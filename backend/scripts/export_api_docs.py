@@ -13,7 +13,6 @@ from pathlib import Path
 
 from app.db.models import PIPELINE_STEPS
 from app.main import create_app
-from app.ml.audience_simulator import AudiencePanelDraft, build_audience_simulation
 from app.schemas import (
     ClipDetailOut,
     MomentOut,
@@ -137,63 +136,6 @@ def search_results() -> SearchOut:
 def examples() -> dict[str, object]:
     c0 = clip(0, liked=True)
     sid = uid(500)
-    creator = CreatorPackOut(
-        title_options=["1v5 Clutch on Ascent", "The Round That Looked Over", "Five Players, One Vandal"],
-        description="A Valorant player is left alone on Ascent and eliminates all five opponents to win the round.",
-        summary="A Valorant player wins a one-versus-five round on Ascent.",
-        caption="The one-versus-five that somehow worked.",
-        youtube={
-            "title": "1v5 Valorant Clutch on Ascent",
-            "description": "A full one-versus-five clutch from a ranked match on Ascent.",
-            "tags": ["Valorant", "Ascent", "clutch", "gaming"],
-            "chapters": [{"timestamp": "00:00", "label": "The clutch"}],
-        },
-        reddit={
-            "title": "Managed a 1v5 on Ascent",
-            "body": "I thought this round was over, but the last duel worked out.",
-            "suggested_subreddits": ["VALORANT", "gaming"],
-        },
-        transcript=[{"timestamp": "00:12", "text": "No way."}],
-        key_moments=[{"timestamp": "00:18", "label": "The final elimination wins the round"}],
-        hashtags=["Valorant", "gaming", "clutch"],
-        content_warnings=[],
-    )
-    panel = AudiencePanelDraft.model_validate({
-        "inferred_niche": "competitive gaming clips",
-        "inferred_target_audience": "Valorant players and FPS highlight viewers",
-        "personas": [
-            {
-                "name": "Ranked regular", "layer": "target", "profile": "Plays Valorant most evenings",
-                "interests": ["Valorant", "ranked play"], "hook_score": 91, "completion_probability": 0.94,
-                "like_probability": 0.86, "comment_probability": 0.61, "save_probability": 0.44,
-                "share_probability": 0.72, "skip_probability": 0.04, "primary_action": "share",
-                "reaction": "The impossible-looking setup makes the final duel land.",
-                "suggested_comment": "How did they isolate every fight?", "what_worked": "The stakes are immediate.",
-                "friction": "The first elimination is hard to see.", "recommended_change": "Add a quick 1v5 overlay.",
-            },
-            {
-                "name": "General FPS fan", "layer": "adjacent", "profile": "Watches competitive shooters",
-                "interests": ["FPS games", "esports"], "hook_score": 72, "completion_probability": 0.73,
-                "like_probability": 0.66, "comment_probability": 0.35, "save_probability": 0.24,
-                "share_probability": 0.46, "skip_probability": 0.18, "primary_action": "like",
-                "reaction": "The skill is clear even without knowing the map.", "suggested_comment": None,
-                "what_worked": "Each elimination increases tension.", "friction": "Game context is assumed.",
-                "recommended_change": "Show the score and player count at the start.",
-            },
-            {
-                "name": "Casual viewer", "layer": "outsider", "profile": "Rarely watches gaming clips",
-                "interests": ["short comedy", "sports"], "hook_score": 43, "completion_probability": 0.38,
-                "like_probability": 0.27, "comment_probability": 0.08, "save_probability": 0.04,
-                "share_probability": 0.09, "skip_probability": 0.58, "primary_action": "skip",
-                "reaction": "The ending looks impressive, but the stakes arrive too late.", "suggested_comment": None,
-                "what_worked": "The team reaction explains the payoff.", "friction": "The HUD is difficult to parse.",
-                "recommended_change": "Open with the final reaction, then replay the clutch.",
-            },
-        ],
-        "consensus_strengths": ["The clip has a clear escalating payoff."],
-        "consensus_risks": ["Viewers outside the game may not understand the stakes."],
-        "recommended_changes": ["Add a one-second 1v5 context card before the action."],
-    })
     return {
         "health.json": HealthOut(status="ok", checks={"database": "ok", "redis": "ok", "storage": "ok"}),
         "users.create.json": USERS[0],
@@ -230,8 +172,27 @@ def examples() -> dict[str, object]:
                                              start_ms=c0.start_ms, end_ms=c0.end_ms),
         "search.json": search_results(),
         "search.image.json": search_results().model_copy(update={"query": "image:screenshot.png", "took_ms": 241}),
-        "creator.analyze.json": creator,
-        "creator.simulate.json": build_audience_simulation(panel, creator, "instagram", "FPS highlight viewers"),
+        "creator.analyze.json": CreatorPackOut(
+            title_options=["1v5 Clutch on Ascent", "The Round That Looked Over", "Five Players, One Vandal"],
+            description="A Valorant player is left alone on Ascent and eliminates all five opponents to win the round.",
+            summary="A Valorant player wins a one-versus-five round on Ascent.",
+            caption="The one-versus-five that somehow worked.",
+            youtube={
+                "title": "1v5 Valorant Clutch on Ascent",
+                "description": "A full one-versus-five clutch from a ranked match on Ascent.",
+                "tags": ["Valorant", "Ascent", "clutch", "gaming"],
+                "chapters": [{"timestamp": "00:00", "label": "The clutch"}],
+            },
+            reddit={
+                "title": "Managed a 1v5 on Ascent",
+                "body": "I thought this round was over, but the last duel worked out.",
+                "suggested_subreddits": ["VALORANT", "gaming"],
+            },
+            transcript=[{"timestamp": "00:12", "text": "No way."}],
+            key_moments=[{"timestamp": "00:18", "label": "The final elimination wins the round"}],
+            hashtags=["Valorant", "gaming", "clutch"],
+            content_warnings=[],
+        ),
     }
 
 
