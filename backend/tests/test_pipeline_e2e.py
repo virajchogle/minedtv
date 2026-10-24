@@ -1,0 +1,202 @@
+"""Full pipeline against real Postgres + pgvector and ffmpeg, with stub/fake models.
+
+Needs the compose Postgres (`docker-compose up -d postgres`) and ffmpeg on PATH; skips otherwise.
+Uses a separate database (minedtv_test) and local-disk storage.
+"""
+
+import asyncio
+import os
+import shutil
+import subprocess
+import uuid
+from pathlib import Path
+
+import pytest
+from alembic import command
+from alembic.config import Config
+from sqlalchemy import func, select, text
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+from app.config import get_settings
+from app.db.models import Clip, Event, Frame, Segment, Session, SessionStatus, Transcript, User
+from app.ml.interfaces import DetectedEvent, TranscriptChunk
+from app.ml.stubs import StubEmbedder
+from app.services.playlist import build_playlist
+from app.services.search import Filters, SearchService
+from app.services.storage import LocalStorage
+from app.worker.pipeline import Deps, run_pipeline
+
+BASE_URL = os.environ.get("TEST_DATABASE_ADMIN_URL", "postgresql+asyncpg://minedtv:minedtv@localhost:5432/minedtv")
+TEST_DB = "minedtv_test"
+TEST_URL = BASE_URL.rsplit("/", 1)[0] + f"/{TEST_DB}"
+ROOT = Path(__file__).resolve().parents[1]
+VIDEO_S = 20
+
+pytestmark = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not installed")
+
+
+async def _create_db() -> None:
+    import asyncpg
+
+    conn = await asyncpg.connect(BASE_URL.replace("+asyncpg", ""), timeout=3)
+    try:
+        if not await conn.fetchval("SELECT 1 FROM pg_database WHERE datname = $1", TEST_DB):
+            await conn.execute(f'CREATE DATABASE "{TEST_DB}"')
+    finally:
+        await conn.close()
+
+
+@pytest.fixture(scope="session")
+def migrated_db():
+    try:
+        asyncio.run(_create_db())
+    except Exception as e:  # noqa: BLE001
+        pytest.skip(f"Postgres not reachable ({e}); run docker-compose up -d postgres")
+    cfg = Config(str(ROOT / "alembic.ini"))
+    cfg.set_main_option("script_location", str(ROOT / "app/db/migrations"))
+    cfg.set_main_option("sqlalchemy.url", TEST_URL)
+    command.upgrade(cfg, "head")
+    return TEST_URL
+
+
+@pytest.fixture
+async def sessionmaker(migrated_db):
+    engine = create_async_engine(migrated_db)
+    async with engine.begin() as conn:
+        await conn.execute(text("TRUNCATE users CASCADE"))
+    yield async_sessionmaker(engine, expire_on_commit=False)
+    await engine.dispose()
+
+
+@pytest.fixture(scope="session")
+def video(tmp_path_factory) -> Path:
+    out = tmp_path_factory.mktemp("media") / "game.mp4"
+    subprocess.run(
+        [
+            "ffmpeg", "-loglevel", "error", "-y",
+            "-f", "lavfi", "-i", f"testsrc2=size=1280x720:rate=30:duration={VIDEO_S}",
+            "-f", "lavfi", "-i", f"sine=frequency=300:duration={VIDEO_S}",
+            "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", "-shortest", str(out),
+        ],
+        check=True,
+    )
+    return out
+
+
+class FakeTranscriber:
+    def transcribe(self, audio_path: str) -> list[TranscriptChunk]:
+        assert Path(audio_path).stat().st_size > 0
+        return [
+            TranscriptChunk(1000, 3000, "okay rotate to B"),
+            TranscriptChunk(3000, 6000, "he's one shot, he's one shot"),
+            TranscriptChunk(14_000, 17_000, "NO WAY that clutch was insane", "friend"),
+        ]
+
+
+class FakeDetector:
+    def detect(self, video_path: str, session_id: str) -> list[DetectedEvent]:
+        return [DetectedEvent(4000, "kill", 0.6, {"weapon": "vandal"}), DetectedEvent(15_000, "clutch", 0.95)]
+
+
+class BrokenDetector:
+    def detect(self, video_path: str, session_id: str):
+        raise RuntimeError("model exploded")
+
+
+def _deps(sm, storage, detector) -> Deps:
+    settings = get_settings().model_copy(update={"clip_window_ms": 3000})
+    return Deps(storage, StubEmbedder(), FakeTranscriber(), detector, sm, settings)
+
+
+async def _new_session(sm, storage, video) -> uuid.UUID:
+    async with sm() as db:
+        user = User(username=f"tester_{uuid.uuid4().hex[:6]}")
+        db.add(user)
+        await db.flush()
+        sid = uuid.uuid4()
+        prefix = f"sessions/{sid}"
+        db.add(Session(id=sid, user_id=user.id, game="Valorant", title="Bind ranked", storage_prefix=prefix,
+                       source_key=f"{prefix}/source.mp4", status=SessionStatus.QUEUED))
+        await db.commit()
+    storage.put_file(f"{prefix}/source.mp4", video)
+    return sid
+
+
+async def test_pipeline_end_to_end(sessionmaker, video, tmp_path):
+    storage = LocalStorage(tmp_path / "storage")
+    sid = await _new_session(sessionmaker, storage, video)
+
+    assert await run_pipeline(sid, deps=_deps(sessionmaker, storage, FakeDetector())) == SessionStatus.READY
+
+    async with sessionmaker() as db:
+        s = await db.get(Session, sid)
+        assert (s.status, s.last_step, s.error) == ("ready", "finalize", None)
+        assert s.duration_ms == VIDEO_S * 1000
+        assert (s.width, s.height, s.has_audio) == (1280, 720, True)
+        assert storage.exists(s.poster_key)
+
+        segs = (await db.scalars(select(Segment).where(Segment.session_id == sid).order_by(Segment.idx))).all()
+        assert len(segs) == VIDEO_S // 2
+        assert all(a.start_ms + a.duration_ms == b.start_ms for a, b in zip(segs, segs[1:]))
+        assert all(storage.exists(sg.storage_key) and len(sg.content_hash) == 64 for sg in segs)
+
+        n_frames = await db.scalar(select(func.count()).select_from(Frame).where(Frame.session_id == sid))
+        assert n_frames == VIDEO_S
+
+        lines = (await db.scalars(select(Transcript).where(Transcript.session_id == sid).order_by(Transcript.start_ms))).all()
+        assert [t.text for t in lines] == ["okay rotate to B he's one shot, he's one shot", "NO WAY that clutch was insane"]
+        assert lines[1].speaker == "friend"
+
+        events = (await db.scalars(select(Event).where(Event.session_id == sid))).all()
+        assert {(e.type, e.source) for e in events} == {("kill", "FakeDetector"), ("clutch", "FakeDetector")}
+
+        clips = (await db.scalars(select(Clip).where(Clip.session_id == sid).order_by(Clip.start_ms))).all()
+        assert [(c.start_ms, c.end_ms, c.kind) for c in clips] == [(1000, 7000, "auto"), (12_000, 18_000, "auto")]
+        assert all(c.thumbnail_key and "/frames/" in c.thumbnail_key for c in clips)
+
+    body = build_playlist(segs, clips[1].start_ms, clips[1].end_ms, storage.url_for)
+    assert body.count("#EXTINF") == 3 and "#EXT-X-MEDIA-SEQUENCE:6" in body
+
+    search = SearchService(sessionmaker, StubEmbedder(), get_settings(), redis=None)
+    results, cached = await search.search_text("the clutch", Filters(game="valorant"), 10)
+    assert not cached and len(results) == 1
+    r = results[0]
+    assert r.kind == "clip" and r.clip_id == clips[1].id
+    assert {"keyword", "event"} <= set(r.signals)
+    assert r.match_t_ms in range(14_000, 15_001)
+    assert r.transcript_snippet == "NO WAY that clutch was insane"
+
+    none, _ = await search.search_text("the clutch", Filters(game="Fortnite"), 10)
+    assert none == []
+
+    # Rerunning is idempotent: same row counts, user clips untouched.
+    async with sessionmaker() as db:
+        s = await db.get(Session, sid)
+        db.add(Clip(session_id=sid, user_id=s.user_id, start_ms=0, end_ms=5000, kind="user", status="ready"))
+        await db.commit()
+    assert await run_pipeline(sid, deps=_deps(sessionmaker, storage, FakeDetector())) == SessionStatus.READY
+    async with sessionmaker() as db:
+        assert await db.scalar(select(func.count()).select_from(Segment).where(Segment.session_id == sid)) == VIDEO_S // 2
+        assert await db.scalar(select(func.count()).select_from(Frame).where(Frame.session_id == sid)) == VIDEO_S
+        kinds = (await db.scalars(select(Clip.kind).where(Clip.session_id == sid))).all()
+        assert sorted(kinds) == ["auto", "auto", "user"]
+
+
+async def test_failed_step_resumes(sessionmaker, video, tmp_path):
+    storage = LocalStorage(tmp_path / "storage")
+    sid = await _new_session(sessionmaker, storage, video)
+
+    assert await run_pipeline(sid, deps=_deps(sessionmaker, storage, BrokenDetector())) == SessionStatus.FAILED
+    async with sessionmaker() as db:
+        s = await db.get(Session, sid)
+        assert (s.status, s.failed_step, s.last_step) == ("failed", "highlights", "audio")
+        assert "model exploded" in s.error
+        seg_ids = set((await db.scalars(select(Segment.id).where(Segment.session_id == sid))).all())
+
+    assert await run_pipeline(sid, resume=True, deps=_deps(sessionmaker, storage, FakeDetector())) == SessionStatus.READY
+    async with sessionmaker() as db:
+        s = await db.get(Session, sid)
+        assert (s.status, s.failed_step, s.error) == ("ready", None, None)
+        # Earlier steps were not redone.
+        assert set((await db.scalars(select(Segment.id).where(Segment.session_id == sid))).all()) == seg_ids
+        assert await db.scalar(select(func.count()).select_from(Event).where(Event.session_id == sid)) == 2

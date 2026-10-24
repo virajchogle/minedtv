@@ -1,0 +1,82 @@
+{
+  "query": "the clutch on ascent",
+  "results": [
+    {
+      "kind": "clip",
+      "clip_id": "00000000-0000-0000-0000-0000000003e8",
+      "session_id": "00000000-0000-0000-0000-0000000001f4",
+      "match_t_ms": 331000,
+      "start_ms": 312000,
+      "end_ms": 342000,
+      "score": 0.04838,
+      "signals": [
+        "visual",
+        "speech",
+        "event"
+      ],
+      "thumbnail_url": "https://pub-xxxxxxxx.r2.dev/sessions/00000000-0000-0000-0000-0000000001f4/frames/000331000.jpg",
+      "transcript_snippet": "NO WAY he just clutched that, one versus five",
+      "playlist_url": "https://minedtv-api-xxxxx-ue.a.run.app/clips/00000000-0000-0000-0000-0000000003e8/playlist.m3u8",
+      "game": "Valorant",
+      "title": "1v5 clutch on Ascent",
+      "user": {
+        "id": "00000000-0000-0000-0000-000000000064",
+        "username": "ShadowSniper",
+        "avatar_url": "https://pub-xxxxxxxx.r2.dev/avatars/shadowsniper.png"
+      },
+      "other_moments_ms": [
+        1204000,
+        88000
+      ]
+    },
+    {
+      "kind": "session",
+      "clip_id": null,
+      "session_id": "00000000-0000-0000-0000-0000000001fb",
+      "match_t_ms": 754000,
+      "start_ms": 739000,
+      "end_ms": 769000,
+      "score": 0.03175,
+      "signals": [
+        "keyword",
+        "speech"
+      ],
+      "thumbnail_url": "https://pub-xxxxxxxx.r2.dev/sessions/00000000-0000-0000-0000-0000000001fb/frames/000754000.jpg",
+      "transcript_snippet": "okay okay clutch time, I've got this",
+      "playlist_url": "https://minedtv-api-xxxxx-ue.a.run.app/sessions/00000000-0000-0000-0000-0000000001fb/playlist.m3u8?start_ms=739000&end_ms=769000",
+      "game": "Valorant",
+      "title": "Late night ranked",
+      "user": {
+        "id": "00000000-0000-0000-0000-000000000065",
+        "username": "NovaQueen",
+        "avatar_url": "https://pub-xxxxxxxx.r2.dev/avatars/novaqueen.png"
+      },
+      "other_moments_ms": []
+    },
+    {
+      "kind": "clip",
+      "clip_id": "00000000-0000-0000-0000-0000000003ec",
+      "session_id": "00000000-0000-0000-0000-0000000001f8",
+      "match_t_ms": 2226000,
+      "start_ms": 2210000,
+      "end_ms": 2241000,
+      "score": 0.01639,
+      "signals": [
+        "event"
+      ],
+      "thumbnail_url": "https://pub-xxxxxxxx.r2.dev/sessions/00000000-0000-0000-0000-0000000001f8/frames/002226000.jpg",
+      "transcript_snippet": null,
+      "playlist_url": "https://minedtv-api-xxxxx-ue.a.run.app/clips/00000000-0000-0000-0000-0000000003ec/playlist.m3u8",
+      "game": "Valorant",
+      "title": "Ace in overtime",
+      "user": {
+        "id": "00000000-0000-0000-0000-000000000068",
+        "username": "Kairo",
+        "avatar_url": "https://pub-xxxxxxxx.r2.dev/avatars/kairo.png"
+      },
+      "other_moments_ms": []
+    }
+  ],
+  "took_ms": 184,
+  "cached": false
+}

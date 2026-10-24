@@ -1,0 +1,115 @@
+{
+  "items": [
+    {
+      "id": "00000000-0000-0000-0000-0000000003e8",
+      "session_id": "00000000-0000-0000-0000-0000000001f4",
+      "user": {
+        "id": "00000000-0000-0000-0000-000000000064",
+        "username": "ShadowSniper",
+        "avatar_url": "https://pub-xxxxxxxx.r2.dev/avatars/shadowsniper.png"
+      },
+      "game": "Valorant",
+      "title": "1v5 clutch on Ascent",
+      "start_ms": 312000,
+      "end_ms": 342000,
+      "duration_ms": 30000,
+      "thumbnail_url": "https://pub-xxxxxxxx.r2.dev/sessions/00000000-0000-0000-0000-0000000001f4/frames/000327000.jpg",
+      "playlist_url": "https://minedtv-api-xxxxx-ue.a.run.app/clips/00000000-0000-0000-0000-0000000003e8/playlist.m3u8",
+      "status": "ready",
+      "kind": "auto",
+      "view_count": 48211,
+      "like_count": 3904,
+      "liked_by_me": null,
+      "created_at": "2026-10-24T18:30:00Z"
+    },
+    {
+      "id": "00000000-0000-0000-0000-0000000003e9",
+      "session_id": "00000000-0000-0000-0000-0000000001f5",
+      "user": {
+        "id": "00000000-0000-0000-0000-000000000065",
+        "username": "NovaQueen",
+        "avatar_url": "https://pub-xxxxxxxx.r2.dev/avatars/novaqueen.png"
+      },
+      "game": "CS2",
+      "title": "No scope across the map",
+      "start_ms": 95000,
+      "end_ms": 112000,
+      "duration_ms": 17000,
+      "thumbnail_url": "https://pub-xxxxxxxx.r2.dev/sessions/00000000-0000-0000-0000-0000000001f5/frames/000103000.jpg",
+      "playlist_url": "https://minedtv-api-xxxxx-ue.a.run.app/clips/00000000-0000-0000-0000-0000000003e9/playlist.m3u8",
+      "status": "ready",
+      "kind": "user",
+      "view_count": 12877,
+      "like_count": 1210,
+      "liked_by_me": null,
+      "created_at": "2026-10-24T15:30:00Z"
+    },
+    {
+      "id": "00000000-0000-0000-0000-0000000003ea",
+      "session_id": "00000000-0000-0000-0000-0000000001f6",
+      "user": {
+        "id": "00000000-0000-0000-0000-000000000066",
+        "username": "xPixel",
+        "avatar_url": "https://pub-xxxxxxxx.r2.dev/avatars/xpixel.png"
+      },
+      "game": "Fortnite",
+      "title": "Last circle 20-bomb",
+      "start_ms": 1402000,
+      "end_ms": 1437000,
+      "duration_ms": 35000,
+      "thumbnail_url": "https://pub-xxxxxxxx.r2.dev/sessions/00000000-0000-0000-0000-0000000001f6/frames/001419000.jpg",
+      "playlist_url": "https://minedtv-api-xxxxx-ue.a.run.app/clips/00000000-0000-0000-0000-0000000003ea/playlist.m3u8",
+      "status": "ready",
+      "kind": "auto",
+      "view_count": 201554,
+      "like_count": 18022,
+      "liked_by_me": null,
+      "created_at": "2026-10-24T12:30:00Z"
+    },
+    {
+      "id": "00000000-0000-0000-0000-0000000003eb",
+      "session_id": "00000000-0000-0000-0000-0000000001f7",
+      "user": {
+        "id": "00000000-0000-0000-0000-000000000067",
+        "username": "Glitchy",
+        "avatar_url": "https://pub-xxxxxxxx.r2.dev/avatars/glitchy.png"
+      },
+      "game": "Apex Legends",
+      "title": "Squad wipe with a pistol",
+      "start_ms": 640000,
+      "end_ms": 668000,
+      "duration_ms": 28000,
+      "thumbnail_url": "https://pub-xxxxxxxx.r2.dev/sessions/00000000-0000-0000-0000-0000000001f7/frames/000654000.jpg",
+      "playlist_url": "https://minedtv-api-xxxxx-ue.a.run.app/clips/00000000-0000-0000-0000-0000000003eb/playlist.m3u8",
+      "status": "ready",
+      "kind": "user",
+      "view_count": 7310,
+      "like_count": 615,
+      "liked_by_me": null,
+      "created_at": "2026-10-24T09:30:00Z"
+    },
+    {
+      "id": "00000000-0000-0000-0000-0000000003ec",
+      "session_id": "00000000-0000-0000-0000-0000000001f8",
+      "user": {
+        "id": "00000000-0000-0000-0000-000000000068",
+        "username": "Kairo",
+        "avatar_url": "https://pub-xxxxxxxx.r2.dev/avatars/kairo.png"
+      },
+      "game": "Valorant",
+      "title": "Ace in overtime",
+      "start_ms": 2210000,
+      "end_ms": 2241000,
+      "duration_ms": 31000,
+      "thumbnail_url": "https://pub-xxxxxxxx.r2.dev/sessions/00000000-0000-0000-0000-0000000001f8/frames/002225000.jpg",
+      "playlist_url": "https://minedtv-api-xxxxx-ue.a.run.app/clips/00000000-0000-0000-0000-0000000003ec/playlist.m3u8",
+      "status": "ready",
+      "kind": "auto",
+      "view_count": 33090,
+      "like_count": 2744,
+      "liked_by_me": null,
+      "created_at": "2026-10-24T06:30:00Z"
+    }
+  ],
+  "next_cursor": "MjAyNi0xMC0yNFQwNjozMDowMCswMDowMHwwMDAw"
+}

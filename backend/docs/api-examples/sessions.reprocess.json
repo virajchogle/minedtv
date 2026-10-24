@@ -1,0 +1,18 @@
+{
+  "session_id": "00000000-0000-0000-0000-0000000001f4",
+  "status": "queued",
+  "progress": 0.7142857142857143,
+  "steps": [
+    "probe",
+    "segment",
+    "thumbnails",
+    "frames",
+    "audio",
+    "highlights",
+    "finalize"
+  ],
+  "last_step": "audio",
+  "failed_step": null,
+  "error": null,
+  "done": false
+}

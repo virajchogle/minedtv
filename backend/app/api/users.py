@@ -1,0 +1,51 @@
+import uuid
+
+from fastapi import APIRouter, HTTPException, Query
+from sqlalchemy import select
+
+from app.api.deps import Db, OptionalUser, Urls
+from app.api.feed import base_clip_query, clip_page
+from app.db.models import Clip, User
+from app.schemas import FeedOut, UserCreate, UserOut
+
+router = APIRouter(prefix="/users", tags=["users"])
+
+
+@router.post("", response_model=UserOut, status_code=201)
+async def create_user(body: UserCreate, db: Db) -> UserOut:
+    """Create a demo user. There's no auth yet: clients act as a user by sending X-User-Id."""
+    if await db.scalar(select(User.id).where(User.username == body.username)):
+        raise HTTPException(409, "Username taken")
+    user = User(username=body.username, avatar_url=body.avatar_url)
+    db.add(user)
+    await db.commit()
+    return UserOut.model_validate(user)
+
+
+@router.get("", response_model=list[UserOut])
+async def list_users(db: Db, limit: int = Query(default=50, ge=1, le=200)) -> list[UserOut]:
+    users = (await db.scalars(select(User).order_by(User.username).limit(limit))).all()
+    return [UserOut.model_validate(u) for u in users]
+
+
+@router.get("/{user_id}", response_model=UserOut)
+async def get_user(user_id: uuid.UUID, db: Db) -> UserOut:
+    user = await db.get(User, user_id)
+    if user is None:
+        raise HTTPException(404, "User not found")
+    return UserOut.model_validate(user)
+
+
+@router.get("/{user_id}/clips", response_model=FeedOut)
+async def user_clips(
+    user_id: uuid.UUID,
+    db: Db,
+    urls: Urls,
+    me: OptionalUser,
+    cursor: str | None = None,
+    limit: int = Query(default=20, ge=1, le=100),
+) -> FeedOut:
+    """A user's clips, newest first (same pagination as /feed)."""
+    if await db.get(User, user_id) is None:
+        raise HTTPException(404, "User not found")
+    return await clip_page(db, base_clip_query().where(Clip.user_id == user_id), limit, cursor, urls, me)

@@ -1,0 +1,22 @@
+{
+  "id": "00000000-0000-0000-0000-0000000003e9",
+  "session_id": "00000000-0000-0000-0000-0000000001f5",
+  "user": {
+    "id": "00000000-0000-0000-0000-000000000065",
+    "username": "NovaQueen",
+    "avatar_url": "https://pub-xxxxxxxx.r2.dev/avatars/novaqueen.png"
+  },
+  "game": "CS2",
+  "title": "No scope across the map",
+  "start_ms": 95000,
+  "end_ms": 112000,
+  "duration_ms": 17000,
+  "thumbnail_url": "https://pub-xxxxxxxx.r2.dev/sessions/00000000-0000-0000-0000-0000000001f5/frames/000103000.jpg",
+  "playlist_url": "https://minedtv-api-xxxxx-ue.a.run.app/clips/00000000-0000-0000-0000-0000000003e9/playlist.m3u8",
+  "status": "ready",
+  "kind": "user",
+  "view_count": 12877,
+  "like_count": 1210,
+  "liked_by_me": null,
+  "created_at": "2026-10-24T15:30:00Z"
+}

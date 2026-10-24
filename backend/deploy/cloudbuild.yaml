@@ -1,0 +1,10 @@
+# Builds and pushes both images with Cloud Build (no local Docker / cross-arch build needed).
+#   gcloud builds submit --config deploy/cloudbuild.yaml --substitutions _REPO=us-east1-docker.pkg.dev/$PROJECT_ID/minedtv .
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ["build", "-f", "Dockerfile.api", "-t", "${_REPO}/api:latest", "."]
+  - name: gcr.io/cloud-builders/docker
+    args: ["build", "-f", "Dockerfile.worker", "-t", "${_REPO}/worker:latest", "."]
+images:
+  - "${_REPO}/api:latest"
+  - "${_REPO}/worker:latest"

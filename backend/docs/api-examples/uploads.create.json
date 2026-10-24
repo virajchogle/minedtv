@@ -1,0 +1,10 @@
+{
+  "session_id": "00000000-0000-0000-0000-0000000001f4",
+  "upload_url": "https://<account>.r2.cloudflarestorage.com/minedtv/sessions/00000000-0000-0000-0000-0000000001f4/source.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=...",
+  "method": "PUT",
+  "headers": {
+    "Content-Type": "video/mp4"
+  },
+  "expires_in_s": 3600,
+  "storage_key": "sessions/00000000-0000-0000-0000-0000000001f4/source.mp4"
+}

@@ -1,0 +1,6 @@
+# Optional: only for running the real models locally on CPU (EMBEDDER_BACKEND=app.ml.models:ClipEmbedder).
+# Not needed with stubs or Modal. The Modal image pins its own copies in modal_app.py.
+torch==2.5.1
+transformers==4.46.3
+pillow==11.0.0
+faster-whisper==1.1.0

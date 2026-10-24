@@ -1,0 +1,83 @@
+# Local dev stack: Postgres + pgvector, Redis, SeaweedFS (S3 stand-in), API and worker.
+#   docker-compose up --build        (or `docker compose ...` with Docker Desktop)
+# API on http://localhost:8000 (docs at /docs). S3 API on http://localhost:8333.
+# (MinIO's images are no longer published publicly, so SeaweedFS plays the S3 role locally.)
+
+x-app-env: &app-env
+  APP_ENV: dev
+  LOG_JSON: "false"
+  DATABASE_URL: postgresql+asyncpg://minedtv:minedtv@postgres:5432/minedtv
+  REDIS_URL: redis://redis:6379/0
+  STORAGE_BACKEND: s3
+  S3_ENDPOINT_URL: http://s3:8333
+  # Presigned URLs go to clients (browser, phone, emulator), so they must use a host
+  # those clients can reach. Override with your LAN IP to test on a real phone.
+  S3_PUBLIC_ENDPOINT_URL: ${S3_PUBLIC_ENDPOINT_URL:-http://localhost:8333}
+  S3_REGION: us-east-1
+  S3_ACCESS_KEY_ID: local
+  S3_SECRET_ACCESS_KEY: localsecret
+  S3_BUCKET: minedtv
+  EMBEDDING_DIM: ${EMBEDDING_DIM:-768}
+  EMBEDDER_BACKEND: ${EMBEDDER_BACKEND:-stub}
+  TRANSCRIBER_BACKEND: ${TRANSCRIBER_BACKEND:-stub}
+  HIGHLIGHT_BACKEND: ${HIGHLIGHT_BACKEND:-stub}
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: minedtv
+      POSTGRES_PASSWORD: minedtv
+      POSTGRES_DB: minedtv
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U minedtv"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      retries: 30
+
+  s3:
+    image: chrislusf/seaweedfs:4.48
+    # No -s3.config means auth is off locally; signed requests are accepted as-is.
+    command: server -dir=/data -s3 -s3.port=8333 -master.volumeSizeLimitMB=1024 -volume.max=0
+    ports: ["8333:8333"]
+    volumes: [s3data:/data]
+
+  migrate:
+    build: {context: ., dockerfile: Dockerfile.api}
+    environment: *app-env
+    command: sh -c "alembic upgrade head && python -m scripts.init_storage"
+    depends_on:
+      postgres: {condition: service_healthy}
+      s3: {condition: service_started}
+
+  api:
+    build: {context: ., dockerfile: Dockerfile.api}
+    environment: *app-env
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    ports: ["8000:8000"]
+    volumes: ["./app:/srv/app"]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+
+  worker:
+    build: {context: ., dockerfile: Dockerfile.worker}
+    environment: *app-env
+    volumes: ["./app:/srv/app"]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+
+volumes:
+  pgdata:
+  s3data:
