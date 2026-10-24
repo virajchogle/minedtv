@@ -48,9 +48,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["*"],
     )
 
-    from app.api import clips, feed, search, sessions, uploads, users
+    from app.api import clips, creator, feed, search, sessions, uploads, users
 
-    for module in (uploads, sessions, clips, feed, search, users):
+    for module in (uploads, sessions, clips, feed, search, users, creator):
         app.include_router(module.router)
 
     @app.get("/health", response_model=HealthOut, tags=["health"])

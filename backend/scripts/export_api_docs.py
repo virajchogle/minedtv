@@ -17,6 +17,7 @@ from app.schemas import (
     ClipDetailOut,
     ClipOut,
     CountsOut,
+    CreatorPackOut,
     EventOut,
     FeedOut,
     HealthOut,
@@ -154,6 +155,27 @@ def examples() -> dict[str, object]:
         "clips.view.json": CountsOut(clip_id=c0.id, view_count=48_212, like_count=3_904, liked_by_me=None),
         "search.json": search_results(),
         "search.image.json": search_results().model_copy(update={"query": "image:screenshot.png", "took_ms": 241}),
+        "creator.analyze.json": CreatorPackOut(
+            title_options=["1v5 Clutch on Ascent", "The Round That Looked Over", "Five Players, One Vandal"],
+            description="A Valorant player is left alone on Ascent and eliminates all five opponents to win the round.",
+            summary="A Valorant player wins a one-versus-five round on Ascent.",
+            caption="The one-versus-five that somehow worked.",
+            youtube={
+                "title": "1v5 Valorant Clutch on Ascent",
+                "description": "A full one-versus-five clutch from a ranked match on Ascent.",
+                "tags": ["Valorant", "Ascent", "clutch", "gaming"],
+                "chapters": [{"timestamp": "00:00", "label": "The clutch"}],
+            },
+            reddit={
+                "title": "Managed a 1v5 on Ascent",
+                "body": "I thought this round was over, but the last duel worked out.",
+                "suggested_subreddits": ["VALORANT", "gaming"],
+            },
+            transcript=[{"timestamp": "00:12", "text": "No way."}],
+            key_moments=[{"timestamp": "00:18", "label": "The final elimination wins the round"}],
+            hashtags=["Valorant", "gaming", "clutch"],
+            content_warnings=[],
+        ),
     }
 
 

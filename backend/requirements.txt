@@ -13,3 +13,5 @@ redis>=5
 rq>=1.16
 # GPU inference (only imported when an ml backend is set to "modal")
 modal>=1.0
+# AI creator metadata
+google-genai>=2.33,<3

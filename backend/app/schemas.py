@@ -187,3 +187,47 @@ class SearchOut(_Out):
     results: list[SearchResult]
     took_ms: int
     cached: bool
+
+
+# --- AI creator metadata ---
+
+
+class CreatorTranscriptCue(BaseModel):
+    timestamp: str = Field(examples=["00:12"])
+    text: str
+
+
+class CreatorKeyMoment(BaseModel):
+    timestamp: str = Field(examples=["00:12"])
+    label: str
+
+
+class CreatorChapter(BaseModel):
+    timestamp: str = Field(examples=["00:00"])
+    label: str
+
+
+class CreatorYouTubeMetadata(BaseModel):
+    title: str = Field(max_length=100)
+    description: str
+    tags: list[str]
+    chapters: list[CreatorChapter]
+
+
+class CreatorRedditMetadata(BaseModel):
+    title: str
+    body: str
+    suggested_subreddits: list[str]
+
+
+class CreatorPackOut(_Out):
+    title_options: list[str]
+    description: str
+    summary: str
+    caption: str
+    youtube: CreatorYouTubeMetadata
+    reddit: CreatorRedditMetadata
+    transcript: list[CreatorTranscriptCue]
+    key_moments: list[CreatorKeyMoment]
+    hashtags: list[str]
+    content_warnings: list[str]

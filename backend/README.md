@@ -92,6 +92,7 @@ Full spec: [`docs/openapi.json`](docs/openapi.json), or `/docs` on a running ser
 | GET | `/users/{id}/clips` | `users.clips.json` |
 | GET | `/search?q=&game=&user_id=&from=&to=&limit=` | `search.json` |
 | POST | `/search/image` (multipart `image`, optional `game`, `user_id`, `limit`) | `search.image.json` |
+| POST | `/creator/analyze` (multipart `video`) | Gemini-generated transcript, summary, captions, and platform metadata |
 | GET | `/health` | `health.json` |
 
 **Playback:** hand `playlist_url` to ExoPlayer/Media3 (Android), AVPlayer (iOS) or hls.js (web). Playback is segment-granular. The playlist starts at the segment containing `start_ms`, with `EXT-X-START` set to the exact offset. Segment URLs are presigned GETs valid for an hour, or plain public URLs if `STORAGE_PUBLIC_BASE_URL` is set. Re-fetch the playlist if a player sits open longer than that.
@@ -101,6 +102,12 @@ Full spec: [`docs/openapi.json`](docs/openapi.json), or `/docs` on a running ser
 ---
 
 ## Plugging in real models
+
+### Gemini creator engine
+
+Set `GEMINI_API_KEY` to enable `POST /creator/analyze`. The endpoint accepts a multipart video and returns a typed content pack containing a factual description, concise summary, transcript, key moments, caption, title options, hashtags, YouTube metadata, and Reddit copy. `GEMINI_MODEL`, `CREATOR_FRAME_SAMPLE_FPS`, `CREATOR_INLINE_LIMIT_MB`, and `CREATOR_MAX_UPLOAD_MB` tune the engine; see `.env.example`.
+
+The reusable engine lives in `app/ml/gemini_creator.py`. Small videos are sent inline, larger videos use Gemini's Files API, and temporary local and remote files are removed after each request.
 
 Contracts are in [`app/ml/interfaces.py`](app/ml/interfaces.py):
 
@@ -186,10 +193,10 @@ app/
   log.py             JSON logs; session_id + step bound on every pipeline line
   schemas.py         all request/response models
   db/                models, engine, Alembic migrations
-  api/               routers: uploads, sessions, clips, feed, search, users
+  api/               routers: uploads, sessions, clips, feed, search, users, creator
   services/          storage (S3/R2/local), playlist, search (RRF), counters, serialize
   worker/            pipeline steps, ffmpeg wrappers, RQ job + worker entry point
-  ml/                interfaces, stubs, registry, Modal adapter, real CLIP/Whisper
+  ml/                interfaces, Gemini creator engine, stubs, registry, Modal adapter, real CLIP/Whisper
 modal_app.py         Modal GPU app
 scripts/             seed, load_test, export_api_docs, init_storage
 deploy/              Cloud Build config + Cloud Run deploy script

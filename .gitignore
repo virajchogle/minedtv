@@ -1,10 +1,13 @@
 .venv/
 __pycache__/
 *.pyc
+*.py[cod]
 .env
 .env.*
 !.env.example
 .pytest_cache/
+.tmp/
+uploads/
 .data/
 demo_videos/
 *.mp4

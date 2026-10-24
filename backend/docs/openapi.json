@@ -1337,6 +1337,48 @@
         }
       }
     },
+    "/creator/analyze": {
+      "post": {
+        "tags": [
+          "creator"
+        ],
+        "summary": "Analyze Video",
+        "description": "Generate transcripts, summaries, and platform-ready metadata from one video.",
+        "operationId": "analyze_video_creator_analyze_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_analyze_video_creator_analyze_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatorPackOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "tags": [
@@ -1361,6 +1403,21 @@
   },
   "components": {
     "schemas": {
+      "Body_analyze_video_creator_analyze_post": {
+        "properties": {
+          "video": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "Video",
+            "description": "Video file to analyze"
+          }
+        },
+        "type": "object",
+        "required": [
+          "video"
+        ],
+        "title": "Body_analyze_video_creator_analyze_post"
+      },
       "Body_search_image_search_image_post": {
         "properties": {
           "image": {
@@ -1792,6 +1849,201 @@
           "like_count"
         ],
         "title": "CountsOut"
+      },
+      "CreatorChapter": {
+        "properties": {
+          "timestamp": {
+            "type": "string",
+            "title": "Timestamp",
+            "examples": [
+              "00:00"
+            ]
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "timestamp",
+          "label"
+        ],
+        "title": "CreatorChapter"
+      },
+      "CreatorKeyMoment": {
+        "properties": {
+          "timestamp": {
+            "type": "string",
+            "title": "Timestamp",
+            "examples": [
+              "00:12"
+            ]
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "timestamp",
+          "label"
+        ],
+        "title": "CreatorKeyMoment"
+      },
+      "CreatorPackOut": {
+        "properties": {
+          "title_options": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Title Options"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "caption": {
+            "type": "string",
+            "title": "Caption"
+          },
+          "youtube": {
+            "$ref": "#/components/schemas/CreatorYouTubeMetadata"
+          },
+          "reddit": {
+            "$ref": "#/components/schemas/CreatorRedditMetadata"
+          },
+          "transcript": {
+            "items": {
+              "$ref": "#/components/schemas/CreatorTranscriptCue"
+            },
+            "type": "array",
+            "title": "Transcript"
+          },
+          "key_moments": {
+            "items": {
+              "$ref": "#/components/schemas/CreatorKeyMoment"
+            },
+            "type": "array",
+            "title": "Key Moments"
+          },
+          "hashtags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Hashtags"
+          },
+          "content_warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Content Warnings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title_options",
+          "description",
+          "summary",
+          "caption",
+          "youtube",
+          "reddit",
+          "transcript",
+          "key_moments",
+          "hashtags",
+          "content_warnings"
+        ],
+        "title": "CreatorPackOut"
+      },
+      "CreatorRedditMetadata": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "body": {
+            "type": "string",
+            "title": "Body"
+          },
+          "suggested_subreddits": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Suggested Subreddits"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "body",
+          "suggested_subreddits"
+        ],
+        "title": "CreatorRedditMetadata"
+      },
+      "CreatorTranscriptCue": {
+        "properties": {
+          "timestamp": {
+            "type": "string",
+            "title": "Timestamp",
+            "examples": [
+              "00:12"
+            ]
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "timestamp",
+          "text"
+        ],
+        "title": "CreatorTranscriptCue"
+      },
+      "CreatorYouTubeMetadata": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 100,
+            "title": "Title"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags"
+          },
+          "chapters": {
+            "items": {
+              "$ref": "#/components/schemas/CreatorChapter"
+            },
+            "type": "array",
+            "title": "Chapters"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "description",
+          "tags",
+          "chapters"
+        ],
+        "title": "CreatorYouTubeMetadata"
       },
       "EventOut": {
         "properties": {

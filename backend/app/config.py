@@ -59,6 +59,13 @@ class Settings(BaseSettings):
     modal_app_name: str = "minedtv-ml"
     embed_batch_size: int = 32
 
+    # Gemini-powered creator metadata. Leave the key empty to disable /creator/analyze.
+    gemini_api_key: str | None = None
+    gemini_model: str = "gemini-3.8-flash"
+    creator_inline_limit_mb: int = Field(default=20, gt=0)
+    creator_frame_sample_fps: float = Field(default=0.25, gt=0)
+    creator_max_upload_mb: int = Field(default=500, gt=0)
+
     # --- processing ---
     segment_seconds: int = 2
     transcode_height: int = 720
