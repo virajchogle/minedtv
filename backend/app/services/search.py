@@ -57,6 +57,7 @@ class Hit:
     signal: str
     raw_score: float
     snippet: str | None = None
+    label: str | None = None  # event type, for event hits
 
 
 @dataclass
@@ -66,6 +67,51 @@ class Moment:
     score: float
     signals: set[str] = field(default_factory=set)
     snippet: str | None = None
+    label: str | None = None
+    # Strongest raw score seen per signal (cosine similarity, ts_rank, or event score).
+    strength: dict[str, float] = field(default_factory=dict)
+    confidence: float = 0.0
+
+
+@dataclass
+class Thresholds:
+    """Minimum similarity for a semantic hit to count. Measured on CLIP ViT-L/14: matching frames
+    score ~0.30 vs 0.14-0.19 for unrelated text; a matching transcript line ~0.77 vs 0.61-0.67."""
+
+    visual: float = 0.22
+    speech: float = 0.70
+    visual_full: float = 0.32  # similarity treated as full confidence
+    speech_full: float = 0.85
+
+
+def drop_weak(hit_lists: dict[str, list[Hit]], th: Thresholds) -> dict[str, list[Hit]]:
+    """Remove semantic hits below threshold. Keyword and event hits are exact matches and always kept."""
+    out = dict(hit_lists)
+    out["visual"] = [h for h in hit_lists.get("visual", []) if h.raw_score >= th.visual]
+    out["speech"] = [h for h in hit_lists.get("speech", []) if h.raw_score >= th.speech]
+    return out
+
+
+def _ramp(x: float, lo: float, hi: float) -> float:
+    return max(0.0, min(1.0, (x - lo) / (hi - lo))) if hi > lo else float(x >= lo)
+
+
+def confidence(strength: dict[str, float], th: Thresholds) -> float:
+    """0..1: how sure we are this moment matches. Each signal gives its own 0..1 and they
+    combine like independent evidence (1 - product of misses), so agreement raises it."""
+    parts = []
+    if "visual" in strength:
+        parts.append(0.4 + 0.6 * _ramp(strength["visual"], th.visual, th.visual_full))
+    if "speech" in strength:
+        parts.append(0.5 + 0.5 * _ramp(strength["speech"], th.speech, th.speech_full))
+    if "keyword" in strength:
+        parts.append(0.85)
+    if "event" in strength:
+        parts.append(max(0.5, min(1.0, strength["event"])))
+    miss = 1.0
+    for p in parts:
+        miss *= 1.0 - p
+    return round(1.0 - miss, 3)
 
 
 def normalize_query(q: str) -> str:
@@ -118,8 +164,11 @@ def fuse(hit_lists: dict[str, list[Hit]], k: int, window_ms: int) -> list[Moment
             keyed[signal].append(mid)
             m = moments[mid]
             m.signals.add(signal)
+            m.strength[signal] = max(m.strength.get(signal, float("-inf")), h.raw_score)
             if h.snippet and m.snippet is None:
                 m.snippet = h.snippet
+            if h.label and m.label is None:
+                m.label = h.label
 
     for mid, score in rrf(list(keyed.values()), k).items():
         moments[mid].score = score
@@ -146,7 +195,7 @@ def cache_key(q: str, f: Filters, limit: int) -> str:
     payload = json.dumps(
         [normalize_query(q), (f.game or "").lower(), str(f.user_id or ""), str(f.date_from or ""), str(f.date_to or ""), limit]
     )
-    return "search:v1:" + hashlib.sha1(payload.encode()).hexdigest()
+    return "search:v2:" + hashlib.sha1(payload.encode()).hexdigest()
 
 
 # ---------------------------------------------------------------- signal queries
@@ -206,12 +255,14 @@ async def event_hits(db: AsyncSession, types: list[str], f: Filters, limit: int)
     if not types:
         return []
     stmt = (
-        _filtered(select(Event.session_id, Event.t_ms, Event.score).join(Session, Session.id == Event.session_id), f)
+        _filtered(
+            select(Event.session_id, Event.t_ms, Event.score, Event.type).join(Session, Session.id == Event.session_id), f
+        )
         .where(Event.type.in_(types))
         .order_by(Event.score.desc())
         .limit(limit)
     )
-    return [Hit(r.session_id, r.t_ms, "event", float(r.score)) for r in await db.execute(stmt)]
+    return [Hit(r.session_id, r.t_ms, "event", float(r.score), label=r.type) for r in await db.execute(stmt)]
 
 
 # ---------------------------------------------------------------- resolution
@@ -228,6 +279,7 @@ class Resolved:
     start_ms: int
     end_ms: int
     score: float
+    confidence: float
     signals: list[str]
     thumbnail_key: str | None
     transcript_snippet: str | None
@@ -235,6 +287,8 @@ class Resolved:
     title: str | None
     user: dict
     other_moments_ms: list[int]
+    # Best moment first, then the others: {t_ms, confidence, signals, label, snippet, thumbnail_key}
+    moments: list[dict] = field(default_factory=list)
 
     def to_json(self) -> dict:
         d = self.__dict__.copy()
@@ -248,6 +302,15 @@ class Resolved:
         d["clip_id"] = uuid.UUID(d["clip_id"]) if d["clip_id"] else None
         d["session_id"] = uuid.UUID(d["session_id"])
         return cls(**d)
+
+
+async def _nearest_thumb(db: AsyncSession, session_id: uuid.UUID, t: int) -> str | None:
+    return await db.scalar(
+        select(Frame.thumbnail_key)
+        .where(Frame.session_id == session_id, Frame.thumbnail_key.is_not(None))
+        .order_by(func.abs(Frame.t_ms - t))
+        .limit(1)
+    )
 
 
 async def resolve(db: AsyncSession, hits: list[SessionHit], window_ms: int) -> list[Resolved]:
@@ -272,12 +335,19 @@ async def resolve(db: AsyncSession, hits: list[SessionHit], window_ms: int) -> l
             .order_by((Clip.end_ms - Clip.start_ms).asc(), (Clip.kind == literal("auto")).asc())
             .limit(1)
         )
-        thumb = await db.scalar(
-            select(Frame.thumbnail_key)
-            .where(Frame.session_id == s.id, Frame.thumbnail_key.is_not(None))
-            .order_by(func.abs(Frame.t_ms - t))
-            .limit(1)
-        )
+        moments = []
+        for m in [h.best, *h.others]:
+            moments.append(
+                {
+                    "t_ms": m.t_ms,
+                    "confidence": m.confidence,
+                    "signals": [sig for sig in SIGNALS if sig in m.signals],
+                    "label": m.label,
+                    "snippet": m.snippet,
+                    "thumbnail_key": await _nearest_thumb(db, s.id, m.t_ms),
+                }
+            )
+        thumb = moments[0]["thumbnail_key"]
         if clip is not None:
             kind, clip_id, start, end, title = "clip", clip.id, clip.start_ms, clip.end_ms, clip.title
         else:
@@ -292,13 +362,15 @@ async def resolve(db: AsyncSession, hits: list[SessionHit], window_ms: int) -> l
                 start_ms=start,
                 end_ms=end,
                 score=round(h.best.score, 6),
-                signals=[sig for sig in SIGNALS if sig in h.best.signals],
+                confidence=h.best.confidence,
+                signals=moments[0]["signals"],
                 thumbnail_key=thumb or (clip.thumbnail_key if clip else None) or s.poster_key,
                 transcript_snippet=h.best.snippet,
                 game=s.game,
                 title=title,
                 user={"id": str(u.id), "username": u.username, "avatar_url": u.avatar_url},
                 other_moments_ms=[m.t_ms for m in h.others],
+                moments=moments,
             )
         )
     return out
@@ -318,9 +390,18 @@ class SearchService:
         async with self.sessionmaker() as db:
             return await fn(db, *args)
 
-    async def _finish(self, hit_lists: dict[str, list[Hit]], limit: int) -> list[Resolved]:
+    def _thresholds(self, image: bool = False) -> Thresholds:
         st = self.settings
-        moments = fuse(hit_lists, st.rrf_k, st.moment_window_ms)
+        if image:
+            # Image-to-image similarity runs much higher than text-to-image.
+            return Thresholds(visual=st.image_min_sim, speech=1.0, visual_full=st.image_full_sim)
+        return Thresholds(visual=st.visual_min_sim, speech=st.speech_min_sim)
+
+    async def _finish(self, hit_lists: dict[str, list[Hit]], limit: int, th: Thresholds) -> list[Resolved]:
+        st = self.settings
+        moments = fuse(drop_weak(hit_lists, th), st.rrf_k, st.moment_window_ms)
+        for m in moments:
+            m.confidence = confidence(m.strength, th)
         grouped = group_by_session(moments)[:limit]
         async with self.sessionmaker() as db:
             return await resolve(db, grouped, st.clip_window_ms)
@@ -346,7 +427,7 @@ class SearchService:
             self._run(event_hits, event_types_for(q), f, n),
         )
         hit_lists = dict(zip(SIGNALS, results, strict=True))
-        resolved = await self._finish(hit_lists, limit)
+        resolved = await self._finish(hit_lists, limit, self._thresholds())
         log.info(
             "search",
             extra={"q": q, "hits": {k: len(v) for k, v in hit_lists.items()}, "results": len(resolved), "ms": round((time.monotonic() - t0) * 1000)},
@@ -361,4 +442,4 @@ class SearchService:
     async def search_image(self, image: bytes, f: Filters, limit: int) -> list[Resolved]:
         vec = (await asyncio.to_thread(self.embedder.embed_images, [image]))[0]
         hits = await self._run(visual_hits, vec, f, self.settings.search_signal_limit)
-        return await self._finish({"visual": hits}, limit)
+        return await self._finish({"visual": hits}, limit, self._thresholds(image=True))

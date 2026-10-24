@@ -834,6 +834,92 @@
         }
       }
     },
+    "/clips/{clip_id}/export": {
+      "get": {
+        "tags": [
+          "clips"
+        ],
+        "summary": "Get Export",
+        "description": "Status of the MP4 export for the clip's current range.",
+        "operationId": "get_export_clips__clip_id__export_get",
+        "parameters": [
+          {
+            "name": "clip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Clip Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "clips"
+        ],
+        "summary": "Start Export",
+        "description": "Render the clip as an MP4 (for TikTok/Reels). Idempotent: returns the existing export if\nit's ready or in progress. Poll GET until status is 'ready', then download `url`.",
+        "operationId": "start_export_clips__clip_id__export_post",
+        "parameters": [
+          {
+            "name": "clip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Clip Id"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/feed": {
       "get": {
         "tags": [
@@ -1372,6 +1458,30 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/warmup": {
+      "post": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Warmup",
+        "description": "Wake the GPU embedder so the first real search isn't a cold start. Call it on app\nlaunch without awaiting the result: it returns once the model is warm (up to ~60 s cold).",
+        "operationId": "warmup_warmup_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Warmup Warmup Post"
                 }
               }
             }
@@ -2091,6 +2201,66 @@
         ],
         "title": "EventOut"
       },
+      "ExportOut": {
+        "properties": {
+          "clip_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Clip Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "none",
+              "processing",
+              "ready",
+              "failed"
+            ],
+            "title": "Status",
+            "description": "'none' = never requested for this clip range; POST to start"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url",
+            "description": "MP4 download URL when ready"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "start_ms": {
+            "type": "integer",
+            "title": "Start Ms"
+          },
+          "end_ms": {
+            "type": "integer",
+            "title": "End Ms"
+          }
+        },
+        "type": "object",
+        "required": [
+          "clip_id",
+          "status",
+          "url",
+          "start_ms",
+          "end_ms"
+        ],
+        "title": "ExportOut"
+      },
       "FeedOut": {
         "properties": {
           "items": {
@@ -2157,6 +2327,85 @@
           "checks"
         ],
         "title": "HealthOut"
+      },
+      "MomentOut": {
+        "properties": {
+          "t_ms": {
+            "type": "integer",
+            "title": "T Ms",
+            "description": "Moment time in session time"
+          },
+          "offset_ms": {
+            "type": "integer",
+            "title": "Offset Ms",
+            "description": "Moment time relative to the result's start_ms (where to seek in its playlist)"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence"
+          },
+          "signals": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "visual",
+                "speech",
+                "keyword",
+                "event"
+              ]
+            },
+            "type": "array",
+            "title": "Signals"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label",
+            "description": "Event type when a highlight event matched, e.g. 'clutch'"
+          },
+          "snippet": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snippet",
+            "description": "Transcript line when speech matched"
+          },
+          "thumbnail_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thumbnail Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "t_ms",
+          "offset_ms",
+          "confidence",
+          "signals",
+          "label",
+          "snippet",
+          "thumbnail_url"
+        ],
+        "title": "MomentOut"
       },
       "SearchOut": {
         "properties": {
@@ -2234,7 +2483,15 @@
           },
           "score": {
             "type": "number",
-            "title": "Score"
+            "title": "Score",
+            "description": "Raw fusion score; only meaningful for ordering"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "description": "How sure the match is, 0..1, comparable across queries"
           },
           "signals": {
             "items": {
@@ -2307,6 +2564,14 @@
             "type": "array",
             "title": "Other Moments Ms",
             "description": "Further good matches in the same session"
+          },
+          "moments": {
+            "items": {
+              "$ref": "#/components/schemas/MomentOut"
+            },
+            "type": "array",
+            "title": "Moments",
+            "description": "Best moment first, then the others, with details"
           }
         },
         "type": "object",
@@ -2318,6 +2583,7 @@
           "start_ms",
           "end_ms",
           "score",
+          "confidence",
           "signals",
           "thumbnail_url",
           "transcript_snippet",

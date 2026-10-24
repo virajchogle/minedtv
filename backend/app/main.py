@@ -53,6 +53,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     for module in (uploads, sessions, clips, feed, search, users, creator):
         app.include_router(module.router)
 
+    @app.post("/warmup", tags=["health"])
+    async def warmup() -> dict:
+        """Wake the GPU embedder so the first real search isn't a cold start. Call it on app
+        launch without awaiting the result: it returns once the model is warm (up to ~60 s cold)."""
+        from app.ml.registry import get_embedder
+
+        t0 = asyncio.get_running_loop().time()
+        try:
+            await asyncio.wait_for(asyncio.to_thread(get_embedder().embed_texts, ["warm up"]), timeout=120)
+            status = "warm"
+        except Exception:  # noqa: BLE001 - best effort
+            log.warning("warmup failed", exc_info=True)
+            status = "failed"
+        return {"status": status, "ms": round((asyncio.get_running_loop().time() - t0) * 1000)}
+
     @app.get("/health", response_model=HealthOut, tags=["health"])
     async def health() -> HealthOut:
         checks: dict[str, str] = {}

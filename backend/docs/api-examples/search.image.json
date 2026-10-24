@@ -9,6 +9,7 @@
       "start_ms": 312000,
       "end_ms": 342000,
       "score": 0.04838,
+      "confidence": 0.97,
       "signals": [
         "visual",
         "speech",
@@ -25,8 +26,33 @@
         "avatar_url": "https://pub-xxxxxxxx.r2.dev/avatars/shadowsniper.png"
       },
       "other_moments_ms": [
-        1204000,
-        88000
+        338500
+      ],
+      "moments": [
+        {
+          "t_ms": 331000,
+          "offset_ms": 19000,
+          "confidence": 0.97,
+          "signals": [
+            "visual",
+            "speech",
+            "event"
+          ],
+          "label": "clutch",
+          "snippet": "NO WAY he just clutched that, one versus five",
+          "thumbnail_url": "https://pub-xxxxxxxx.r2.dev/sessions/00000000-0000-0000-0000-0000000001f4/frames/000331000.jpg"
+        },
+        {
+          "t_ms": 338500,
+          "offset_ms": 26500,
+          "confidence": 0.71,
+          "signals": [
+            "visual"
+          ],
+          "label": null,
+          "snippet": null,
+          "thumbnail_url": "https://pub-xxxxxxxx.r2.dev/sessions/00000000-0000-0000-0000-0000000001f4/frames/000338000.jpg"
+        }
       ]
     },
     {
@@ -37,9 +63,10 @@
       "start_ms": 739000,
       "end_ms": 769000,
       "score": 0.03175,
+      "confidence": 0.96,
       "signals": [
-        "keyword",
-        "speech"
+        "speech",
+        "keyword"
       ],
       "thumbnail_url": "https://pub-xxxxxxxx.r2.dev/sessions/00000000-0000-0000-0000-0000000001fb/frames/000754000.jpg",
       "transcript_snippet": "okay okay clutch time, I've got this",
@@ -51,7 +78,21 @@
         "username": "NovaQueen",
         "avatar_url": "https://pub-xxxxxxxx.r2.dev/avatars/novaqueen.png"
       },
-      "other_moments_ms": []
+      "other_moments_ms": [],
+      "moments": [
+        {
+          "t_ms": 754000,
+          "offset_ms": 15000,
+          "confidence": 0.96,
+          "signals": [
+            "speech",
+            "keyword"
+          ],
+          "label": null,
+          "snippet": "okay okay clutch time, I've got this",
+          "thumbnail_url": "https://pub-xxxxxxxx.r2.dev/sessions/00000000-0000-0000-0000-0000000001fb/frames/000754000.jpg"
+        }
+      ]
     },
     {
       "kind": "clip",
@@ -61,6 +102,7 @@
       "start_ms": 2210000,
       "end_ms": 2241000,
       "score": 0.01639,
+      "confidence": 0.88,
       "signals": [
         "event"
       ],
@@ -74,7 +116,20 @@
         "username": "Kairo",
         "avatar_url": "https://pub-xxxxxxxx.r2.dev/avatars/kairo.png"
       },
-      "other_moments_ms": []
+      "other_moments_ms": [],
+      "moments": [
+        {
+          "t_ms": 2226000,
+          "offset_ms": 16000,
+          "confidence": 0.88,
+          "signals": [
+            "event"
+          ],
+          "label": "ace",
+          "snippet": null,
+          "thumbnail_url": "https://pub-xxxxxxxx.r2.dev/sessions/00000000-0000-0000-0000-0000000001f8/frames/002226000.jpg"
+        }
+      ]
     }
   ],
   "took_ms": 241,

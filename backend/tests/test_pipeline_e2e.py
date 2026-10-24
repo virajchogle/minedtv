@@ -200,3 +200,31 @@ async def test_failed_step_resumes(sessionmaker, video, tmp_path):
         # Earlier steps were not redone.
         assert set((await db.scalars(select(Segment.id).where(Segment.session_id == sid))).all()) == seg_ids
         assert await db.scalar(select(func.count()).select_from(Event).where(Event.session_id == sid)) == 2
+
+
+async def test_export_renders_exact_clip_mp4(sessionmaker, video, tmp_path):
+    from app.worker.export import export_clip, export_key
+
+    storage = LocalStorage(tmp_path / "storage")
+    sid = await _new_session(sessionmaker, storage, video)
+    assert await run_pipeline(sid, deps=_deps(sessionmaker, storage, FakeDetector())) == SessionStatus.READY
+    async with sessionmaker() as db:
+        s = await db.get(Session, sid)
+        # Deliberately not on a segment boundary.
+        clip = Clip(session_id=sid, user_id=s.user_id, start_ms=3_500, end_ms=9_250, kind="user", status="ready")
+        db.add(clip)
+        await db.commit()
+
+    key = await export_clip(clip.id, _deps(sessionmaker, storage, FakeDetector()))
+    assert key == export_key(clip.id, 3_500, 9_250) and storage.exists(key)
+    probe = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration:stream=codec_name", "-of", "json", str(storage._path(key))],
+        capture_output=True, text=True, check=True,
+    ).stdout
+    import json
+
+    info = json.loads(probe)
+    assert abs(float(info["format"]["duration"]) - 5.75) < 0.15
+    assert {s["codec_name"] for s in info["streams"]} == {"h264", "aac"}
+    # Second call reuses the finished file.
+    assert await export_clip(clip.id, _deps(sessionmaker, storage, FakeDetector())) == key

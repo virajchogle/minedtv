@@ -89,6 +89,8 @@ Full spec: [`docs/openapi.json`](docs/openapi.json), or `/docs` on a running ser
 | GET | `/clips/{id}/playlist.m3u8` | `clips.playlist.m3u8` |
 | POST | `/clips` · PATCH `/clips/{id}` · DELETE `/clips/{id}` | `clips.create.json`, `clips.patch.json` |
 | POST/DELETE | `/clips/{id}/like` · POST `/clips/{id}/view` | `clips.like.json`, `clips.view.json` |
+| POST/GET | `/clips/{id}/export` (MP4 for TikTok/Reels; POST starts it, GET polls until `ready`) | `clips.export.*.json` |
+| POST | `/warmup` (wake the GPU; call on app launch without awaiting) | |
 | GET | `/users/{id}/clips` | `users.clips.json` |
 | GET | `/search?q=&game=&user_id=&from=&to=&limit=` | `search.json` |
 | POST | `/search/image` (multipart `image`, optional `game`, `user_id`, `limit`) | `search.image.json` |
@@ -97,7 +99,9 @@ Full spec: [`docs/openapi.json`](docs/openapi.json), or `/docs` on a running ser
 
 **Playback:** hand `playlist_url` to ExoPlayer/Media3 (Android), AVPlayer (iOS) or hls.js (web). Playback is segment-granular. The playlist starts at the segment containing `start_ms`, with `EXT-X-START` set to the exact offset. Segment URLs are presigned GETs valid for an hour, or plain public URLs if `STORAGE_PUBLIC_BASE_URL` is set. Re-fetch the playlist if a player sits open longer than that.
 
-**Search results** contain one entry per session. `kind: "clip"` means an existing clip contains the match. `kind: "session"` means no clip does, and `start_ms..end_ms` is a suggested ±15 s window you can turn into a clip with `POST /clips`. Seek to `match_t_ms - start_ms` within the playlist. `signals` says which of `visual`, `speech`, `keyword`, `event` matched.
+**Search results** contain one entry per session, and weak matches are filtered out: a visual-only match needs cosine similarity ≥ 0.22 and a speech match ≥ 0.70, while keyword and event matches always count. These thresholds were measured on CLIP ViT-L/14; re-measure them if the model changes. `confidence` (0–1) is comparable across queries, unlike the raw `score`. `moments` lists the best moment first, then up to 3 more in the same session, each with `offset_ms` (where to seek in that result's playlist), `confidence`, `signals`, the event `label`, the transcript `snippet` and a `thumbnail_url`.
+
+`kind: "clip"` means an existing clip contains the match. `kind: "session"` means no clip does, and `start_ms..end_ms` is a suggested ±15 s window you can turn into a clip with `POST /clips`. Seek to `match_t_ms - start_ms` within the playlist. `signals` says which of `visual`, `speech`, `keyword`, `event` matched.
 
 ---
 
@@ -149,6 +153,8 @@ modal run modal_app.py                    # smoke test: prints "embedder ok: dim
 ```
 
 Then set `EMBEDDER_BACKEND=modal` and `TRANSCRIBER_BACKEND=modal`. Locally, the adapter uses your `~/.modal.toml`. On Cloud Run, set `MODAL_TOKEN_ID` and `MODAL_TOKEN_SECRET` (from modal.com → Settings → API Tokens).
+
+Before a demo, run `python -m scripts.gpu_warm on` to keep one GPU container warm (about $0.60/hour), and `python -m scripts.gpu_warm off` afterwards. The app can also call `POST /warmup` at launch.
 
 Containers scale to zero after 5 idle minutes. The first call after that is a cold start of about 30–60 s, which also hits the first search. Before a demo, run one search or `modal run modal_app.py` to warm it up.
 

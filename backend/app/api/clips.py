@@ -1,18 +1,23 @@
+import asyncio
 import uuid
 
 from fastapi import APIRouter, HTTPException, Response
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import PlainTextResponse
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.api.deps import CurrentUser, Db, OptionalUser, Urls
 from app.db.models import Clip, Event, Like, Segment, Session, SessionStatus, Transcript, User
-from app.schemas import ClipCreate, ClipDetailOut, ClipOut, ClipPatch, CountsOut, EventOut, TranscriptOut
+from app.schemas import ClipCreate, ClipDetailOut, ClipOut, ClipPatch, CountsOut, EventOut, ExportOut, TranscriptOut
 from app.services import counters
-from app.services.queries import nearest_frame_key
 from app.services.playlist import build_playlist, validate_clip_range
+from app.services.queries import nearest_frame_key
+from app.services.redis import get_redis
 from app.services.serialize import clip_out
 from app.services.storage import get_storage
+from app.worker.enqueue import enqueue_export
+from app.worker.export import export_key, status_key
 
 router = APIRouter(prefix="/clips", tags=["clips"])
 
@@ -201,3 +206,36 @@ async def delete_clip(clip_id: uuid.UUID, user: CurrentUser, db: Db) -> Response
     await db.commit()
     return Response(status_code=204)
 
+
+
+async def _export_state(clip: Clip) -> ExportOut:
+    key = export_key(clip.id, clip.start_ms, clip.end_ms)
+    base = dict(clip_id=clip.id, start_ms=clip.start_ms, end_ms=clip.end_ms)
+    if await asyncio.to_thread(get_storage().exists, key):
+        return ExportOut(**base, status="ready", url=get_storage().url_for(key))
+    raw = await get_redis().get(status_key(clip.id, clip.start_ms, clip.end_ms))
+    if raw is None:
+        return ExportOut(**base, status="none", url=None)
+    if raw.startswith("failed"):
+        return ExportOut(**base, status="failed", url=None, error=raw.partition(":")[2] or None)
+    return ExportOut(**base, status="processing", url=None)
+
+
+@router.get("/{clip_id}/export", response_model=ExportOut)
+async def get_export(clip_id: uuid.UUID, db: Db) -> ExportOut:
+    """Status of the MP4 export for the clip's current range."""
+    clip, _, _ = await _load(db, clip_id)
+    return await _export_state(clip)
+
+
+@router.post("/{clip_id}/export", response_model=ExportOut, status_code=202)
+async def start_export(clip_id: uuid.UUID, db: Db) -> ExportOut:
+    """Render the clip as an MP4 (for TikTok/Reels). Idempotent: returns the existing export if
+    it's ready or in progress. Poll GET until status is 'ready', then download `url`."""
+    clip, _, _ = await _load(db, clip_id)
+    state = await _export_state(clip)
+    if state.status in ("ready", "processing"):
+        return state
+    await get_redis().set(status_key(clip.id, clip.start_ms, clip.end_ms), "processing", ex=6 * 3600)
+    await run_in_threadpool(enqueue_export, clip.id)
+    return state.model_copy(update={"status": "processing", "error": None})

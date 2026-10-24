@@ -83,6 +83,11 @@ class Settings(BaseSettings):
     search_signal_limit: int = 40
     clip_window_ms: int = 15000
     moment_window_ms: int = 5000
+    # Minimum cosine similarity for semantic hits (CLIP ViT-L/14 scale; re-measure if the model changes).
+    visual_min_sim: float = 0.22
+    speech_min_sim: float = 0.70
+    image_min_sim: float = 0.55
+    image_full_sim: float = 0.85
 
     # --- counters ---
     counter_flush_interval_s: int = 30

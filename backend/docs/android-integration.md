@@ -355,7 +355,24 @@ val clips = remote?.takeIf { it.isNotEmpty() } ?: SampleData.clips
 When a clip is opened, call `MinedTvApi.view(clip.remoteId!!)` once. Have the like button call
 `MinedTvApi.like(clip.remoteId!!, liked)`.
 
-## 7. Uploading from the phone (optional)
+## 7. Newer API features
+
+- **Warm-up on launch:** fire `MinedTvApi.post("/warmup")` in a background coroutine when the app
+  starts and ignore the result. It wakes the GPU so the first search is fast.
+- **Real confidence:** each search result has `confidence` (0–1, comparable across queries). Use it
+  instead of rescaling `score`. Weak matches are already filtered out server side.
+- **Rich moments:** `moments` is a list (best first) of
+  `{t_ms, offset_ms, confidence, signals, label, snippet, thumbnail_url}`. `offset_ms` is where to
+  seek in that result's `playlist_url`. This replaces `match_t_ms - start_ms` and `other_moments_ms`, so the
+  "Also here · Another match" placeholders can show real quotes, labels and thumbnails.
+- **MP4 export for sharing:** `POST /clips/{id}/export` returns `status: "processing"`. Poll
+  `GET /clips/{id}/export` every ~5 s until `status == "ready"`, then download `url` (a plain MP4)
+  and hand it to TikTok or Instagram. It takes about 1 minute (the worker runs every minute).
+  Exports are cached per clip range, so a second POST is instant.
+- **Stable media URLs:** thumbnails, segments and exports now use a fixed public R2 URL, so Coil and
+  ExoPlayer can cache them.
+
+## 8. Uploading from the phone (optional)
 
 1. `POST /uploads` with `{"filename": "x.mp4", "content_type": "video/mp4", "game": "Valorant", "title": "..."}`
    returns `upload_url` and `session_id`.

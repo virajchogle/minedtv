@@ -150,6 +150,17 @@ class ClipPatch(BaseModel):
     end_ms: int | None = Field(default=None, gt=0)
 
 
+class ExportOut(_Out):
+    clip_id: uuid.UUID
+    status: Literal["none", "processing", "ready", "failed"] = Field(
+        description="'none' = never requested for this clip range; POST to start"
+    )
+    url: str | None = Field(description="MP4 download URL when ready")
+    error: str | None = None
+    start_ms: int
+    end_ms: int
+
+
 class CountsOut(_Out):
     clip_id: uuid.UUID
     view_count: int
@@ -162,6 +173,16 @@ class CountsOut(_Out):
 Signal = Literal["visual", "speech", "keyword", "event"]
 
 
+class MomentOut(_Out):
+    t_ms: int = Field(description="Moment time in session time")
+    offset_ms: int = Field(description="Moment time relative to the result's start_ms (where to seek in its playlist)")
+    confidence: float = Field(ge=0, le=1)
+    signals: list[Signal]
+    label: str | None = Field(description="Event type when a highlight event matched, e.g. 'clutch'")
+    snippet: str | None = Field(description="Transcript line when speech matched")
+    thumbnail_url: str | None
+
+
 class SearchResult(_Out):
     kind: Literal["clip", "session"] = Field(
         description="'clip' when an existing clip contains the match; otherwise 'session' with a suggested window"
@@ -171,7 +192,8 @@ class SearchResult(_Out):
     match_t_ms: int = Field(description="The exact moment to seek to, in session time")
     start_ms: int = Field(description="Clip start, or start of the suggested window")
     end_ms: int = Field(description="Clip end, or end of the suggested window")
-    score: float
+    score: float = Field(description="Raw fusion score; only meaningful for ordering")
+    confidence: float = Field(ge=0, le=1, description="How sure the match is, 0..1, comparable across queries")
     signals: list[Signal]
     thumbnail_url: str | None
     transcript_snippet: str | None
@@ -180,6 +202,7 @@ class SearchResult(_Out):
     title: str | None
     user: UserOut
     other_moments_ms: list[int] = Field(default_factory=list, description="Further good matches in the same session")
+    moments: list[MomentOut] = Field(default_factory=list, description="Best moment first, then the others, with details")
 
 
 class SearchOut(_Out):

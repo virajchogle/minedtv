@@ -9,7 +9,7 @@ from app.api.deps import UrlBuilder, Urls
 from app.config import get_settings
 from app.db.session import get_sessionmaker
 from app.ml.registry import get_embedder
-from app.schemas import SearchOut, SearchResult, UserOut
+from app.schemas import MomentOut, SearchOut, SearchResult, UserOut
 from app.services.redis import get_redis
 from app.services.search import Filters, Resolved, SearchService
 from app.services.serialize import url_or_none
@@ -32,6 +32,7 @@ def _out(r: Resolved, urls: UrlBuilder) -> SearchResult:
         start_ms=r.start_ms,
         end_ms=r.end_ms,
         score=r.score,
+        confidence=r.confidence,
         signals=r.signals,
         thumbnail_url=url_or_none(r.thumbnail_key),
         transcript_snippet=r.transcript_snippet,
@@ -40,6 +41,18 @@ def _out(r: Resolved, urls: UrlBuilder) -> SearchResult:
         title=r.title,
         user=UserOut(**r.user),
         other_moments_ms=r.other_moments_ms,
+        moments=[
+            MomentOut(
+                t_ms=m["t_ms"],
+                offset_ms=max(0, m["t_ms"] - r.start_ms),
+                confidence=m["confidence"],
+                signals=m["signals"],
+                label=m["label"],
+                snippet=m["snippet"],
+                thumbnail_url=url_or_none(m["thumbnail_key"]),
+            )
+            for m in r.moments
+        ],
     )
 
 
