@@ -65,6 +65,7 @@ class Settings(BaseSettings):
     creator_inline_limit_mb: int = Field(default=20, gt=0)
     creator_frame_sample_fps: float = Field(default=0.25, gt=0)
     creator_max_upload_mb: int = Field(default=500, gt=0)
+    creator_persona_count: int = Field(default=9, ge=3, le=15)
 
     # --- processing ---
     segment_seconds: int = 2

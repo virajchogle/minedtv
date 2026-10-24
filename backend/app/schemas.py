@@ -254,3 +254,66 @@ class CreatorPackOut(_Out):
     key_moments: list[CreatorKeyMoment]
     hashtags: list[str]
     content_warnings: list[str]
+
+
+CreatorPlatform = Literal["general", "youtube", "reddit", "instagram", "tiktok"]
+AudienceLayer = Literal["target", "adjacent", "outsider"]
+AudienceAction = Literal["like", "comment", "save", "share", "skip"]
+
+
+class AudiencePersonaReview(BaseModel):
+    name: str
+    layer: AudienceLayer
+    profile: str
+    interests: list[str]
+    hook_score: int = Field(ge=0, le=100)
+    completion_probability: float = Field(ge=0, le=1)
+    like_probability: float = Field(ge=0, le=1)
+    comment_probability: float = Field(ge=0, le=1)
+    save_probability: float = Field(ge=0, le=1)
+    share_probability: float = Field(ge=0, le=1)
+    skip_probability: float = Field(ge=0, le=1)
+    primary_action: AudienceAction
+    reaction: str
+    suggested_comment: str | None = None
+    what_worked: str
+    friction: str
+    recommended_change: str
+
+
+class AudienceMetricsOut(BaseModel):
+    simulated_watch_rate: float = Field(ge=0, le=100)
+    simulated_completion_rate: float = Field(ge=0, le=100)
+    simulated_like_rate: float = Field(ge=0, le=100)
+    simulated_comment_rate: float = Field(ge=0, le=100)
+    simulated_save_rate: float = Field(ge=0, le=100)
+    simulated_share_rate: float = Field(ge=0, le=100)
+    action_distribution: dict[AudienceAction, int]
+
+
+class AudienceLayerOut(BaseModel):
+    layer: AudienceLayer
+    persona_count: int = Field(ge=1)
+    score: float = Field(ge=0, le=100)
+    threshold: float = Field(ge=0, le=100)
+    exposed_in_cascade: bool
+    cleared_threshold: bool
+
+
+class AudienceSimulationOut(_Out):
+    platform: CreatorPlatform
+    requested_target_audience: str | None
+    inferred_niche: str
+    inferred_target_audience: str
+    virality_score: float = Field(ge=0, le=100)
+    verdict: Literal["weak", "mixed", "promising", "strong"]
+    cascade_depth: Literal["target_only", "adjacent", "outsider", "broad_breakout"]
+    cascade_summary: str
+    metrics: AudienceMetricsOut
+    layers: list[AudienceLayerOut]
+    persona_reviews: list[AudiencePersonaReview]
+    consensus_strengths: list[str]
+    consensus_risks: list[str]
+    recommended_changes: list[str]
+    analysis: CreatorPackOut
+    disclaimer: str

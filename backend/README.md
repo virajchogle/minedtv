@@ -95,6 +95,7 @@ Full spec: [`docs/openapi.json`](docs/openapi.json), or `/docs` on a running ser
 | GET | `/search?q=&game=&user_id=&from=&to=&limit=` | `search.json` |
 | POST | `/search/image` (multipart `image`, optional `game`, `user_id`, `limit`) | `search.image.json` |
 | POST | `/creator/analyze` (multipart `video`) | Gemini-generated transcript, summary, captions, and platform metadata |
+| POST | `/creator/simulate` (multipart `video`, `platform`, optional `target_audience`, `persona_count`) | `creator.simulate.json` |
 | GET | `/health` | `health.json` |
 
 **Playback:** hand `playlist_url` to ExoPlayer/Media3 (Android), AVPlayer (iOS) or hls.js (web). Playback is segment-granular. The playlist starts at the segment containing `start_ms`, with `EXT-X-START` set to the exact offset. Segment URLs are presigned GETs valid for an hour, or plain public URLs if `STORAGE_PUBLIC_BASE_URL` is set. Re-fetch the playlist if a player sits open longer than that.
@@ -112,6 +113,10 @@ Full spec: [`docs/openapi.json`](docs/openapi.json), or `/docs` on a running ser
 Set `GEMINI_API_KEY` to enable `POST /creator/analyze`. The endpoint accepts a multipart video and returns a typed content pack containing a factual description, concise summary, transcript, key moments, caption, title options, hashtags, YouTube metadata, and Reddit copy. `GEMINI_MODEL`, `CREATOR_FRAME_SAMPLE_FPS`, `CREATOR_INLINE_LIMIT_MB`, and `CREATOR_MAX_UPLOAD_MB` tune the engine; see `.env.example`.
 
 The reusable engine lives in `app/ml/gemini_creator.py`. Small videos are sent inline, larger videos use Gemini's Files API, and temporary local and remote files are removed after each request.
+
+`POST /creator/simulate` reuses that factual video analysis, then asks one structured Gemini call for a diverse panel split across target, adjacent-interest, and outsider audiences. Local deterministic scoring calculates engagement signals and decides whether the simulated sharing cascade reaches each layer. The default panel is 9 personas and can be tuned with `CREATOR_PERSONA_COUNT` or the request's `persona_count` field (3-15). Results are explicitly synthetic feedback, not real audience analytics or a guarantee of reach.
+
+The simulator creates a `creator.persona_panel` OpenTelemetry span with model, platform, panel size, score, and cascade depth. With current FastAPI versions, set `FASTAPI_OTEL_AUTO_CONFIGURE=true`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`, and `OTEL_SERVICE_NAME` to send request and simulator traces to SigNoz; see `.env.example` for the variable names.
 
 Contracts are in [`app/ml/interfaces.py`](app/ml/interfaces.py):
 
@@ -202,7 +207,7 @@ app/
   api/               routers: uploads, sessions, clips, feed, search, users, creator
   services/          storage (S3/R2/local), playlist, search (RRF), counters, serialize
   worker/            pipeline steps, ffmpeg wrappers, RQ job + worker entry point
-  ml/                interfaces, Gemini creator engine, stubs, registry, Modal adapter, real CLIP/Whisper
+  ml/                Gemini creator + audience simulator, interfaces, stubs, registry, Modal adapter, real CLIP/Whisper
 modal_app.py         Modal GPU app
 scripts/             seed, load_test, export_api_docs, init_storage
 deploy/              Cloud Build config + Cloud Run deploy script
