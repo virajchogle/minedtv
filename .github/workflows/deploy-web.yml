@@ -32,7 +32,7 @@ jobs:
         with:
           node-version: 24
       - name: Install Vercel CLI
-        run: npm install --global vercel@39.3.0
+        run: npm install --global vercel@48.10.2
       - name: Pull production settings and env vars
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
       - name: Build
