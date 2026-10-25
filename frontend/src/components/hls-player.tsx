@@ -63,12 +63,6 @@ export const HlsPlayer = forwardRef<HlsPlayerHandle, HlsPlayerProps>(function Hl
 
     setReady(false);
 
-    // Safari and iOS handle HLS without any JavaScript.
-    if (video.canPlayType("application/vnd.apple.mpegurl")) {
-      video.src = src;
-      return;
-    }
-
     let destroyed = false;
     let instance: { destroy: () => void } | null = null;
 
@@ -76,8 +70,16 @@ export const HlsPlayer = forwardRef<HlsPlayerHandle, HlsPlayerProps>(function Hl
       const { default: Hls } = await import("hls.js");
       if (destroyed) return;
 
+      // Prefer hls.js wherever Media Source Extensions exist. Recent Chrome answers "maybe"
+      // to canPlayType("application/vnd.apple.mpegurl") yet can't play these streams
+      // natively, so checking native support first left the player with no source.
       if (!Hls.isSupported()) {
-        onError?.("This browser cannot play HLS streams.");
+        // iOS Safari has no MSE but plays HLS natively.
+        if (video.canPlayType("application/vnd.apple.mpegurl")) {
+          video.src = src;
+        } else {
+          onError?.("This browser cannot play HLS streams.");
+        }
         return;
       }
 
