@@ -1,6 +1,11 @@
 # Tests and deploys the backend on every push to main that touches backend/.
 #
-#   tests (real Postgres + Redis) -> build images -> migrate the database -> deploy API -> update worker
+#   tests (real Postgres + Redis)  \
+#                                    -> migrate the database -> deploy API -> update worker
+#   build images (layer-cached)    /
+#
+# Tests and the image build run in parallel. Images are pushed tagged with the commit only, and
+# become :latest after the tests pass, so an untested build is never the default.
 #
 # Signs in to Google Cloud without a key (Workload Identity Federation, trusted only for main of
 # this repo) and ships new images only: the settings stay on Cloud Run, so .env.prod never leaves
@@ -54,8 +59,39 @@ jobs:
       - name: Tests
         run: pytest -q
 
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # lets GitHub hand Google a signed identity token
+    strategy:
+      matrix:
+        image: [api, worker]
+    env:
+      REPO: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/minedtv
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Log Docker in to Artifact Registry
+        run: gcloud auth configure-docker "${{ vars.GCP_REGION }}-docker.pkg.dev" --quiet
+      - uses: docker/setup-buildx-action@v3
+      - name: Build and push ${{ matrix.image }}
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          file: backend/Dockerfile.${{ matrix.image }}
+          push: true
+          tags: ${{ env.REPO }}/${{ matrix.image }}:${{ github.sha }}
+          # Layers (ffmpeg, pip install) are reused across runs until requirements or the Dockerfile change.
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,scope=${{ matrix.image }},mode=max
+
   deploy:
-    needs: test
+    needs: [test, build]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -75,13 +111,10 @@ jobs:
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
           service_account: ${{ vars.GCP_DEPLOY_SA }}
       - uses: google-github-actions/setup-gcloud@v2
-      - name: Build and push images
+      - name: Mark the tested images as latest
         run: |
-          gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
-          docker build -f Dockerfile.api -t "$REPO/api:$TAG" -t "$REPO/api:latest" .
-          docker build -f Dockerfile.worker -t "$REPO/worker:$TAG" -t "$REPO/worker:latest" .
-          docker push --all-tags "$REPO/api"
-          docker push --all-tags "$REPO/worker"
+          gcloud artifacts docker tags add "$REPO/api:$TAG" "$REPO/api:latest" --quiet
+          gcloud artifacts docker tags add "$REPO/worker:$TAG" "$REPO/worker:latest" --quiet
       - name: Migrate the database (before any new code serves traffic)
         run: |
           gcloud run jobs update minedtv-migrate --project "$PROJECT" --region "$REGION" --image "$REPO/worker:$TAG"
