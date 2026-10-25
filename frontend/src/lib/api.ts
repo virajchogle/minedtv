@@ -16,6 +16,7 @@
 
 import type {
   AnalyticsOut,
+  ClipAnalytics,
   ClipCreatorPackOut,
   ClipDetailOut,
   ClipOut,
@@ -1011,6 +1012,17 @@ export async function fetchAnalytics(days: number): Promise<AnalyticsOut> {
   const me = getCurrentUser();
   if (!me) throw new Error("Pick a user first.");
   return request<AnalyticsOut>(`/users/${me.id}/analytics?days=${days}`);
+}
+
+/**
+ * A clip's virality score, or null if it's never been checked. Defensively
+ * guards `virality` itself in case it's missing from a response — the
+ * backend's own schema guarantees it, but this is a client/server boundary
+ * and crashing the whole dashboard over one clip's bad data is worse than
+ * reporting that clip as unscored.
+ */
+export function clipViralityScore(c: ClipAnalytics): number | null {
+  return c.virality?.score ?? null;
 }
 
 /** Verdict cut-offs on the 0–100 virality score (same as the backend). */
