@@ -372,3 +372,63 @@ def burn_ass_captions(src: Path, out: Path, captions: Path, *, crf: int = 23) ->
         "-c:a", "copy", "-movflags", "+faststart", "-shortest", str(out),
     ])
     return out
+
+
+def mix_background_music(
+    src: Path,
+    music: Path,
+    out: Path,
+    *,
+    duration_ms: int,
+    volume: float = 0.50,
+    speech_volume: float = 0.30,
+    speech_intervals_ms: list[tuple[int, int]] | None = None,
+) -> Path:
+    """Mix a looping music bed while preserving speech/game audio and the encoded video."""
+    if duration_ms <= 0:
+        raise ValueError("music mix duration must be positive")
+    if not music.is_file():
+        raise MediaError("background music file is missing")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    duration_s = duration_ms / 1000
+    fade_out = max(0.0, duration_s - min(1.0, duration_s / 3))
+    info = probe(src)
+    intervals = [
+        (max(0, start_ms - 120), min(duration_ms, end_ms + 180))
+        for start_ms, end_ms in (speech_intervals_ms or [])
+        if end_ms > start_ms and start_ms < duration_ms and end_ms > 0
+    ]
+    if intervals:
+        active = "+".join(
+            f"between(t,{start_ms / 1000:.3f},{end_ms / 1000:.3f})" for start_ms, end_ms in intervals
+        )
+        volume_filter = f"volume='if({active},{speech_volume:.3f},{volume:.3f})':eval=frame"
+    else:
+        volume_filter = f"volume={volume:.3f}"
+    music_filter = (
+        f"[1:a]atrim=duration={duration_s:.3f},asetpts=PTS-STARTPTS,"
+        f"{volume_filter},afade=t=in:st=0:d={min(0.4, duration_s / 4):.3f},"
+        f"afade=t=out:st={fade_out:.3f}:d={duration_s - fade_out:.3f}[music]"
+    )
+    if info.has_audio:
+        # Only timed transcript cues lower the music. Without reliable speech
+        # timestamps, keep the soundtrack prominent instead of treating every
+        # game sound as dialogue and compressing the entire bed.
+        mixed_music = "[music]"
+        duck_filter = ""
+        audio_filter = (
+            music_filter
+            + duck_filter
+            + f";[0:a:0]{mixed_music}amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95[audio]"
+        )
+    else:
+        audio_filter = music_filter + ";[music]alimiter=limit=0.95[audio]"
+    _run([
+        executable("ffmpeg"), "-hide_banner", "-loglevel", "error", "-y",
+        "-i", str(src), "-stream_loop", "-1", "-i", str(music),
+        "-filter_complex", audio_filter,
+        "-map", "0:v:0", "-map", "[audio]",
+        "-c:v", "copy", "-c:a", "aac", "-b:a", "160k", "-ac", "2", "-ar", "48000",
+        "-t", f"{duration_s:.3f}", "-movflags", "+faststart", str(out),
+    ])
+    return out

@@ -964,6 +964,7 @@ function highlightQuery(o: HighlightOptions): string {
     captions: String(o.captions),
     caption_style: o.caption_style,
     hook: String(o.hook),
+    music: String(o.music),
   }).toString();
 }
 
