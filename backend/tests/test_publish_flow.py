@@ -78,3 +78,17 @@ def test_default_persona_count_shares_one_result():
     assert clips_api._virality_args(clip, ClipViralityIn(platform="youtube")) == clips_api._virality_args(
         clip, ClipViralityIn(platform="youtube", persona_count=default)
     )
+
+
+async def test_creator_tools_are_owner_only(sessionmaker):  # noqa: F811
+    owner, clip = await _draft_clip(sessionmaker)
+    async with sessionmaker() as db:
+        stranger = User(username=f"x_{uuid.uuid4().hex[:6]}")
+        db.add(stranger)
+        await db.commit()
+        for call in (clips_api.get_creator_pack, clips_api.start_creator_pack, clips_api.get_export, clips_api.start_export):
+            with pytest.raises(HTTPException) as e:
+                await call(clip.id, stranger, db)
+            assert e.value.status_code == 403, call.__name__
+        assert (await clips_api.get_creator_pack(clip.id, owner, db)).status == "none"
+        assert (await clips_api.get_export(clip.id, owner, db)).status == "none"

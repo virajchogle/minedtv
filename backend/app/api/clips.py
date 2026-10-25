@@ -274,17 +274,17 @@ async def _export_state(clip: Clip) -> ExportOut:
 
 
 @router.get("/{clip_id}/export", response_model=ExportOut)
-async def get_export(clip_id: uuid.UUID, db: Db) -> ExportOut:
-    """Status of the MP4 export for the clip's current range."""
-    clip, _, _ = await _load(db, clip_id)
+async def get_export(clip_id: uuid.UUID, user: CurrentUser, db: Db) -> ExportOut:
+    """Status of the MP4 export for the clip's current range (owner only)."""
+    clip = await _load_owned(db, clip_id, user)
     return await _export_state(clip)
 
 
 @router.post("/{clip_id}/export", response_model=ExportOut, status_code=202)
-async def start_export(clip_id: uuid.UUID, db: Db) -> ExportOut:
-    """Render the clip as an MP4 (for TikTok/Reels). Idempotent: returns the existing export if
-    it's ready or in progress. Poll GET until status is 'ready', then download `url`."""
-    clip, _, _ = await _load(db, clip_id)
+async def start_export(clip_id: uuid.UUID, user: CurrentUser, db: Db) -> ExportOut:
+    """Render the clip as an MP4 (for TikTok/Reels; owner only). Idempotent: returns the existing
+    export if it's ready or in progress. Poll GET until status is 'ready', then download `url`."""
+    clip = await _load_owned(db, clip_id, user)
     state = await _export_state(clip)
     if state.status in ("ready", "processing"):
         return state
@@ -311,19 +311,20 @@ async def _pack_state(clip: Clip) -> ClipCreatorPackOut:
 
 
 @router.get("/{clip_id}/creator-pack", response_model=ClipCreatorPackOut)
-async def get_creator_pack(clip_id: uuid.UUID, db: Db) -> ClipCreatorPackOut:
-    """Status of the AI creator pack (titles, caption, hashtags, YouTube/Reddit metadata) for this clip."""
-    clip, _, _ = await _load(db, clip_id)
+async def get_creator_pack(clip_id: uuid.UUID, user: CurrentUser, db: Db) -> ClipCreatorPackOut:
+    """Status of the AI creator pack (titles, caption, hashtags, YouTube/Reddit metadata) for this
+    clip. Owner only."""
+    clip = await _load_owned(db, clip_id, user)
     return await _pack_state(clip)
 
 
 @router.post("/{clip_id}/creator-pack", response_model=ClipCreatorPackOut, status_code=202)
-async def start_creator_pack(clip_id: uuid.UUID, db: Db) -> ClipCreatorPackOut:
-    """Generate the creator pack for an already-uploaded clip (no re-upload). Gemini watches the
-    clip's MP4; takes ~1-2 min. Idempotent; poll GET until status is 'ready'."""
+async def start_creator_pack(clip_id: uuid.UUID, user: CurrentUser, db: Db) -> ClipCreatorPackOut:
+    """Generate the creator pack for a clip you own (no re-upload). Gemini watches the clip's MP4;
+    takes ~1-2 min. Idempotent; poll GET until status is 'ready'."""
+    clip = await _load_owned(db, clip_id, user)
     if not get_settings().gemini_api_key:
         raise HTTPException(503, "Creator packs are not configured (GEMINI_API_KEY missing)")
-    clip, _, _ = await _load(db, clip_id)
     state = await _pack_state(clip)
     if state.status in ("ready", "processing"):
         return state

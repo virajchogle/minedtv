@@ -6,9 +6,8 @@
  *    also starts the virality check and the AI creator pack
  *  - post to YouTube (owner, published clips)
  *  - like (anyone acting as a user)
- *  - MP4 export for TikTok/Reels
- *  - AI creator pack (titles, caption, hashtags, YouTube metadata)
- *  - virality check (owner, unpublished clips only)
+ *  - owner only: MP4 export for TikTok/Reels, the AI creator pack (titles,
+ *    caption, hashtags, YouTube metadata) and the virality check
  *
  * The last three are background jobs on the backend: start with POST, then
  * poll GET until `ready`. Existing results are loaded on mount.
@@ -765,13 +764,15 @@ export function ClipActions({ video, onChange }: { video: Video; onChange: (v: V
   return (
     <div className="space-y-4">
       <LikeButton video={video} onChange={onChange} />
-      {!me && <ChooseUserNotice action="like, publish and run AI tools on clips" />}
+      {!me && <ChooseUserNotice action="like clips, or use the AI tools on your own" />}
       {isOwner && <PublishSection video={video} onChange={onChange} />}
       {isOwner && video.publish_state === "published" && <YouTubeSection video={video} />}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <ExportSection video={video} />
-        <CreatorPackSection video={video} />
-      </div>
+      {isOwner && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <ExportSection video={video} />
+          <CreatorPackSection video={video} />
+        </div>
+      )}
       {isOwner && <ViralitySection video={video} />}
     </div>
   );
