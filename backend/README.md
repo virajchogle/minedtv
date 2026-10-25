@@ -85,6 +85,7 @@ Full spec: [`docs/openapi.json`](docs/openapi.json), or `/docs` on a running ser
 | GET | `/sessions/{id}` | `sessions.get.json`, `sessions.get.failed.json` |
 | GET | `/sessions/{id}/status` (SSE `status` events, closes when `done`) | `sessions.status.sse.txt` |
 | POST | `/sessions/{id}/reprocess` (resumes from the failed step) | `sessions.reprocess.json` |
+| POST/GET | `/sessions/{id}/frame-highlights` (owner only; POST starts, GET polls) | `sessions.frame-highlights.json` |
 | GET | `/sessions/{id}/playlist.m3u8?start_ms=&end_ms=` | |
 | GET | `/feed?cursor=&limit=&game=` | `feed.json` |
 | GET | `/clips/{id}` (with events + transcript in range) | `clips.get.json` |
@@ -100,9 +101,37 @@ Full spec: [`docs/openapi.json`](docs/openapi.json), or `/docs` on a running ser
 | GET | `/search?q=&game=&user_id=&from=&to=&limit=` | `search.json` |
 | POST | `/search/image` (multipart `image`, optional `game`, `user_id`, `limit`) | `search.image.json` |
 | POST | `/creator/analyze` (multipart `video`) | Gemini-generated transcript, summary, captions, and platform metadata |
+| POST | `/creator/highlights` (multipart `video`) | `creator.highlights.json` |
 | POST | `/creator/simulate` (multipart `video`, `platform`, optional `target_audience`, `persona_count`) | `creator.simulate.json` |
 | POST | `/creator/simulate-analysis` (JSON with an `/creator/analyze` result plus persona options) | `creator.simulate.json` |
 | GET | `/health` | `health.json` |
+
+**Frame highlights:** after a session is ready, POST `/sessions/{id}/frame-highlights` with an optional
+`{"count": 3, "clip_duration_ms": 30000}` body, then poll GET until `status` is `ready`. The worker reuses
+the sampled frame embeddings, visibility measurements, detector events, and transcript already produced by
+the upload pipeline; it does not decode or upload the video again. Legacy frames calculate and persist their
+visibility the first time they are scored. Each frame gets visual, novelty, visibility, sustained-scene, event,
+and speech component scores. The strongest non-overlapping peaks become draft clips with
+`generation_source: "frame_virality"`, while existing pipeline and manual clips are preserved. Viral prompt
+embeddings are cached per worker process, and a repeat POST with unchanged options returns the stored result.
+
+**Standalone highlights:** `POST /creator/highlights` is the separate, direct-upload version. It accepts the
+video itself as multipart form data, samples and scores frames in one pass, then automatically selects the
+strongest peak. Absolute luminance/visible-area/contrast scoring prevents nearly black frames from winning on
+CLIP similarity alone, while an eight-second neighborhood signal favors sustained action over isolated title
+cards or cuts. The clip expands through relatively strong neighboring frames, tolerates a short score dip so
+setup/payoff is preserved, and stops at a sustained local valley (10-45 second safety bounds). It renders that
+context-aware range as a phone-compatible 720x1280 H.264/AAC MP4: a blurred 9:16 background fills the screen
+while the sharp source remains fully visible instead of being cropped. Timed speech/accessibility cues are burned
+into the result. A configured `TRANSCRIBER_BACKEND` is tried first; Gemini provides the focused short-clip fallback
+when `GEMINI_API_KEY` is set. Captioning extracts only the selected range as compact mono Opus audio, avoiding a
+second video encode and reducing the Gemini payload. If neither provider produces cues, the clip still succeeds and reports
+`captions_burned: false`. The response includes playback/download URLs, output dimensions, caption count, and
+caption source. It does not create a user or session and does not need Postgres, Redis, object storage, or the
+persona simulator.
+It does require `ffmpeg`/`ffprobe` and a real CLIP-compatible embedder for meaningful visual rankings. Direct
+outputs expire after `STANDALONE_HIGHLIGHT_TTL_S` (24 hours by default). The API container installs FFmpeg;
+local Windows setups can point `FFMPEG_BINARY` and `FFPROBE_BINARY` at project-local executables.
 
 **Playback:** hand `playlist_url` to ExoPlayer/Media3 (Android), AVPlayer (iOS) or hls.js (web). Playback is segment-granular. The playlist starts at the segment containing `start_ms`, with `EXT-X-START` set to the exact offset. Segment URLs are presigned GETs valid for an hour, or plain public URLs if `STORAGE_PUBLIC_BASE_URL` is set. Re-fetch the playlist if a player sits open longer than that.
 

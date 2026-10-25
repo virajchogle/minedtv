@@ -175,6 +175,140 @@
         }
       }
     },
+    "/sessions/{session_id}/frame-highlights": {
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Create Frame Highlights",
+        "description": "Score existing sampled frames and generate private highlight clips. This is on-demand and\ndoes not decode the video again. Poll the matching GET until status is ready or failed.",
+        "operationId": "create_frame_highlights_sessions__session_id__frame_highlights_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Acting user's ID (demo identity, no auth yet)",
+              "title": "X-User-Id"
+            },
+            "description": "Acting user's ID (demo identity, no auth yet)"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FrameHighlightsCreate",
+                "default": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FrameHighlightsOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Get Frame Highlights",
+        "description": "Return frame scores and generated clips for the current frame-highlight run.",
+        "operationId": "get_frame_highlights_sessions__session_id__frame_highlights_get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Acting user's ID (demo identity, no auth yet)",
+              "title": "X-User-Id"
+            },
+            "description": "Acting user's ID (demo identity, no auth yet)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FrameHighlightsOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/sessions/{session_id}/status": {
       "get": {
         "tags": [
@@ -1933,6 +2067,149 @@
         }
       }
     },
+    "/creator/highlights": {
+      "post": {
+        "tags": [
+          "creator"
+        ],
+        "summary": "Create Direct Highlights",
+        "description": "Upload one video and render its strongest automatically contextualized highlight.\n\nThis does not create a user/session and does not require Postgres, Redis, or the persona simulator.",
+        "operationId": "create_direct_highlights_creator_highlights_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_create_direct_highlights_creator_highlights_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectHighlightsOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/creator/highlights/{run_id}/clips/{index}.mp4": {
+      "get": {
+        "tags": [
+          "creator"
+        ],
+        "summary": "Get Direct Highlight Clip",
+        "operationId": "get_direct_highlight_clip_creator_highlights__run_id__clips__index__mp4_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "index",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Index"
+            }
+          },
+          {
+            "name": "download",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Download"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/creator/highlights/{run_id}/frames/{frame_id}.jpg": {
+      "get": {
+        "tags": [
+          "creator"
+        ],
+        "summary": "Get Direct Highlight Frame",
+        "operationId": "get_direct_highlight_frame_creator_highlights__run_id__frames__frame_id__jpg_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "frame_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Frame Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/creator/analyze": {
       "post": {
         "tags": [
@@ -2544,6 +2821,21 @@
         ],
         "title": "Body_analyze_video_creator_analyze_post"
       },
+      "Body_create_direct_highlights_creator_highlights_post": {
+        "properties": {
+          "video": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "Video",
+            "description": "Video to score and cut into highlights"
+          }
+        },
+        "type": "object",
+        "required": [
+          "video"
+        ],
+        "title": "Body_create_direct_highlights_creator_highlights_post"
+      },
       "Body_search_image_search_image_post": {
         "properties": {
           "image": {
@@ -2824,6 +3116,22 @@
             ],
             "title": "Kind"
           },
+          "generation_source": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "pipeline",
+                  "frame_virality"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generation Source",
+            "description": "Which backend generator made an auto clip; null for manually created clips"
+          },
           "publish_state": {
             "type": "string",
             "enum": [
@@ -2996,6 +3304,22 @@
               "user"
             ],
             "title": "Kind"
+          },
+          "generation_source": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "pipeline",
+                  "frame_virality"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generation Source",
+            "description": "Which backend generator made an auto clip; null for manually created clips"
           },
           "publish_state": {
             "type": "string",
@@ -3449,6 +3773,227 @@
         ],
         "title": "CreatorYouTubeMetadata"
       },
+      "DirectHighlightClipOut": {
+        "properties": {
+          "index": {
+            "type": "integer",
+            "title": "Index"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "start_ms": {
+            "type": "integer",
+            "title": "Start Ms"
+          },
+          "end_ms": {
+            "type": "integer",
+            "title": "End Ms"
+          },
+          "duration_ms": {
+            "type": "integer",
+            "title": "Duration Ms"
+          },
+          "score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Score"
+          },
+          "video_url": {
+            "type": "string",
+            "title": "Video Url"
+          },
+          "download_url": {
+            "type": "string",
+            "title": "Download Url"
+          },
+          "thumbnail_url": {
+            "type": "string",
+            "title": "Thumbnail Url"
+          },
+          "width": {
+            "type": "integer",
+            "title": "Width",
+            "description": "Rendered portrait video width"
+          },
+          "height": {
+            "type": "integer",
+            "title": "Height",
+            "description": "Rendered portrait video height"
+          },
+          "captions_burned": {
+            "type": "boolean",
+            "title": "Captions Burned",
+            "description": "Whether timed captions are burned into the video"
+          },
+          "caption_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Caption Count"
+          },
+          "caption_source": {
+            "type": "string",
+            "enum": [
+              "none",
+              "transcriber",
+              "gemini"
+            ],
+            "title": "Caption Source"
+          }
+        },
+        "type": "object",
+        "required": [
+          "index",
+          "title",
+          "start_ms",
+          "end_ms",
+          "duration_ms",
+          "score",
+          "video_url",
+          "download_url",
+          "thumbnail_url",
+          "width",
+          "height",
+          "captions_burned",
+          "caption_count",
+          "caption_source"
+        ],
+        "title": "DirectHighlightClipOut"
+      },
+      "DirectHighlightFrameOut": {
+        "properties": {
+          "frame_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Frame Id"
+          },
+          "t_ms": {
+            "type": "integer",
+            "title": "T Ms"
+          },
+          "score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Score"
+          },
+          "visual_score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Visual Score"
+          },
+          "novelty_score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Novelty Score"
+          },
+          "visibility_score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Visibility Score"
+          },
+          "scene_score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Scene Score"
+          },
+          "selected": {
+            "type": "boolean",
+            "title": "Selected"
+          },
+          "thumbnail_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thumbnail Url",
+            "description": "Present for selected peak frames"
+          }
+        },
+        "type": "object",
+        "required": [
+          "frame_id",
+          "t_ms",
+          "score",
+          "visual_score",
+          "novelty_score",
+          "visibility_score",
+          "scene_score",
+          "selected",
+          "thumbnail_url"
+        ],
+        "title": "DirectHighlightFrameOut"
+      },
+      "DirectHighlightsOut": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Run Id"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "duration_ms": {
+            "type": "integer",
+            "title": "Duration Ms"
+          },
+          "width": {
+            "type": "integer",
+            "title": "Width"
+          },
+          "height": {
+            "type": "integer",
+            "title": "Height"
+          },
+          "frames_analyzed": {
+            "type": "integer",
+            "title": "Frames Analyzed"
+          },
+          "algorithm_version": {
+            "type": "string",
+            "title": "Algorithm Version"
+          },
+          "scores": {
+            "items": {
+              "$ref": "#/components/schemas/DirectHighlightFrameOut"
+            },
+            "type": "array",
+            "title": "Scores"
+          },
+          "clips": {
+            "items": {
+              "$ref": "#/components/schemas/DirectHighlightClipOut"
+            },
+            "type": "array",
+            "title": "Clips"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "filename",
+          "duration_ms",
+          "width",
+          "height",
+          "frames_analyzed",
+          "algorithm_version",
+          "scores",
+          "clips"
+        ],
+        "title": "DirectHighlightsOut"
+      },
       "EventOut": {
         "properties": {
           "id": {
@@ -3583,6 +4128,210 @@
           "next_cursor"
         ],
         "title": "FeedOut"
+      },
+      "FrameHighlightsCreate": {
+        "properties": {
+          "count": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 10.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Count",
+            "description": "Maximum non-overlapping clips; omitted uses FRAME_HIGHLIGHT_COUNT"
+          },
+          "clip_duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 120000.0,
+                "minimum": 3000.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clip Duration Ms",
+            "description": "Length of each generated clip; omitted uses FRAME_HIGHLIGHT_DURATION_MS"
+          }
+        },
+        "type": "object",
+        "title": "FrameHighlightsCreate"
+      },
+      "FrameHighlightsOut": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Session Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "none",
+              "processing",
+              "ready",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "requested_count": {
+            "type": "integer",
+            "title": "Requested Count"
+          },
+          "clip_duration_ms": {
+            "type": "integer",
+            "title": "Clip Duration Ms"
+          },
+          "algorithm_version": {
+            "type": "string",
+            "title": "Algorithm Version"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "scores": {
+            "items": {
+              "$ref": "#/components/schemas/FrameViralityPoint"
+            },
+            "type": "array",
+            "title": "Scores"
+          },
+          "clips": {
+            "items": {
+              "$ref": "#/components/schemas/ClipOut"
+            },
+            "type": "array",
+            "title": "Clips"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "status",
+          "requested_count",
+          "clip_duration_ms",
+          "algorithm_version"
+        ],
+        "title": "FrameHighlightsOut"
+      },
+      "FrameViralityPoint": {
+        "properties": {
+          "frame_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Frame Id"
+          },
+          "t_ms": {
+            "type": "integer",
+            "title": "T Ms"
+          },
+          "score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Score",
+            "description": "Combined frame virality score"
+          },
+          "visual_score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Visual Score",
+            "description": "Viral visual semantics, ranked within the video"
+          },
+          "novelty_score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Novelty Score",
+            "description": "Visual change from adjacent sampled frames"
+          },
+          "event_score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Event Score",
+            "description": "Nearby highlight-detector evidence"
+          },
+          "speech_score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Speech Score",
+            "description": "Nearby excited/reaction transcript evidence"
+          },
+          "visibility_score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Visibility Score",
+            "description": "Absolute frame readability based on luminance, visible area, and contrast"
+          },
+          "scene_score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Scene Score",
+            "description": "Sustained visual strength across the surrounding scene"
+          },
+          "selected": {
+            "type": "boolean",
+            "title": "Selected",
+            "description": "Whether this peak generated a highlight clip"
+          },
+          "thumbnail_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thumbnail Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "frame_id",
+          "t_ms",
+          "score",
+          "visual_score",
+          "novelty_score",
+          "event_score",
+          "speech_score",
+          "visibility_score",
+          "scene_score",
+          "selected",
+          "thumbnail_url"
+        ],
+        "title": "FrameViralityPoint"
       },
       "HTTPValidationError": {
         "properties": {

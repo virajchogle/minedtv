@@ -82,6 +82,16 @@ class Settings(BaseSettings):
     transcript_min_window_ms: int = 5000
     transcript_max_window_ms: int = 10000
     auto_clip_count: int = 3
+    # On-demand frame virality highlights. This uses the frame embeddings already produced by
+    # the pipeline, so it does not re-read or re-upload the video.
+    frame_highlight_count: int = Field(default=3, ge=1, le=10)
+    frame_highlight_duration_ms: int = Field(default=30_000, ge=3_000, le=120_000)
+    frame_virality_min_score: float = Field(default=0.42, ge=0, le=1)
+    standalone_highlight_dir: str = ".data/standalone-highlights"
+    standalone_highlight_ttl_s: int = Field(default=86_400, ge=300)
+    standalone_highlight_sample_fps: float = Field(default=0.5, gt=0, le=4)
+    standalone_mobile_width: int = Field(default=720, ge=360, le=2160, multiple_of=2)
+    standalone_mobile_height: int = Field(default=1280, ge=640, le=3840, multiple_of=2)
     # Publish state for clips the pipeline creates. "draft" keeps new uploads private until the owner
     # publishes; "published" puts them straight in the feed (useful until the app has a publish button).
     new_clip_publish_state: Literal["draft", "ready", "published"] = "draft"

@@ -20,10 +20,22 @@ from sqlalchemy import delete, func, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import Settings, get_settings
-from app.db.models import PIPELINE_STEPS, STEP_STATUS, Clip, Event, Frame, Segment, Session, SessionStatus, Transcript
+from app.db.models import (
+    PIPELINE_STEPS,
+    STEP_STATUS,
+    Clip,
+    Event,
+    Frame,
+    FrameHighlightRun,
+    Segment,
+    Session,
+    SessionStatus,
+    Transcript,
+)
 from app.db.session import get_sessionmaker
 from app.log import bind
 from app.ml.interfaces import DetectedEvent, Embedder, HighlightDetector, Transcriber, TranscriptChunk
+from app.services.frame_virality import image_visibility_score
 from app.services.queries import nearest_frame_key
 from app.services.storage import Storage, get_storage
 from app.worker import media
@@ -177,6 +189,9 @@ async def step_frames(ctx: Ctx) -> None:
 
     await asyncio.to_thread(ctx.deps.storage.delete_prefix, f"{prefix}/frames/")
     async with ctx.deps.sessionmaker() as db:
+        # New frames invalidate any on-demand frame score run. Score rows cascade when
+        # their old frame rows are replaced; deleting the run makes the API report none.
+        await db.execute(delete(FrameHighlightRun).where(FrameHighlightRun.session_id == ctx.session_id))
         await db.execute(delete(Frame).where(Frame.session_id == ctx.session_id))
         await db.commit()
 
@@ -184,6 +199,9 @@ async def step_frames(ctx: Ctx) -> None:
         batch = frames[i : i + st.embed_batch_size]
         images = [p.read_bytes() for _, p in batch]
         vectors = await asyncio.to_thread(ctx.deps.embedder.embed_images, images)
+        visibility_scores = await asyncio.gather(
+            *(asyncio.to_thread(image_visibility_score, image) for image in images)
+        )
         keys = [f"{prefix}/frames/{t:09d}.jpg" for t, _ in batch]
         await asyncio.to_thread(
             _upload_many, ctx.deps.storage, [(k, p, "image/jpeg") for k, (_, p) in zip(keys, batch, strict=True)], st.upload_concurrency
@@ -192,8 +210,16 @@ async def step_frames(ctx: Ctx) -> None:
             await db.execute(
                 insert(Frame),
                 [
-                    dict(session_id=ctx.session_id, t_ms=t, thumbnail_key=k, embedding=v)
-                    for (t, _), k, v in zip(batch, keys, vectors, strict=True)
+                    dict(
+                        session_id=ctx.session_id,
+                        t_ms=t,
+                        thumbnail_key=k,
+                        embedding=v,
+                        visibility_score=visibility,
+                    )
+                    for (t, _), k, v, visibility in zip(
+                        batch, keys, vectors, visibility_scores, strict=True
+                    )
                 ],
             )
             await db.commit()
@@ -315,6 +341,7 @@ async def step_finalize(ctx: Ctx) -> None:
                         thumbnail_key=await nearest_frame_key(db, s.id, t) or s.poster_key,
                         status="ready",
                         kind="auto",
+                        generation_source="pipeline",
                         publish_state=st.new_clip_publish_state,
                         published_at=func.now() if st.new_clip_publish_state == "published" else None,
                     )
@@ -330,6 +357,7 @@ async def step_finalize(ctx: Ctx) -> None:
                     thumbnail_key=s.poster_key,
                     status="ready",
                     kind="auto",
+                    generation_source="pipeline",
                     publish_state=st.new_clip_publish_state,
                     published_at=func.now() if st.new_clip_publish_state == "published" else None,
                 )

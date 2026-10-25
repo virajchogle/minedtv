@@ -54,3 +54,17 @@ def enqueue_virality(clip_id: uuid.UUID, platform: str, target_audience: str | N
         failure_ttl=86400,
     )
     return job.id
+
+
+def enqueue_frame_highlights(session_id: uuid.UUID, requested_count: int, clip_duration_ms: int) -> str:
+    job = get_queue().enqueue(
+        "app.worker.jobs.frame_highlights",
+        str(session_id),
+        requested_count=requested_count,
+        clip_duration_ms=clip_duration_ms,
+        job_id=f"frame-highlights-{session_id}-{uuid.uuid4().hex[:8]}",
+        job_timeout=900,
+        result_ttl=3600,
+        failure_ttl=86400,
+    )
+    return job.id

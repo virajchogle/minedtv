@@ -20,9 +20,14 @@ from app.schemas import (
     ClipOut,
     CountsOut,
     CreatorPackOut,
+    DirectHighlightClipOut,
+    DirectHighlightFrameOut,
+    DirectHighlightsOut,
     EventOut,
     ExportOut,
     FeedOut,
+    FrameHighlightsOut,
+    FrameViralityPoint,
     HealthOut,
     SearchOut,
     SearchResult,
@@ -64,6 +69,7 @@ def clip(i: int, liked: bool | None = None) -> ClipOut:
         id=cid, session_id=sid, user=USERS[u], game=game, title=title, start_ms=start, end_ms=end,
         duration_ms=end - start, thumbnail_url=f"{CDN}/sessions/{sid}/frames/{(start + end) // 2 // 1000 * 1000:09d}.jpg",
         playlist_url=f"{API}/clips/{cid}/playlist.m3u8", status="ready", kind=kind, view_count=views,
+        generation_source="pipeline" if kind == "auto" else None,
         like_count=likes, liked_by_me=liked, created_at=NOW - timedelta(hours=3 * i),
     )
 
@@ -207,6 +213,29 @@ def examples() -> dict[str, object]:
         "sessions.get.json": session(),
         "sessions.get.failed.json": session("failed", "audio", failed_step="highlights", error="RuntimeError: model exploded"),
         "sessions.reprocess.json": status_event("queued", "audio"),
+        "sessions.frame-highlights.json": FrameHighlightsOut(
+            session_id=sid,
+            status="ready",
+            requested_count=3,
+            clip_duration_ms=30_000,
+            algorithm_version="frame-virality-v2-visibility",
+            scores=[
+                FrameViralityPoint(
+                    frame_id=uid(9200), t_ms=331_000, score=0.934, visual_score=0.91,
+                    novelty_score=0.78, event_score=0.97, speech_score=0.88,
+                    visibility_score=0.96, scene_score=0.89, selected=True,
+                    thumbnail_url=f"{CDN}/sessions/{sid}/frames/000331000.jpg",
+                ),
+                FrameViralityPoint(
+                    frame_id=uid(9201), t_ms=332_000, score=0.741, visual_score=0.84,
+                    novelty_score=0.43, event_score=0.76, speech_score=0.88,
+                    visibility_score=0.91, scene_score=0.85, selected=False,
+                    thumbnail_url=f"{CDN}/sessions/{sid}/frames/000332000.jpg",
+                ),
+            ],
+            clips=[clip(0).model_copy(update={"generation_source": "frame_virality", "publish_state": "draft"})],
+            updated_at=NOW,
+        ),
         "feed.json": FeedOut(items=[clip(i) for i in range(5)], next_cursor="MjAyNi0xMC0yNFQwNjozMDowMCswMDowMHwwMDAw"),
         "users.clips.json": FeedOut(items=[clip(0)], next_cursor=None),
         "clips.get.json": ClipDetailOut(
@@ -232,6 +261,33 @@ def examples() -> dict[str, object]:
         "search.json": search_results(),
         "search.image.json": search_results().model_copy(update={"query": "image:screenshot.png", "took_ms": 241}),
         "creator.analyze.json": creator,
+        "creator.highlights.json": DirectHighlightsOut(
+            run_id=uid(9300), filename="ranked-ascent.mp4", duration_ms=91_000, width=1920, height=1080,
+            frames_analyzed=46, algorithm_version="frame-virality-v3-visibility-context",
+            scores=[
+                DirectHighlightFrameOut(
+                    frame_id=uid(9301), t_ms=40_000, score=0.934, visual_score=0.91,
+                    novelty_score=0.82, visibility_score=0.95, scene_score=0.88, selected=True,
+                    thumbnail_url=f"{API}/creator/highlights/{uid(9300)}/frames/{uid(9301)}.jpg",
+                ),
+                DirectHighlightFrameOut(
+                    frame_id=uid(9302), t_ms=42_000, score=0.612, visual_score=0.68,
+                    novelty_score=0.44, visibility_score=0.89, scene_score=0.73,
+                    selected=False, thumbnail_url=None,
+                ),
+            ],
+            clips=[
+                DirectHighlightClipOut(
+                    index=1, title="The viral clip", start_ms=31_000, end_ms=55_000,
+                    duration_ms=24_000, score=0.934,
+                    video_url=f"{API}/creator/highlights/{uid(9300)}/clips/1.mp4",
+                    download_url=f"{API}/creator/highlights/{uid(9300)}/clips/1.mp4?download=true",
+                    thumbnail_url=f"{API}/creator/highlights/{uid(9300)}/frames/{uid(9301)}.jpg",
+                    width=720, height=1280, captions_burned=True, caption_count=8,
+                    caption_source="gemini",
+                )
+            ],
+        ),
         "creator.simulate.json": build_audience_simulation(panel, creator, "instagram", "FPS highlight viewers"),
     }
 

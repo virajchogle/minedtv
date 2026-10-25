@@ -37,6 +37,7 @@ def clip_out(
         playlist_url=urls.clip_playlist(clip.id),
         status=clip.status,
         kind=clip.kind,
+        generation_source=clip.generation_source,
         publish_state=clip.publish_state,
         published_at=clip.published_at,
         view_count=clip.view_count + pending[0],

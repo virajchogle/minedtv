@@ -106,6 +106,10 @@ class ClipOut(_Out):
     playlist_url: str
     status: str
     kind: Literal["auto", "user"]
+    generation_source: Literal["pipeline", "frame_virality"] | None = Field(
+        default=None,
+        description="Which backend generator made an auto clip; null for manually created clips",
+    )
     publish_state: PublishState = Field(
         default="published",
         description="draft (owner only) -> ready (queued to post to YouTube, owner only) -> published (public)",
@@ -115,6 +119,88 @@ class ClipOut(_Out):
     like_count: int
     liked_by_me: bool | None = Field(default=None, description="Only set when X-User-Id is sent")
     created_at: datetime
+
+
+class FrameHighlightsCreate(BaseModel):
+    count: int | None = Field(
+        default=None,
+        ge=1,
+        le=10,
+        description="Maximum non-overlapping clips; omitted uses FRAME_HIGHLIGHT_COUNT",
+    )
+    clip_duration_ms: int | None = Field(
+        default=None,
+        ge=3000,
+        le=120_000,
+        description="Length of each generated clip; omitted uses FRAME_HIGHLIGHT_DURATION_MS",
+    )
+
+
+class FrameViralityPoint(_Out):
+    frame_id: uuid.UUID
+    t_ms: int
+    score: float = Field(ge=0, le=1, description="Combined frame virality score")
+    visual_score: float = Field(ge=0, le=1, description="Viral visual semantics, ranked within the video")
+    novelty_score: float = Field(ge=0, le=1, description="Visual change from adjacent sampled frames")
+    event_score: float = Field(ge=0, le=1, description="Nearby highlight-detector evidence")
+    speech_score: float = Field(ge=0, le=1, description="Nearby excited/reaction transcript evidence")
+    visibility_score: float = Field(ge=0, le=1, description="Absolute frame readability based on luminance, visible area, and contrast")
+    scene_score: float = Field(ge=0, le=1, description="Sustained visual strength across the surrounding scene")
+    selected: bool = Field(description="Whether this peak generated a highlight clip")
+    thumbnail_url: str | None
+
+
+class FrameHighlightsOut(_Out):
+    session_id: uuid.UUID
+    status: Literal["none", "processing", "ready", "failed"]
+    requested_count: int
+    clip_duration_ms: int
+    algorithm_version: str
+    error: str | None = None
+    scores: list[FrameViralityPoint] = Field(default_factory=list)
+    clips: list[ClipOut] = Field(default_factory=list)
+    updated_at: datetime | None = None
+
+
+class DirectHighlightFrameOut(_Out):
+    frame_id: uuid.UUID
+    t_ms: int
+    score: float = Field(ge=0, le=1)
+    visual_score: float = Field(ge=0, le=1)
+    novelty_score: float = Field(ge=0, le=1)
+    visibility_score: float = Field(ge=0, le=1)
+    scene_score: float = Field(ge=0, le=1)
+    selected: bool
+    thumbnail_url: str | None = Field(description="Present for selected peak frames")
+
+
+class DirectHighlightClipOut(_Out):
+    index: int
+    title: str
+    start_ms: int
+    end_ms: int
+    duration_ms: int
+    score: float = Field(ge=0, le=1)
+    video_url: str
+    download_url: str
+    thumbnail_url: str
+    width: int = Field(description="Rendered portrait video width")
+    height: int = Field(description="Rendered portrait video height")
+    captions_burned: bool = Field(description="Whether timed captions are burned into the video")
+    caption_count: int = Field(ge=0)
+    caption_source: Literal["none", "transcriber", "gemini"]
+
+
+class DirectHighlightsOut(_Out):
+    run_id: uuid.UUID
+    filename: str
+    duration_ms: int
+    width: int
+    height: int
+    frames_analyzed: int
+    algorithm_version: str
+    scores: list[DirectHighlightFrameOut]
+    clips: list[DirectHighlightClipOut]
 
 
 class FeedOut(_Out):

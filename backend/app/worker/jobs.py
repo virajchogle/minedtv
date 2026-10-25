@@ -78,3 +78,20 @@ def virality(clip_id: str, platform: str = "general", target_audience: str | Non
             await get_redis().aclose()
 
     return asyncio.run(main())
+
+
+def frame_highlights(session_id: str, requested_count: int, clip_duration_ms: int) -> str:
+    from app.db.session import get_engine
+    from app.worker.frame_highlights import run_frame_highlights
+    from app.worker.pipeline import Deps
+
+    settings = get_settings()
+    setup_logging(settings.log_level, settings.log_json)
+
+    async def main() -> str:
+        try:
+            return await run_frame_highlights(session_id, Deps.default(), requested_count, clip_duration_ms)
+        finally:
+            await get_engine().dispose()
+
+    return asyncio.run(main())

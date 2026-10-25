@@ -18,7 +18,18 @@ from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.config import get_settings
-from app.db.models import Clip, Event, Frame, Segment, Session, SessionStatus, Transcript, User
+from app.db.models import (
+    Clip,
+    Event,
+    Frame,
+    FrameHighlightRun,
+    FrameViralityScore,
+    Segment,
+    Session,
+    SessionStatus,
+    Transcript,
+    User,
+)
 from app.ml.interfaces import DetectedEvent, TranscriptChunk
 from app.ml.stubs import StubEmbedder
 from app.services.playlist import build_playlist
@@ -301,3 +312,65 @@ async def test_virality_only_for_unpublished_clips(sessionmaker, video, tmp_path
     with pytest.raises(ClipAlreadyPublished):
         await run_virality(clip.id, deps, "youtube", None, 6, simulator_factory=FakeSimulator,
                            engine_factory=engine_factory({}, []))
+
+
+async def test_frame_virality_reuses_pipeline_frames_and_creates_clips(sessionmaker, video, tmp_path):
+    from app.services.frame_virality import ALGORITHM_VERSION
+    from app.worker.frame_highlights import run_frame_highlights
+
+    storage = LocalStorage(tmp_path / "storage")
+    sid = await _new_session(sessionmaker, storage, video)
+    deps = _deps(sessionmaker, storage, FakeDetector())
+    deps.settings = deps.settings.model_copy(
+        update={"frame_highlight_count": 2, "frame_highlight_duration_ms": 4000}
+    )
+    assert await run_pipeline(sid, deps=deps) == SessionStatus.READY
+
+    assert await run_frame_highlights(sid, deps) == str(sid)
+    async with sessionmaker() as db:
+        run = await db.get(FrameHighlightRun, sid)
+        assert (run.status, run.algorithm_version) == ("ready", ALGORITHM_VERSION)
+        scores = (
+            await db.scalars(
+                select(FrameViralityScore)
+                .where(FrameViralityScore.session_id == sid)
+                .order_by(FrameViralityScore.t_ms)
+            )
+        ).all()
+        assert len(scores) == VIDEO_S
+        assert 1 <= sum(score.selected for score in scores) <= 2
+        clips = (
+            await db.scalars(
+                select(Clip).where(Clip.session_id == sid, Clip.generation_source == "frame_virality")
+            )
+        ).all()
+        assert len(clips) == sum(score.selected for score in scores)
+        assert await db.scalar(
+            select(func.count()).select_from(Clip).where(
+                Clip.session_id == sid, Clip.generation_source == "pipeline"
+            )
+        ) == 2
+        assert all(clip.end_ms - clip.start_ms == 4000 for clip in clips)
+        assert all(clip.publish_state == "draft" for clip in clips)
+        assert await db.scalar(
+            select(func.count()).select_from(Event).where(
+                Event.session_id == sid, Event.source == "FrameViralityScorer"
+            )
+        ) == len(clips)
+
+    # Re-running replaces the generated rows rather than duplicating them.
+    assert await run_frame_highlights(sid, deps) == str(sid)
+    async with sessionmaker() as db:
+        assert await db.scalar(
+            select(func.count()).select_from(FrameViralityScore).where(
+                FrameViralityScore.session_id == sid
+            )
+        ) == VIDEO_S
+        assert await db.scalar(
+            select(func.count()).select_from(Clip).where(Clip.session_id == sid, Clip.kind == "auto")
+        ) >= 1
+        assert await db.scalar(
+            select(func.count()).select_from(Clip).where(
+                Clip.session_id == sid, Clip.generation_source == "frame_virality"
+            )
+        ) <= 2

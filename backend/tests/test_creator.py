@@ -6,8 +6,9 @@ from fastapi.testclient import TestClient
 from app.api import creator
 from app.config import Settings
 from app.main import create_app
-from app.ml import audience_simulator, gemini_creator
+from app.ml import audience_simulator, gemini_captions, gemini_creator
 from app.ml.audience_simulator import AudiencePanelDraft, GeminiAudienceSimulator, build_audience_simulation
+from app.ml.gemini_captions import GeminiCaptionEngine
 from app.ml.gemini_creator import GeminiCreatorEngine, extract_json
 from app.schemas import CreatorPackOut
 
@@ -143,6 +144,73 @@ def test_inline_analysis_returns_typed_content_pack(monkeypatch, tmp_path):
         "max_output_tokens": 8192,
     }
     assert captured["timeout"] == 90
+
+
+def test_focused_caption_engine_returns_timed_cues(monkeypatch, tmp_path):
+    captured = {}
+
+    class FakeInteractions:
+        def create(self, **kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(output_text=json.dumps({
+                "cues": [
+                    {"start_ms": 100, "end_ms": 1400, "text": "Plant the defuser!"},
+                    {"start_ms": 1500, "end_ms": 2600, "text": "[Gunfire]"},
+                ]
+            }))
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            captured["client"] = kwargs
+            self.interactions = FakeInteractions()
+
+    monkeypatch.setattr(gemini_captions.genai, "Client", FakeClient)
+    audio = tmp_path / "selected.opus"
+    audio.write_bytes(b"short selected audio")
+    settings = Settings(app_env="test", gemini_api_key="test-key")
+
+    cues = GeminiCaptionEngine(settings).transcribe_audio(audio)
+
+    assert [(cue.start_ms, cue.end_ms, cue.text) for cue in cues] == [
+        (100, 1400, "Plant the defuser!"),
+        (1500, 2600, "[Gunfire]"),
+    ]
+    assert captured["client"] == {"api_key": "test-key"}
+    assert captured["generation_config"] == {"thinking_level": "minimal", "max_output_tokens": 2048}
+    assert captured["input"][0]["type"] == "audio"
+    assert captured["input"][0]["mime_type"] == "audio/opus"
+    assert "processing" not in captured["input"][0]
+
+
+def test_focused_caption_engine_normalizes_seconds_mislabeled_as_milliseconds(monkeypatch, tmp_path):
+    class FakeInteractions:
+        def create(self, **kwargs):
+            return SimpleNamespace(output_text=json.dumps({
+                "cues": [
+                    {"start_ms": 0, "end_ms": 2, "text": "There has to be someone here."},
+                    {"start_ms": 8, "end_ms": 10, "text": "Not good."},
+                    {"start_ms": 30, "end_ms": 31, "text": "[Groaning]"},
+                ]
+            }))
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            self.interactions = FakeInteractions()
+
+    monkeypatch.setattr(gemini_captions.genai, "Client", FakeClient)
+    audio = tmp_path / "selected.opus"
+    audio.write_bytes(b"audio")
+
+    cues = GeminiCaptionEngine(Settings(app_env="test", gemini_api_key="test-key")).transcribe_audio(
+        audio,
+        duration_ms=32_000,
+    )
+
+    assert [(cue.start_ms, cue.end_ms) for cue in cues] == [
+        (0, 2000),
+        (8000, 10_000),
+        (30_000, 31_000),
+    ]
 
 
 def test_creator_endpoint_accepts_video(monkeypatch):

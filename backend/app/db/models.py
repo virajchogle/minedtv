@@ -147,6 +147,8 @@ class Clip(Base):
     created_at: Mapped[datetime] = _created()
     # "auto" clips are (re)created by the pipeline's finalize step; "user" clips are never touched by it.
     kind: Mapped[str] = mapped_column(String(16), nullable=False, default="user", server_default="user")
+    # Distinguishes disposable outputs from different generators. Null means a user-created clip.
+    generation_source: Mapped[str | None] = mapped_column(String(32))
     # draft -> ready (queued to post to YouTube) -> published (visible in feed/search). Unpublished
     # clips are owner-only; virality simulation only runs on them.
     publish_state: Mapped[str] = mapped_column(String(16), nullable=False, default="draft", server_default="draft")
@@ -170,7 +172,62 @@ class Frame(Base):
     session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False)
     t_ms: Mapped[int] = mapped_column(BigInteger, nullable=False)
     thumbnail_key: Mapped[str | None] = mapped_column(Text)
+    visibility_score: Mapped[float | None] = mapped_column(Float)
     embedding = mapped_column(Vector(EMBEDDING_DIM))
+
+
+class FrameHighlightRun(Base):
+    """Current on-demand frame-virality run for a processed session."""
+
+    __tablename__ = "frame_highlight_runs"
+
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("sessions.id", ondelete="CASCADE"), primary_key=True
+    )
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="processing")
+    requested_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    clip_duration_ms: Mapped[int] = mapped_column(Integer, nullable=False)
+    algorithm_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = _created()
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class FrameViralityScore(Base):
+    """Explainable virality signals calculated from one already-extracted frame."""
+
+    __tablename__ = "frame_virality_scores"
+    __table_args__ = (
+        Index("ix_frame_virality_session_t", "session_id", "t_ms"),
+        Index("ix_frame_virality_session_selected", "session_id", "selected", "score"),
+        CheckConstraint(
+            "score BETWEEN 0 AND 1 AND visual_score BETWEEN 0 AND 1 "
+            "AND novelty_score BETWEEN 0 AND 1 AND event_score BETWEEN 0 AND 1 "
+            "AND speech_score BETWEEN 0 AND 1 AND visibility_score BETWEEN 0 AND 1 "
+            "AND scene_score BETWEEN 0 AND 1",
+            name="ck_frame_virality_scores_range",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False
+    )
+    frame_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("frames.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    t_ms: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    score: Mapped[float] = mapped_column(Float, nullable=False)
+    visual_score: Mapped[float] = mapped_column(Float, nullable=False)
+    novelty_score: Mapped[float] = mapped_column(Float, nullable=False)
+    event_score: Mapped[float] = mapped_column(Float, nullable=False)
+    speech_score: Mapped[float] = mapped_column(Float, nullable=False)
+    visibility_score: Mapped[float] = mapped_column(Float, nullable=False)
+    scene_score: Mapped[float] = mapped_column(Float, nullable=False)
+    selected: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    created_at: Mapped[datetime] = _created()
 
 
 class Transcript(Base):

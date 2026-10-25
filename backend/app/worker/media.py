@@ -2,7 +2,10 @@
 
 import json
 import logging
+import os
+import shutil
 import subprocess
+import textwrap
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -11,6 +14,20 @@ log = logging.getLogger(__name__)
 
 class MediaError(RuntimeError):
     pass
+
+
+def executable(name: str) -> str:
+    """Resolve an ffmpeg tool, allowing a project-local runtime override."""
+    override = os.getenv(f"{name.upper()}_BINARY")
+    return override or name
+
+
+def tools_available() -> bool:
+    def available(name: str) -> bool:
+        candidate = executable(name)
+        return Path(candidate).is_file() or shutil.which(candidate) is not None
+
+    return available("ffmpeg") and available("ffprobe")
 
 
 def _run(args: list[str], timeout: int = 3600) -> str:
@@ -40,7 +57,7 @@ def _parse_rate(rate: str | None) -> float:
 
 def probe(path: str | Path) -> ProbeResult:
     out = json.loads(
-        _run(["ffprobe", "-v", "error", "-print_format", "json", "-show_streams", "-show_format", str(path)], timeout=120)
+        _run([executable("ffprobe"), "-v", "error", "-print_format", "json", "-show_streams", "-show_format", str(path)], timeout=120)
     )
     streams = out.get("streams", [])
     video = next((s for s in streams if s.get("codec_type") == "video"), None)
@@ -72,7 +89,7 @@ def transcode_hls(
     """Transcode to <=height p H.264/AAC and cut into segment_s-second HLS segments on keyframes."""
     out_dir.mkdir(parents=True, exist_ok=True)
     args = [
-        "ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(src),
+        executable("ffmpeg"), "-hide_banner", "-loglevel", "error", "-y", "-i", str(src),
         "-map", "0:v:0",
     ]
     if has_audio:
@@ -115,7 +132,7 @@ def parse_hls_index(index: Path) -> list[HlsSegment]:
 
 def extract_image(src: str | Path, out: Path, t_s: float, width: int) -> Path:
     _run([
-        "ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-ss", f"{t_s:.3f}", "-i", str(src),
+        executable("ffmpeg"), "-hide_banner", "-loglevel", "error", "-y", "-ss", f"{t_s:.3f}", "-i", str(src),
         "-frames:v", "1", "-vf", f"scale={width}:-2", "-q:v", "3", str(out),
     ], timeout=120)
     return out
@@ -125,7 +142,7 @@ def sample_frames(src: str | Path, out_dir: Path, *, fps: float, width: int) -> 
     """One small JPEG per 1/fps seconds. Returns (t_ms, path) in time order."""
     out_dir.mkdir(parents=True, exist_ok=True)
     _run([
-        "ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(src),
+        executable("ffmpeg"), "-hide_banner", "-loglevel", "error", "-y", "-i", str(src),
         "-vf", f"fps={fps},scale={width}:-2", "-q:v", "5", str(out_dir / "f_%06d.jpg"),
     ])
     paths = sorted(out_dir.glob("f_*.jpg"))
@@ -135,7 +152,142 @@ def sample_frames(src: str | Path, out_dir: Path, *, fps: float, width: int) -> 
 def extract_audio(src: str | Path, out: Path) -> Path:
     """Mono 16 kHz Opus: what Whisper wants, and small enough to ship to a GPU box (~10 MB/hour)."""
     _run([
-        "ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(src),
+        executable("ffmpeg"), "-hide_banner", "-loglevel", "error", "-y", "-i", str(src),
         "-vn", "-ac", "1", "-ar", "16000", "-c:a", "libopus", "-b:a", "24k", str(out),
+    ])
+    return out
+
+
+def extract_audio_range(src: str | Path, out: Path, start_ms: int, end_ms: int) -> Path:
+    """Extract only a selected range as compact mono 16 kHz Opus audio."""
+    if start_ms < 0 or end_ms <= start_ms:
+        raise ValueError("invalid audio range")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    _run([
+        executable("ffmpeg"), "-hide_banner", "-loglevel", "error", "-y",
+        "-ss", f"{start_ms / 1000:.3f}", "-i", str(src),
+        "-t", f"{(end_ms - start_ms) / 1000:.3f}",
+        "-vn", "-ac", "1", "-ar", "16000", "-c:a", "libopus", "-b:a", "24k", str(out),
+    ])
+    return out
+
+
+def render_clip(
+    src: str | Path,
+    out: Path,
+    start_ms: int,
+    end_ms: int,
+    *,
+    height: int = 720,
+    crf: int = 23,
+) -> Path:
+    """Render an exact, browser-friendly MP4 range from a source video."""
+    if start_ms < 0 or end_ms <= start_ms:
+        raise ValueError("invalid clip range")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    _run([
+        executable("ffmpeg"), "-hide_banner", "-loglevel", "error", "-y",
+        "-ss", f"{start_ms / 1000:.3f}", "-i", str(src),
+        "-t", f"{(end_ms - start_ms) / 1000:.3f}",
+        "-map", "0:v:0", "-map", "0:a:0?",
+        "-vf", f"scale=-2:trunc(min({height}\\,ih)/2)*2",
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", str(crf), "-pix_fmt", "yuv420p",
+        "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", str(out),
+    ])
+    return out
+
+
+def _ass_timestamp(ms: int) -> str:
+    total_centiseconds = max(0, ms) // 10
+    hours, remainder = divmod(total_centiseconds, 360_000)
+    minutes, remainder = divmod(remainder, 6_000)
+    seconds, centiseconds = divmod(remainder, 100)
+    return f"{hours}:{minutes:02d}:{seconds:02d}.{centiseconds:02d}"
+
+
+def write_ass_captions(cues: list[tuple[int, int, str]], out: Path) -> Path:
+    """Write phone-readable, centered burn-in captions for a 720x1280 canvas."""
+    header = """[Script Info]
+ScriptType: v4.00+
+PlayResX: 720
+PlayResY: 1280
+WrapStyle: 2
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Mobile,Arial,38,&H00FFFFFF,&H00FFFFFF,&H00101010,&H78000000,-1,0,0,0,100,100,0,0,1,3,1,2,54,54,106,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+"""
+    lines = [header]
+    for start_ms, end_ms, raw_text in cues:
+        cleaned = " ".join(raw_text.split()).strip()
+        if not cleaned:
+            continue
+        wrapped = r"\N".join(textwrap.wrap(cleaned, width=32, break_long_words=False, break_on_hyphens=False))
+        escaped = wrapped.replace("{", r"\{").replace("}", r"\}")
+        lines.append(
+            f"Dialogue: 0,{_ass_timestamp(start_ms)},{_ass_timestamp(max(end_ms, start_ms + 500))},"
+            f"Mobile,,0,0,0,,{escaped}\n"
+        )
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text("".join(lines), encoding="utf-8-sig")
+    return out
+
+
+def _ffmpeg_filter_path(path: Path) -> str:
+    # FFmpeg's filter parser treats the drive colon as a separator even when
+    # subprocess bypasses the shell. Forward slashes also work on Windows.
+    return path.resolve().as_posix().replace(":", r"\:").replace("'", r"\'")
+
+
+def render_mobile_clip(
+    src: str | Path,
+    out: Path,
+    start_ms: int,
+    end_ms: int,
+    *,
+    captions: Path | None = None,
+    width: int = 720,
+    height: int = 1280,
+    crf: int = 23,
+) -> Path:
+    """Render a broadly compatible 9:16 MP4 without cropping landscape action.
+
+    A blurred full-canvas copy fills the portrait background while a sharp,
+    aspect-preserving copy stays centered. Optional ASS captions are burned in.
+    """
+    if start_ms < 0 or end_ms <= start_ms:
+        raise ValueError("invalid clip range")
+    if width < 2 or height < 2 or width % 2 or height % 2:
+        raise ValueError("mobile output dimensions must be positive even numbers")
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    blur_width = max(90, width // 4)
+    blur_height = max(160, height // 4)
+    filters = (
+        f"[0:v]split=2[background][foreground];"
+        f"[background]scale={blur_width}:{blur_height}:force_original_aspect_ratio=increase,"
+        f"crop={blur_width}:{blur_height},boxblur=12:6,scale={width}:{height}[blurred];"
+        f"[foreground]scale={width}:{height}:force_original_aspect_ratio=decrease[sharp];"
+        f"[blurred][sharp]overlay=(W-w)/2:(H-h)/2,"
+        "fps=30,format=yuv420p"
+    )
+    if captions and captions.is_file():
+        filters += f",ass=filename='{_ffmpeg_filter_path(captions)}'"
+    filters += "[video]"
+
+    _run([
+        executable("ffmpeg"), "-hide_banner", "-loglevel", "error", "-y",
+        "-ss", f"{start_ms / 1000:.3f}", "-i", str(src),
+        "-t", f"{(end_ms - start_ms) / 1000:.3f}",
+        "-filter_complex", filters,
+        "-map", "[video]", "-map", "0:a:0?",
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", str(crf),
+        "-profile:v", "main", "-level:v", "4.0", "-pix_fmt", "yuv420p",
+        "-c:a", "aac", "-b:a", "128k", "-ac", "2", "-ar", "48000",
+        "-movflags", "+faststart", "-shortest", str(out),
     ])
     return out
