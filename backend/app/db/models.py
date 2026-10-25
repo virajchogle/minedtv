@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
@@ -7,6 +7,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Computed,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -243,6 +244,16 @@ class Like(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
     clip_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("clips.id", ondelete="CASCADE"), primary_key=True, index=True)
     created_at: Mapped[datetime] = _created()
+
+
+class ClipDailyViews(Base):
+    """Views per clip per UTC day, for analytics. Flushed from Redis with the view counters."""
+
+    __tablename__ = "clip_daily_views"
+
+    clip_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("clips.id", ondelete="CASCADE"), primary_key=True)
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    views: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
 class Comment(Base):

@@ -11,7 +11,7 @@ import uuid
 from collections.abc import Callable
 
 from app.config import Settings
-from app.db.models import UNPUBLISHED_STATES, Clip, NotificationType
+from app.db.models import Clip, NotificationType
 from app.schemas import CreatorPackOut
 from app.services.social import notify
 from app.worker.creator_pack import build_creator_pack
@@ -19,10 +19,6 @@ from app.worker.export import STATUS_TTL_S
 from app.worker.pipeline import Deps
 
 log = logging.getLogger("virality")
-
-
-class ClipAlreadyPublished(RuntimeError):
-    pass
 
 
 def _options_hash(platform: str, target_audience: str | None, persona_count: int | None) -> str:
@@ -48,13 +44,15 @@ async def run_virality(
     simulator_factory: Callable[[Settings], object] | None = None,
     engine_factory: Callable[[Settings], object] | None = None,
 ) -> str:
-    """Simulate audience reactions for an unpublished clip. Returns the result's storage key."""
+    """Simulate audience reactions for a clip. Runs 1 + VIRALITY_EXTRA_PANELS persona panels on the
+    same AI analysis and keeps every panel's score in `score_samples`, since one panel is noisy.
+    Returns the result's storage key."""
     clip_id = uuid.UUID(str(clip_id))
     async with deps.sessionmaker() as db:
         clip = await db.get(Clip, clip_id)
         if clip is None:
             raise LookupError(f"clip {clip_id} not found")
-        start, end, state, owner_id = clip.start_ms, clip.end_ms, clip.publish_state, clip.user_id
+        start, end, owner_id = clip.start_ms, clip.end_ms, clip.user_id
     args = (clip_id, start, end, platform, target_audience, persona_count)
     key, skey = virality_key(*args), virality_status_key(*args)
 
@@ -62,9 +60,6 @@ async def run_virality(
         if redis is not None:
             await redis.set(skey, value, ex=STATUS_TTL_S)
 
-    if state not in UNPUBLISHED_STATES:
-        await set_status("failed:clip is already published")
-        raise ClipAlreadyPublished(f"clip {clip_id} is {state}")
     if await asyncio.to_thread(deps.storage.exists, key):
         await set_status("ready")
         return key
@@ -80,7 +75,17 @@ async def run_virality(
             simulator_factory = GeminiAudienceSimulator
         simulator = simulator_factory(deps.settings)
         count = persona_count or deps.settings.creator_persona_count
-        result = await asyncio.to_thread(simulator.simulate, analysis, platform, target_audience, count)
+
+        def panel():
+            return simulator.simulate(analysis, platform, target_audience, count)
+
+        panels = 1 + deps.settings.virality_extra_panels
+        runs = await asyncio.gather(*(asyncio.to_thread(panel) for _ in range(panels)), return_exceptions=True)
+        ok = [r for r in runs if not isinstance(r, BaseException)]
+        if not ok:
+            raise runs[0]
+        # The first good panel is the full report; the others only contribute their scores.
+        result = ok[0].model_copy(update={"score_samples": [r.virality_score for r in ok]})
         await asyncio.to_thread(
             deps.storage.put_bytes, key, result.model_dump_json().encode(), "application/json"
         )

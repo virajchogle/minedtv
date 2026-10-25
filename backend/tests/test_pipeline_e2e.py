@@ -272,8 +272,8 @@ async def test_creator_pack_for_existing_clip(sessionmaker, video, tmp_path):
     assert calls == ["busy-model", "ok-model"]
 
 
-async def test_virality_only_for_unpublished_clips(sessionmaker, video, tmp_path):
-    from app.worker.virality import ClipAlreadyPublished, run_virality
+async def test_virality_runs_panels_on_any_clip(sessionmaker, video, tmp_path):
+    from app.worker.virality import run_virality
     from tests.test_creator_pack import engine_factory
 
     storage = LocalStorage(tmp_path / "storage")
@@ -299,7 +299,12 @@ async def test_virality_only_for_unpublished_clips(sessionmaker, video, tmp_path
     deps = _deps(sessionmaker, storage, FakeDetector())
     key = await run_virality(clip.id, deps, "youtube", None, 5, simulator_factory=FakeSimulator,
                              engine_factory=engine_factory({}, []))
-    assert storage.exists(key) and seen == [("t", "youtube", 5)]
+    panels = 1 + deps.settings.virality_extra_panels
+    assert storage.exists(key) and seen == [("t", "youtube", 5)] * panels
+    from app.schemas import AudienceSimulationOut
+
+    saved = AudienceSimulationOut.model_validate_json(storage.get_bytes(key))
+    assert len(saved.score_samples) == panels and saved.score_samples[0] == saved.virality_score
     from app.db.models import Notification
 
     async with sessionmaker() as db:
@@ -309,6 +314,8 @@ async def test_virality_only_for_unpublished_clips(sessionmaker, video, tmp_path
     async with sessionmaker() as db:
         await db.execute(update(Clip).where(Clip.id == clip.id).values(publish_state="published"))
         await db.commit()
-    with pytest.raises(ClipAlreadyPublished):
-        await run_virality(clip.id, deps, "youtube", None, 6, simulator_factory=FakeSimulator,
-                           engine_factory=engine_factory({}, []))
+    # Published clips get checked too (publishing starts one).
+    seen.clear()
+    assert storage.exists(await run_virality(clip.id, deps, "youtube", None, 6, simulator_factory=FakeSimulator,
+                                             engine_factory=engine_factory({}, [])))
+    assert len(seen) == panels

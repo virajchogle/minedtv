@@ -1,7 +1,7 @@
 """Pydantic models for every API request and response."""
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -385,6 +385,11 @@ class AudienceSimulationOut(_Out):
     recommended_changes: list[str]
     analysis: CreatorPackOut
     disclaimer: str
+    score_samples: list[float] = Field(
+        default_factory=list,
+        description="virality_score of every persona panel run (the first is this report's); show the median "
+        "and the spread. Empty for one-panel results and /creator/simulate.",
+    )
 
 
 class ClipCreatorPackOut(_Out):
@@ -413,6 +418,54 @@ class ClipViralityOut(_Out):
     error: str | None = None
     start_ms: int
     end_ms: int
+
+
+# --- analytics ---
+
+
+class AnalyticsDayOut(BaseModel):
+    day: date
+    views: int
+    likes: int
+    comments: int
+    new_followers: int
+
+
+class AnalyticsTotalsOut(BaseModel):
+    views: int
+    likes: int
+    comments: int
+    new_followers: int
+
+
+class ViralitySummaryOut(BaseModel):
+    """The clip's YouTube virality check (the one publishing starts), without the full report."""
+
+    status: Literal["none", "processing", "ready", "failed"]
+    score: float | None = None
+    verdict: Literal["weak", "mixed", "promising", "strong"] | None = None
+    score_samples: list[float] = Field(default_factory=list)
+
+
+class ClipAnalyticsOut(BaseModel):
+    clip: ClipOut
+    period_views: int
+    period_likes: int
+    period_comments: int
+    virality: ViralitySummaryOut
+
+
+class AnalyticsOut(BaseModel):
+    days: int
+    start: date
+    end: date
+    tracking_since: date | None = Field(description="First day with recorded daily views; earlier views only count in totals")
+    lifetime: AnalyticsTotalsOut
+    period: AnalyticsTotalsOut
+    previous_period: AnalyticsTotalsOut
+    follower_count: int
+    daily: list[AnalyticsDayOut] = Field(description="One row per UTC day in the period, oldest first, zero-filled")
+    clips: list[ClipAnalyticsOut] = Field(description="All the owner's clips, newest first")
 
 
 # --- social: profiles, follows, comments, notifications ---

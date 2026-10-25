@@ -6,16 +6,22 @@ plus whatever is still pending, so they're live even between flushes.
 
 Each flush atomically RENAMEs the hash before reading it, so increments that arrive
 mid-flush go into a fresh hash and nothing is counted twice across API instances.
+
+Views are also counted per UTC day ("clip_id|YYYY-MM-DD" fields) into clip_daily_views,
+which is what analytics charts read.
 """
 
 import asyncio
 import logging
 import uuid
+from datetime import UTC, date, datetime
 
 from redis.exceptions import ResponseError
 from sqlalchemy import update
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from app.db.models import Clip
+from app.db.models import Clip, ClipDailyViews
 from app.db.session import get_sessionmaker
 from app.services.redis import get_redis
 
@@ -23,11 +29,35 @@ log = logging.getLogger(__name__)
 
 VIEWS_KEY = "counters:views"
 LIKES_KEY = "counters:likes"
+DAILY_VIEWS_KEY = "counters:daily_views"
 _COLUMNS = {VIEWS_KEY: Clip.view_count, LIKES_KEY: Clip.like_count}
 
 
+def today() -> date:
+    return datetime.now(UTC).date()
+
+
 async def incr_view(clip_id: uuid.UUID) -> None:
-    await get_redis().hincrby(VIEWS_KEY, str(clip_id), 1)
+    pipe = get_redis().pipeline(transaction=False)
+    pipe.hincrby(VIEWS_KEY, str(clip_id), 1)
+    pipe.hincrby(DAILY_VIEWS_KEY, f"{clip_id}|{today().isoformat()}", 1)
+    await pipe.execute()
+
+
+async def pending_daily_views(clip_ids: set[uuid.UUID]) -> dict[tuple[uuid.UUID, date], int]:
+    """Daily views not flushed yet, for these clips. Missing Redis degrades to none."""
+    try:
+        raw = await get_redis().hgetall(DAILY_VIEWS_KEY)
+    except Exception:  # noqa: BLE001 - counts are best-effort
+        log.warning("redis unavailable for pending daily views", exc_info=True)
+        return {}
+    out: dict[tuple[uuid.UUID, date], int] = {}
+    for field, value in raw.items():
+        clip_id, _, day = field.partition("|")
+        cid = uuid.UUID(clip_id)
+        if cid in clip_ids:
+            out[(cid, date.fromisoformat(day))] = int(value)
+    return out
 
 
 async def incr_like(clip_id: uuid.UUID, delta: int) -> None:
@@ -76,9 +106,44 @@ async def flush() -> int:
             pipe.delete(tmp)
             await pipe.execute()
             raise
+    updated += await _flush_daily(r)
     if updated:
-        log.info("flushed counters", extra={"clips": updated})
+        log.info("flushed counters", extra={"rows": updated})
     return updated
+
+
+async def _flush_daily(r) -> int:
+    tmp = f"{DAILY_VIEWS_KEY}:flushing:{uuid.uuid4().hex}"
+    try:
+        await r.rename(DAILY_VIEWS_KEY, tmp)
+    except ResponseError:
+        return 0
+    deltas = {k: int(v) for k, v in (await r.hgetall(tmp)).items() if int(v) != 0}
+    try:
+        async with get_sessionmaker()() as db:
+            for field, delta in deltas.items():
+                clip_id, _, day = field.partition("|")
+                stmt = pg_insert(ClipDailyViews).values(clip_id=uuid.UUID(clip_id), day=date.fromisoformat(day), views=delta)
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=[ClipDailyViews.clip_id, ClipDailyViews.day],
+                    set_={"views": ClipDailyViews.views + delta},
+                )
+                # A clip deleted since the view was counted has nothing to attach the row to.
+                try:
+                    async with db.begin_nested():
+                        await db.execute(stmt)
+                except IntegrityError:
+                    log.info("skipping daily views for a missing clip", extra={"clip_id": clip_id})
+            await db.commit()
+        await r.delete(tmp)
+        return len(deltas)
+    except Exception:
+        pipe = r.pipeline(transaction=False)
+        for field, delta in deltas.items():
+            pipe.hincrby(DAILY_VIEWS_KEY, field, delta)
+        pipe.delete(tmp)
+        await pipe.execute()
+        raise
 
 
 async def flush_loop(interval_s: int) -> None:
