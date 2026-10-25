@@ -272,16 +272,50 @@ async def step_audio(ctx: Ctx) -> None:
             await db.commit()
 
 
+def _sample_evenly(items: list, n: int) -> list:
+    """n evenly-spaced items across the list, in original order. All of them if n >= len."""
+    if n <= 0 or not items:
+        return []
+    if len(items) <= n:
+        return items
+    step = len(items) / n
+    return [items[int(i * step)] for i in range(n)]
+
+
+def _fetch_frames(storage: Storage, keys: list[str]) -> list[bytes]:
+    """Best-effort: a frame storage hiccup shouldn't fail moderation over one image."""
+    out: list[bytes] = []
+    for key in keys:
+        try:
+            out.append(storage.get_bytes(key))
+        except Exception:
+            log.warning("moderation: could not fetch frame %s, skipping", key)
+    return out
+
+
 async def step_moderate(ctx: Ctx) -> None:
-    """Classify the real transcript. Raises ContentPolicyViolation on severe content,
-    which stops the pipeline before finalize — see run_pipeline's except clause."""
+    """Classify the real transcript plus a sample of the real extracted frames —
+    on-screen text and imagery, not just speech. Raises ContentPolicyViolation on
+    severe content, which stops the pipeline before finalize — see run_pipeline's
+    except clause."""
+    st = ctx.settings
     async with ctx.deps.sessionmaker() as db:
         rows = (
             await db.execute(select(Transcript.text).where(Transcript.session_id == ctx.session_id).order_by(Transcript.start_ms))
         ).scalars().all()
+        frame_keys = (
+            await db.execute(
+                select(Frame.thumbnail_key)
+                .where(Frame.session_id == ctx.session_id, Frame.thumbnail_key.is_not(None))
+                .order_by(Frame.t_ms)
+            )
+        ).scalars().all()
     text = " ".join(rows).strip()
 
-    result = await asyncio.to_thread(get_moderator().classify, text)
+    sampled_keys = _sample_evenly(list(frame_keys), st.moderation_max_frames)
+    frames = await asyncio.to_thread(_fetch_frames, ctx.deps.storage, sampled_keys)
+
+    result = await asyncio.to_thread(get_moderator().classify, text, frames)
 
     async with ctx.deps.sessionmaker() as db:
         s = await ctx.session(db)
