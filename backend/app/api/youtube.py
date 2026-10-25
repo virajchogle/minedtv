@@ -198,6 +198,7 @@ async def post_clip_to_youtube(clip_id: uuid.UUID, body: YouTubePostIn, me: Curr
         return _upload_out(in_flight)
 
     kind, source_key = "clip", None
+    music_credit: str | None = None
     if body.montage is not None:
         manifest_key = highlight_result_key(clip.id, clip.start_ms, clip.end_ms, body.montage)
         storage = get_storage()
@@ -205,6 +206,8 @@ async def post_clip_to_youtube(clip_id: uuid.UUID, body: YouTubePostIn, me: Curr
             raise HTTPException(409, "Make the montage first (POST /clips/{id}/highlights), then post it")
         manifest = json.loads(await asyncio.to_thread(storage.get_bytes, manifest_key))
         kind, source_key = "montage", manifest["video_key"]
+        if manifest.get("music_mixed") and isinstance(manifest.get("music"), dict):
+            music_credit = manifest["music"].get("credit")
         if body.description is None and manifest.get("suggested_caption"):
             hashtags = " ".join(f"#{h.lstrip('#')}" for h in manifest.get("hashtags") or [])
             body = body.model_copy(update={"description": f"{manifest['suggested_caption']}\n\n{hashtags}".strip()})
@@ -215,6 +218,8 @@ async def post_clip_to_youtube(clip_id: uuid.UUID, body: YouTubePostIn, me: Curr
         title = title if title is not None else (p_title or clip.title or "MinedIt clip")
         description = description if description is not None else (p_desc or f"{clip.title or 'Gameplay clip'}\n\nClipped with MinedIt")
         tags = tags if tags is not None else p_tags
+    if music_credit and music_credit not in description:
+        description = f"{description}\n\nMusic: {music_credit}".strip()
     title, description, tags = youtube.clean_metadata(title, description, tags)
 
     up = YouTubeUpload(

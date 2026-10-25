@@ -4,9 +4,8 @@ import { useEffect } from "react";
 
 /**
  * Flat black fallback backdrop plus a faint cursor-follow glow (set via
- * body::after in globals.css) for pages that don't mount their own animated
- * background (e.g. <Velaris>, which sits at z-[-10] — this stays further
- * back at z-[-20] so it never paints over it).
+ * body::after in globals.css), sitting behind Velaris (z-[-10], mounted in
+ * the root layout) at z-[-20] so it never paints over it.
  */
 export function BackgroundEffects() {
   useEffect(() => {

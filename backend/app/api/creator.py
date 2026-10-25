@@ -27,7 +27,9 @@ from app.schemas import (
     DirectHighlightFrameOut,
     DirectHighlightMomentOut,
     DirectHighlightsOut,
+    DirectMusicOut,
     HighlightCaptionStyle,
+    HighlightMusicOut,
     HighlightMode,
 )
 from app.services.standalone_highlights import StandaloneHighlightEngine, algorithm_version
@@ -55,10 +57,12 @@ def get_audience_simulator() -> GeminiAudienceSimulator:
 def get_standalone_highlight_engine() -> StandaloneHighlightEngine:
     from app.ml.gemini_captions import GeminiCaptionEngine
     from app.ml.registry import get_embedder, get_transcriber
+    from app.services.music_catalog import MusicCatalog
 
     settings = get_settings()
     caption_engine = GeminiCaptionEngine(settings) if settings.gemini_api_key else None
-    return StandaloneHighlightEngine(settings, get_embedder(), get_transcriber(), caption_engine)
+    music_catalog = MusicCatalog(settings.highlight_music_catalog_url)
+    return StandaloneHighlightEngine(settings, get_embedder(), get_transcriber(), caption_engine, music_catalog)
 
 
 @lru_cache
@@ -108,6 +112,66 @@ def _direct_asset_url(request: Request, run_id: uuid.UUID, path: str) -> str:
     return f"{base}/creator/highlights/{run_id}/{path}"
 
 
+def _direct_music_url(request: Request, run_id: uuid.UUID, *, download: bool = False) -> str:
+    configured = get_settings().public_api_base_url
+    base = (configured or str(request.base_url)).rstrip("/")
+    suffix = "?download=true" if download else ""
+    return f"{base}/creator/music/{run_id}.mp4{suffix}"
+
+
+@router.post("/music", response_model=DirectMusicOut)
+async def add_adaptive_music(
+    request: Request,
+    video: UploadFile = File(description="Video that should receive context-matched background music"),
+) -> DirectMusicOut:
+    """Add adaptive music to the complete upload without cutting it or adding captions."""
+    suffix, _ = _video_metadata(video)
+    temp_path: Path | None = None
+    try:
+        if not media.tools_available():
+            raise HTTPException(503, "Adaptive music requires ffmpeg and ffprobe on the API host")
+        temp_path = await _save_video(video, suffix)
+        result = await run_in_threadpool(
+            get_standalone_highlight_engine().process_music,
+            temp_path,
+            video.filename or f"video{suffix}",
+        )
+        return DirectMusicOut(
+            run_id=result.run_id,
+            filename=result.filename,
+            duration_ms=result.duration_ms,
+            width=result.width,
+            height=result.height,
+            speech_cue_count=result.speech_cue_count,
+            transcript_source=result.transcript_source,
+            music_mixed=True,
+            music=HighlightMusicOut.model_validate(result.music),
+            video_url=_direct_music_url(request, result.run_id),
+            download_url=_direct_music_url(request, result.run_id, download=True),
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.exception("Adaptive music generation failed")
+        raise HTTPException(502, f"Adaptive music generation failed: {exc}") from exc
+    finally:
+        await video.close()
+        if temp_path:
+            temp_path.unlink(missing_ok=True)
+
+
+@router.get("/music/{run_id}.mp4", response_class=FileResponse)
+async def get_adaptive_music_video(run_id: uuid.UUID, download: bool = False) -> FileResponse:
+    path = get_standalone_highlight_engine().clip_path(run_id, 1)
+    if not path.is_file():
+        raise HTTPException(404, "Music-enhanced video not found or expired")
+    return FileResponse(
+        path,
+        media_type="video/mp4",
+        filename="music-enhanced.mp4" if download else None,
+    )
+
+
 @router.post("/highlights", response_model=DirectHighlightsOut)
 async def create_direct_highlights(
     request: Request,
@@ -115,6 +179,7 @@ async def create_direct_highlights(
     mode: HighlightMode = Form(default="montage"),
     captions: bool = Form(default=True),
     caption_style: HighlightCaptionStyle = Form(default="bold"),
+    music: bool = Form(default=True),
 ) -> DirectHighlightsOut:
     """Upload one video and render its major moments as one contextualized montage.
 
@@ -133,6 +198,7 @@ async def create_direct_highlights(
             mode=mode,
             captions=captions,
             caption_style=caption_style,
+            music=music,
         )
         selected_ids = {frame.frame_id for frame in result.scores if frame.selected}
         scores = [
@@ -169,6 +235,8 @@ async def create_direct_highlights(
                 captions_burned=clip.captions_burned,
                 caption_count=clip.caption_count,
                 caption_source=clip.caption_source,
+                music_mixed=clip.music_mixed,
+                music=HighlightMusicOut.model_validate(clip.music) if clip.music else None,
                 moments=[
                     DirectHighlightMomentOut(
                         index=moment.index,

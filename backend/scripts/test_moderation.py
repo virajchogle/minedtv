@@ -6,7 +6,7 @@
     python -m scripts.test_moderation --text "gg ez" --image path/to/screenshot.jpg
 
 Needs GEMINI_API_KEY in backend/.env (or the environment). Without a key, every
-case classifies as "none" by design — moderation fails open rather than
+case classifies as "none" by design: moderation fails open rather than
 blocking uploads when no classifier is configured.
 
 --image sends exactly that file as the one "sampled frame" for a single custom
@@ -39,7 +39,7 @@ def _print(label: str, result) -> None:
     print(f"[{label}] severity={result.severity!r} categories={result.categories} reason={result.reason!r}")
     for v in result.violations:
         t = f"{v.timestamp_ms / 1000:.1f}s" if v.timestamp_ms is not None else "no specific moment"
-        print(f"    - at {t}: {v.category} — {v.note}")
+        print(f"    - at {t}: {v.category}: {v.note}")
 
 
 def main() -> None:
@@ -52,7 +52,7 @@ def main() -> None:
     moderator = ContentModerator(settings)
 
     if not settings.gemini_api_key:
-        print("GEMINI_API_KEY is not set — every case below will report severity=none (fail-open).\n")
+        print("GEMINI_API_KEY is not set, so every case below will report severity=none (fail-open).\n")
 
     if args.text or args.image:
         frames = [(0, Path(args.image).read_bytes())] if args.image else []

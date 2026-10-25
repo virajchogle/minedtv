@@ -3,7 +3,7 @@
 /**
  * Two live search previews on the landing page.
  *
- * These run the real backend search — same endpoints, same retrieval pipeline
+ * These run the real backend search: same endpoints, same retrieval pipeline
  * and same match-strength values the app uses. Nothing here is simulated: if
  * the backend is unreachable or no videos are indexed, the card says so rather
  * than displaying invented clips or confidence numbers.
@@ -66,7 +66,7 @@ export function FeaturePreviews() {
         icon={<Film className="h-4 w-4" />}
         eyebrow={focusVideo ? `Inside “${focusVideo.title}”` : "Inside one clip"}
         title="Search within a single video"
-        body="Scope the same engine to one video and get only its timestamps — enforced server-side, not filtered in the browser."
+        body="Scope the same engine to one video and get only its timestamps, enforced server-side, not filtered in the browser."
         placeholder="where the fight starts"
         availability={availability}
         scope="video"
@@ -199,7 +199,7 @@ function PreviewCard({
         {availability === "empty" && (
           <StatusNote
             tone="info"
-            text="No indexed videos yet. Upload a clip and this searches it for real — no sample data is shown."
+            text="No indexed videos yet. Upload a clip and this searches it for real. No sample data is shown."
           />
         )}
 

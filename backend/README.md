@@ -156,12 +156,21 @@ ranges are rendered chronologically and joined into one phone-compatible 720x128
 assembled audio is transcribed once and timed speech/accessibility cues are burned into the final montage. A
 configured `TRANSCRIBER_BACKEND` is tried first; Gemini provides the compact-audio fallback when `GEMINI_API_KEY`
 is set. If neither provider produces cues, the montage still succeeds and reports
-`captions_burned: false`. The response includes playback/download URLs, output dimensions, caption count, and
-caption source, plus every source range included in `moments`. It does not create a user or session and does not need Postgres, Redis, object storage, or the
-persona simulator.
+`captions_burned: false`. By default, the renderer also reuses the existing virality prompt embeddings to infer
+an action, hype, epic, dark, chiptune, or funny music profile, downloads one matching Kevin MacLeod track from the
+public R2 catalog, and mixes it below the original speech/game audio. Timed transcript cues lower
+the music further while someone is speaking; when cues are unavailable, source audio drives conservative
+sidechain ducking instead. This does not add a Gemini
+call. Set multipart `music=false` to opt out. The response reports `music_mixed` and the selected track's title,
+artist, mood, CC BY 4.0 license, required credit, and source URL. It also includes playback/download URLs, output dimensions, caption count,
+caption source, and every source range included in `moments`. It does not create a user or session and does not
+need Postgres, Redis, or the persona simulator; music is read from public R2 URLs and is never copied into local storage.
 It does require `ffmpeg`/`ffprobe` and a real CLIP-compatible embedder for meaningful visual rankings. Direct
 outputs expire after `STANDALONE_HIGHLIGHT_TTL_S` (24 hours by default). The API container installs FFmpeg;
 local Windows setups can point `FFMPEG_BINARY` and `FFPROBE_BINARY` at project-local executables.
+
+The remote catalog is configured with `HIGHLIGHT_MUSIC_CATALOG_URL`. Only its selected MP3 is downloaded into
+the render job's temporary work directory and removed when the render finishes.
 
 **Playback:** hand `playlist_url` to ExoPlayer/Media3 (Android), AVPlayer (iOS) or hls.js (web). Playback is segment-granular. The playlist starts at the segment containing `start_ms`, with `EXT-X-START` set to the exact offset. Segment URLs are presigned GETs valid for an hour, or plain public URLs if `STORAGE_PUBLIC_BASE_URL` is set. Re-fetch the playlist if a player sits open longer than that.
 

@@ -84,7 +84,7 @@
     --sidebar-glass-border: rgba(0, 0, 0, 0.08);
   }
 
-  /* ── Dark theme — recolored to match medal.tv's black + lime-green look ──── */
+  /* ── Dark theme, recolored to match medal.tv's black + lime-green look ──── */
   .dark {
     --background: #050505;
     --foreground: hsl(0 0% 100%);
@@ -184,7 +184,7 @@ body::before {
  * Used by: /explore, /upload, /library, the profile scroll hero.
  *
  * Recolored to match medal.tv's black + neon-lime look (explicit direction,
- * overriding the Android spec doc's literal gold — same hex as --primary
+ * overriding the Android spec doc's literal gold; same hex as --primary
  * above so the shadcn-based components (SearchPanel, Input, Button, ResultCard)
  * and these hand-built ones stay visually identical. */
 :root {

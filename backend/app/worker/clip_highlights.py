@@ -30,6 +30,7 @@ from app.services.frame_virality import (
     score_frames,
     select_contextual_highlights,
 )
+from app.services.music_catalog import MusicCatalog, infer_music_profile
 from app.worker import media
 from app.worker.creator_pack import build_creator_pack, pack_key
 from app.worker.export import export_clip
@@ -37,7 +38,7 @@ from app.worker.pipeline import Deps
 
 
 log = logging.getLogger("clip_highlights")
-ALGORITHM_VERSION = "stored-ai-share-v1"
+ALGORITHM_VERSION = "stored-ai-share-v4-public-r2-music"
 STATUS_TTL_S = 24 * 3600
 
 
@@ -46,7 +47,11 @@ def _options_dict(options: ClipHighlightsIn | dict) -> dict:
 
 
 def options_hash(options: ClipHighlightsIn | dict) -> str:
-    payload = json.dumps(_options_dict(options), sort_keys=True, separators=(",", ":")).encode()
+    payload = json.dumps(
+        {"algorithm_version": ALGORITHM_VERSION, **_options_dict(options)},
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
     return hashlib.sha256(payload).hexdigest()[:16]
 
 
@@ -366,12 +371,13 @@ async def run_clip_highlights(
             for row in transcript_rows
             if row.text.strip() and row.end_ms > start and row.start_ms < end
         ] or _pack_transcript(pack, duration_ms)
+        prompts = prompt_embeddings(deps.embedder)
         scores = await asyncio.to_thread(
             score_frames,
             frames,
             events,
             transcripts,
-            prompt_embeddings(deps.embedder),
+            prompts,
         )
         scores, windows = _select_windows(scores, duration_ms, options.mode)
         if not windows:
@@ -406,6 +412,7 @@ async def run_clip_highlights(
         uncaptioned = workdir / "highlight-uncaptioned.mp4"
         await asyncio.to_thread(media.concatenate_mp4_segments, segments, uncaptioned)
         output = workdir / "highlight.mp4"
+        rendered = workdir / "highlight-rendered.mp4" if options.music else output
         if caption_lines:
             ass = await asyncio.to_thread(
                 media.write_ass_captions,
@@ -416,12 +423,44 @@ async def run_clip_highlights(
             await asyncio.to_thread(
                 media.burn_ass_captions,
                 uncaptioned,
-                output,
+                rendered,
                 ass,
                 crf=deps.settings.transcode_crf,
             )
         else:
-            shutil.move(uncaptioned, output)
+            shutil.move(uncaptioned, rendered)
+
+        selected_music = None
+        if options.music:
+            try:
+                selected_ids = {window.frame.frame_id for window in windows}
+                music_text = " ".join(
+                    [pack.description, pack.summary, pack.caption, *(label for _, label in pack_moments)]
+                )
+                mood, energy = infer_music_profile(frames, selected_ids, prompts, text=music_text)
+                catalog = MusicCatalog(deps.settings.highlight_music_catalog_url)
+                track = await asyncio.to_thread(catalog.select, mood, energy, str(clip_id))
+                music_file = await asyncio.to_thread(catalog.download, track, workdir / f"music-{track.id}.mp3")
+                rendered_duration = sum(window.end_ms - window.start_ms for window in windows)
+                await asyncio.to_thread(
+                    media.mix_background_music,
+                    rendered,
+                    music_file,
+                    output,
+                    duration_ms=rendered_duration,
+                    volume=deps.settings.highlight_music_volume,
+                    speech_volume=deps.settings.highlight_music_speech_volume,
+                    speech_intervals_ms=[
+                        (line["start_ms"], line["end_ms"])
+                        for line in caption_lines
+                        if line["kind"] == "speech"
+                    ],
+                )
+                selected_music = track.response(mood)
+            except Exception:
+                log.warning("Background music unavailable; returning stored highlight without it", exc_info=True)
+                output.unlink(missing_ok=True)
+                shutil.move(rendered, output)
 
         await set_status("processing", "rendering", 0.94)
         await asyncio.to_thread(deps.storage.put_file, video_key, output, "video/mp4")
@@ -434,6 +473,8 @@ async def run_clip_highlights(
             "duration_ms": rendered_duration,
             "frames_analyzed": len(scores),
             "captions_burned": bool(caption_lines),
+            "music_mixed": selected_music is not None,
+            "music": selected_music,
             "moments": [
                 {
                     "source_start_ms": window.start_ms,

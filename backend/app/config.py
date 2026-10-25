@@ -85,12 +85,12 @@ class Settings(BaseSettings):
     creator_virality_max_frames: int = Field(default=240, ge=12, le=2000)
     creator_virality_frame_weight: float = Field(default=0.25, ge=0, le=0.5)
     # Content moderation (app/ml/moderation.py). Same cheap model tier as persona
-    # generation — this is a short classification call, not full video analysis.
+    # generation; this is a short classification call, not full video analysis.
     moderation_model: str = "gemini-3.1-flash-lite"
     # How many already-extracted frames (see step_frames) to sample evenly across the
     # video and send alongside the transcript, so on-screen text/imagery is judged too.
     # They're already small (frame_thumb_width) and already in storage, so this adds no
-    # new extraction work — just a handful of extra bytes on the one classification call.
+    # new extraction work, just a handful of extra bytes on the one classification call.
     moderation_max_frames: int = Field(default=8, ge=0, le=20)
     # Tried in order when the main model is overloaded or rate limited (creator packs for clips).
     gemini_fallback_models: Annotated[list[str], NoDecode] = Field(
@@ -135,6 +135,10 @@ class Settings(BaseSettings):
     standalone_mobile_height: int = Field(default=1280, ge=640, le=3840, multiple_of=2)
     stored_highlight_max_minutes: int = Field(default=10, ge=1, le=90)
     stored_highlight_max_source_mb: int = Field(default=1024, ge=1)
+    # Public R2 catalog stored beside videos. Jobs fetch only the selected MP3.
+    highlight_music_catalog_url: str = "https://pub-415da819582e4b6390d0637419173960.r2.dev/music/catalog.json"
+    highlight_music_volume: float = Field(default=0.50, ge=0.0, le=1.0)
+    highlight_music_speech_volume: float = Field(default=0.30, ge=0.0, le=1.0)
     # Publish state for clips the pipeline creates. "draft" keeps new uploads private until the owner
     # publishes; "published" puts them straight in the feed (useful until the app has a publish button).
     new_clip_publish_state: Literal["draft", "ready", "published"] = "draft"

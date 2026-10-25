@@ -1,14 +1,14 @@
 "use client";
 
 /**
- * MinecraftSunriseHero — a scroll-scrubbed sunrise with a cinematic wordmark
+ * MinecraftSunriseHero: a scroll-scrubbed sunrise with a cinematic wordmark
  * reveal.
  *
  * Architecture: a tall wrapper provides the scroll distance and a `sticky`
  * child pins the viewport-sized scene inside it. Scroll position is read with
  * `useScroll`, never intercepted. The page therefore scrolls normally in both
  * directions, keyboard paging works, touch momentum works, and nothing is ever
- * locked — there is no wheel handler and no `body` lock anywhere in here.
+ * locked; there is no wheel handler and no `body` lock anywhere in here.
  *
  * What the sunrise actually is: layered colour, gradient lighting, a rising
  * sun glow and atmospheric haze composited over a still backdrop, plus a slow
@@ -16,8 +16,8 @@
  * time-of-day simulation and not moving gameplay.
  *
  * Backdrop selection, in order of preference:
- *   1. `videoSrc` — scrubbed by scroll, giving a genuinely animated sunrise.
- *   2. `imageSrc` — a still landscape.
+ *   1. `videoSrc`: scrubbed by scroll, giving a genuinely animated sunrise.
+ *   2. `imageSrc`: a still landscape.
  *   3. A procedural voxel landscape, used when neither is usable.
  *
  * Only the SVG fallback currently provides true foreground overlap, because
@@ -395,7 +395,7 @@ function ImageProbe({ src, onResult }: { src: string; onResult: (ok: boolean) =>
  * Scroll-scrubbed video.
  *
  * Seeking is driven from an rAF loop rather than directly from the scroll
- * callback, and a new seek is only issued once the previous one has settled —
+ * callback, and a new seek is only issued once the previous one has settled:
  * browsers drop `currentTime` writes that arrive while a seek is in flight,
  * which otherwise shows up as the video sticking at one frame.
  */

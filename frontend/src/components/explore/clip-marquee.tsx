@@ -12,7 +12,7 @@ import { absoluteUrl, formatDuration, type Video } from "@/lib/api";
  * 21st.dev 3D-marquee reference, swapped from testimonial cards to clip
  * thumbnails.
  *
- * `linkable` controls whether tiles route to `/video/[id]` — real videos do;
+ * `linkable` controls whether tiles route to `/video/[id]`. Real videos do;
  * sample/placeholder clips (ids like "sample-1") have no such page, so the
  * caller passes `linkable={false}` for those and tiles render as plain
  * (non-navigating) cards instead of dead links.

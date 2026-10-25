@@ -1,10 +1,10 @@
 "use client";
 
 /**
- * Audience Flow — real engagement breakdown: each game you've clipped, flowing
+ * Audience Flow: real engagement breakdown: each game you've clipped, flowing
  * into what happened with those period views (liked / commented / viewed only).
  * Every link's value is summed straight from ClipAnalytics.period_* for the
- * selected range — nothing here is fabricated or illustrative.
+ * selected range, so nothing here is fabricated or illustrative.
  */
 
 import { useMemo, useState } from "react";
@@ -121,7 +121,7 @@ export function AudienceFlowSankey({ clips, compact = false }: { clips: ClipAnal
   if (links.length === 0) {
     return (
       <section className="flex h-full items-center justify-center rounded-2xl border border-dashed border-[var(--mtv-divider)] p-6 text-center text-sm text-[var(--mtv-text-2)]">
-        No views yet in this range — Audience Flow fills in once clips start getting watched.
+        No views yet in this range. Audience Flow fills in once clips start getting watched.
       </section>
     );
   }

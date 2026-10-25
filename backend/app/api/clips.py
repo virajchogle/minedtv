@@ -385,6 +385,7 @@ def _highlight_base(clip: Clip, options: ClipHighlightsIn) -> dict:
         "captions_enabled": options.captions,
         "caption_style": options.caption_style,
         "hook_enabled": options.hook,
+        "music_enabled": options.music,
     }
 
 
@@ -409,6 +410,8 @@ async def _highlight_state(clip: Clip, options: ClipHighlightsIn) -> ClipHighlig
             duration_ms=manifest.get("duration_ms"),
             frames_analyzed=manifest.get("frames_analyzed", 0),
             captions_burned=manifest.get("captions_burned", False),
+            music_mixed=manifest.get("music_mixed", False),
+            music=manifest.get("music"),
             moments=manifest.get("moments", []),
             captions=manifest.get("captions", []),
             summary=manifest.get("summary"),
@@ -484,6 +487,7 @@ async def get_clip_highlights(
     captions: bool = True,
     caption_style: str = "bold",
     hook: bool = True,
+    music: bool = True,
 ) -> ClipHighlightsOut:
     """Poll the stored-clip AI-share job using the same options supplied to POST."""
     clip = await _load_owned(db, clip_id, user)
@@ -494,6 +498,7 @@ async def get_clip_highlights(
             captions=captions,
             caption_style=caption_style,
             hook=hook,
+            music=music,
         )
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc

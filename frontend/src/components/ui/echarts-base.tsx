@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Minimal, real ECharts wrapper — init/resize/dispose lifecycle only. Deliberately
+ * Minimal, real ECharts wrapper: init/resize/dispose lifecycle only. Deliberately
  * not a full "compound component" abstraction layer (no per-chart-type builder
  * DSL): with a handful of charts on one dashboard, a thin wrapper around the real
  * library is less code to maintain than reproducing its own component system.

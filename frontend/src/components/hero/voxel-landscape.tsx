@@ -5,7 +5,7 @@
  * available (see minecraft-sunrise-hero.tsx).
  *
  * It is split into a background plate and a foreground plate so the hero can
- * render the "MinedIt" wordmark *between* them — the depth effect where the
+ * render the "MinedIt" wordmark *between* them, the depth effect where the
  * terrain overlaps the lettering. A flat photograph cannot do this without a
  * hand-authored alpha cutout; an SVG can, because the silhouette is real
  * geometry with correct edges.
@@ -17,7 +17,7 @@
 const VIEW_W = 1600;
 const VIEW_H = 900;
 
-/** Deterministic PRNG — the scene must not change between SSR and hydration. */
+/** Deterministic PRNG: the scene must not change between SSR and hydration. */
 function mulberry32(seed: number) {
   return () => {
     seed |= 0;
@@ -137,7 +137,7 @@ export function VoxelLandscapeBack({ light = 0 }: { light?: number }) {
 }
 
 /**
- * Near terrain. Sits *in front of* the wordmark — this is the layer that
+ * Near terrain. Sits *in front of* the wordmark; this is the layer that
  * creates the overlap depth.
  */
 export function VoxelLandscapeFront({ light = 0 }: { light?: number }) {

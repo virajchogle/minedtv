@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 });
 
 // Bold display stack for the homepage headline treatment, the game marquee
-// and the footer — same fonts as the portfolio reference you gave for the
+// and the footer, same fonts as the portfolio reference you gave for the
 // footer's typography.
 const archivoBlack = Archivo_Black({
   weight: "400",
