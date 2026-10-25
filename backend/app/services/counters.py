@@ -12,6 +12,7 @@ which is what analytics charts read.
 """
 
 import asyncio
+import hashlib
 import logging
 import uuid
 from datetime import UTC, date, datetime
@@ -37,11 +38,19 @@ def today() -> date:
     return datetime.now(UTC).date()
 
 
-async def incr_view(clip_id: uuid.UUID) -> None:
-    pipe = get_redis().pipeline(transaction=False)
+async def incr_view(clip_id: uuid.UUID, viewer: str | None = None, dedup_s: int = 1800) -> bool:
+    """Count a view. With a viewer key, repeat views by that viewer within dedup_s count once.
+    Returns whether it was counted."""
+    r = get_redis()
+    if viewer is not None:
+        digest = hashlib.sha256(viewer.encode()).hexdigest()[:24]
+        if not await r.set(f"viewed:{clip_id}:{digest}", 1, nx=True, ex=dedup_s):
+            return False
+    pipe = r.pipeline(transaction=False)
     pipe.hincrby(VIEWS_KEY, str(clip_id), 1)
     pipe.hincrby(DAILY_VIEWS_KEY, f"{clip_id}|{today().isoformat()}", 1)
     await pipe.execute()
+    return True
 
 
 async def pending_daily_views(clip_ids: set[uuid.UUID]) -> dict[tuple[uuid.UUID, date], int]:

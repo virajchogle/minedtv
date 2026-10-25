@@ -400,6 +400,9 @@ The flow is **upload → My videos (private) → Publish → Post to YouTube**. 
   (export + Gemini + persona panel). Each check now runs 3 panels and keeps every score in
   `result.score_samples`: show the median and the range, so the dashboard's extra
   `/creator/simulate-analysis` calls aren't needed any more.
+- **Views:** `POST /clips/{id}/view` now counts once per viewer per clip every 30 minutes, and owners'
+  own views don't count. Send `X-Viewer-Id: <random UUID kept per install>` when no user is picked, or
+  every signed-out phone behind the same network counts as one viewer.
 - **Analytics:** `GET /users/{me}/analytics?days=30` (owner only) returns real per-day `views`, `likes`,
   `comments`, `new_followers` (UTC days, zero-filled), `period` vs `previous_period` totals, and each clip's
   period stats plus `virality {status, score, verdict, score_samples}`. Use it for the dashboard's charts

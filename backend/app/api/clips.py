@@ -2,8 +2,9 @@ import asyncio
 import json
 import logging
 import uuid
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, Header, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import PlainTextResponse
 from sqlalchemy import delete, func, select
@@ -75,6 +76,14 @@ def _check_visible(clip: Clip, me: User | None) -> None:
         raise HTTPException(404, "Clip not found")
 
 
+def _check_age(clip: Clip, me: User | None) -> None:
+    """Age-restricted clips are visible to their owner regardless of the owner's own age
+    (so uploaders can see what they posted), but otherwise need a signed-in adult account."""
+    is_owner = me is not None and me.id == clip.user_id
+    if clip.age_restricted and not is_owner and not (me is not None and me.is_adult):
+        raise HTTPException(403, "This clip is restricted to users 18 and older")
+
+
 async def _liked(db, user: User | None, clip_ids: list[uuid.UUID]) -> set[uuid.UUID] | None:
     if user is None:
         return None
@@ -95,6 +104,7 @@ async def get_clip(clip_id: uuid.UUID, db: Db, urls: Urls, me: OptionalUser) -> 
     Unpublished clips are only visible to their owner (send X-User-Id)."""
     clip, session, user = await _load(db, clip_id)
     _check_visible(clip, me)
+    _check_age(clip, me)
     events = (
         await db.scalars(
             select(Event)
@@ -175,6 +185,7 @@ async def create_clip(body: ClipCreate, user: CurrentUser, db: Db, urls: Urls) -
         status="ready",
         kind="user",
         age_restricted=session.age_restricted,
+        moderation_violations=session.moderation_violations,
     )
     db.add(clip)
     await db.commit()
@@ -241,11 +252,36 @@ async def unlike(clip_id: uuid.UUID, user: CurrentUser, db: Db) -> CountsOut:
     return await _counts(db, clip, user)
 
 
+def _viewer_key(request: Request, me: User | None, viewer_id: str | None) -> str:
+    """Who's watching, for de-duplicating views: the user, else the client's anonymous viewer ID,
+    else its IP address (the first X-Forwarded-For hop on Cloud Run)."""
+    if me is not None:
+        return f"user:{me.id}"
+    if viewer_id:
+        return f"anon:{viewer_id.strip()[:64]}"
+    forwarded = request.headers.get("x-forwarded-for", "")
+    ip = forwarded.split(",")[0].strip() or (request.client.host if request.client else "unknown")
+    return f"ip:{ip}"
+
+
 @router.post("/{clip_id}/view", response_model=CountsOut)
-async def view(clip_id: uuid.UUID, db: Db, me: OptionalUser) -> CountsOut:
+async def view(
+    clip_id: uuid.UUID,
+    request: Request,
+    db: Db,
+    me: OptionalUser,
+    x_viewer_id: Annotated[
+        str | None, Header(description="Stable anonymous ID for a signed-out viewer (one per browser or install)")
+    ] = None,
+) -> CountsOut:
+    """Count a view. Repeat views by the same viewer within VIEW_DEDUP_MINUTES count once, and
+    owners watching their own clips don't count."""
     clip, _, _ = await _load(db, clip_id)
     _check_visible(clip, me)
-    await counters.incr_view(clip.id)
+    if me is None or me.id != clip.user_id:
+        await counters.incr_view(
+            clip.id, _viewer_key(request, me, x_viewer_id), get_settings().view_dedup_minutes * 60
+        )
     return await _counts(db, clip, me)
 
 

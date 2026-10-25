@@ -26,6 +26,7 @@ import type {
   FeedOut,
   MeOut,
   ModerationSeverity,
+  ModerationViolationOut,
   PublishState,
   SearchOut,
   ServerConfigOut,
@@ -38,7 +39,7 @@ import type {
   YouTubeUploadOut,
 } from "@/lib/minedtv-types";
 
-export type { ModerationSeverity, PublishState } from "@/lib/minedtv-types";
+export type { ModerationSeverity, ModerationViolationOut, PublishState } from "@/lib/minedtv-types";
 
 /** Same-origin proxy. The upstream host is only ever known to the server. */
 export const API_BASE_URL = "/api/minedtv";
@@ -98,6 +99,8 @@ export interface Video {
   moderation_severity: ModerationSeverity;
   /** Owner-visible one-line reason; never the policy itself. */
   moderation_reason: string | null;
+  /** Itemized findings with where in the video each occurs. */
+  moderation_violations: ModerationViolationOut[];
 }
 
 export interface SignalBreakdown {
@@ -376,6 +379,7 @@ function clipToVideo(clip: ClipOut): Video {
     age_restricted: Boolean(clip.age_restricted),
     moderation_severity: clip.moderation_severity ?? "none",
     moderation_reason: clip.moderation_reason ?? null,
+    moderation_violations: clip.moderation_violations ?? [],
   };
 }
 
@@ -415,6 +419,7 @@ function sessionToVideo(session: SessionOut): Video {
     age_restricted: Boolean(session.age_restricted),
     moderation_severity: session.moderation_severity ?? "none",
     moderation_reason: session.moderation_reason ?? null,
+    moderation_violations: session.moderation_violations ?? [],
   };
 }
 
@@ -617,8 +622,26 @@ export const reindexVideo = (sessionId: string) =>
     method: "POST",
   });
 
+/**
+ * A random ID kept per browser, so the API can count a signed-out viewer's repeat views once.
+ * Without it every web visitor would look like one viewer: they all reach the API via our proxy.
+ */
+function viewerId(): string {
+  try {
+    let id = window.localStorage.getItem("minedtv-viewer");
+    if (!id) {
+      id = crypto.randomUUID();
+      window.localStorage.setItem("minedtv-viewer", id);
+    }
+    return id;
+  } catch {
+    return "no-storage";
+  }
+}
+
+/** Counts once per viewer per clip every 30 minutes; owners' own views don't count. */
 export const recordView = (clipId: string) =>
-  request<unknown>(`/clips/${clipId}/view`, { method: "POST" }).catch(() => {
+  request<unknown>(`/clips/${clipId}/view`, { method: "POST", headers: { "X-Viewer-Id": viewerId() } }).catch(() => {
     /* view counting must never interrupt playback */
   });
 
@@ -802,6 +825,7 @@ function humanizeValidation(detail: unknown[]): string {
   if (field === "email") return "Enter a valid email address.";
   if (field === "username") return "Usernames are 2–64 letters, numbers, dots, dashes or underscores.";
   if (field === "password") return "Passwords need at least 8 characters.";
+  if (field === "birth_date") return "Enter a valid date of birth.";
   return first?.msg ?? "Check the form and try again.";
 }
 
@@ -811,8 +835,8 @@ export async function signIn(login: string, password: string): Promise<MeOut> {
   return account;
 }
 
-export async function signUp(username: string, email: string, password: string): Promise<MeOut> {
-  const account = await authRequest<MeOut>("signup", { username, email, password });
+export async function signUp(username: string, email: string, password: string, birthDate: string): Promise<MeOut> {
+  const account = await authRequest<MeOut>("signup", { username, email, password, birth_date: birthDate });
   setAccount(account);
   return account;
 }

@@ -64,6 +64,7 @@ function MarqueeRow({
               src={absoluteUrl(video.thumbnail_url)}
               alt={video.title}
               duration={formatDuration(video.duration_seconds)}
+              ageRestricted={video.age_restricted}
             />
             <p className="mt-1.5 truncate px-0.5 text-[12px] font-medium text-[var(--mtv-text)]">
               {video.title}

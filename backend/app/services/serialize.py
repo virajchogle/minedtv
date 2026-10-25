@@ -50,6 +50,7 @@ def clip_out(
         age_restricted=clip.age_restricted,
         moderation_severity=session.moderation_severity,
         moderation_reason=session.moderation_reason,
+        moderation_violations=clip.moderation_violations,
         created_at=clip.created_at,
     )
 
@@ -74,4 +75,5 @@ def session_out(session: Session, user: User, urls: UrlBuilder) -> SessionOut:
         moderation_severity=session.moderation_severity,
         moderation_reason=session.moderation_reason,
         age_restricted=session.age_restricted,
+        moderation_violations=session.moderation_violations,
     )

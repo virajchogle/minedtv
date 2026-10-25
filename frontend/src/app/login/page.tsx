@@ -34,6 +34,7 @@ function LoginForm() {
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [birthDate, setBirthDate] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -47,7 +48,7 @@ function LoginForm() {
     setError(null);
     try {
       if (mode === "signin") await signIn(login.trim(), password);
-      else await signUp(username.trim(), email.trim(), password);
+      else await signUp(username.trim(), email.trim(), password, birthDate);
       router.push(next);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
@@ -135,6 +136,21 @@ function LoginForm() {
           <label className="block space-y-1 text-xs text-[var(--mtv-text-2)]">
             Email
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required className={input} />
+          </label>
+          <label className="block space-y-1 text-xs text-[var(--mtv-text-2)]">
+            Date of birth
+            <input
+              type="date"
+              value={birthDate}
+              onChange={(e) => setBirthDate(e.target.value)}
+              autoComplete="bday"
+              required
+              max={new Date().toISOString().slice(0, 10)}
+              className={input}
+            />
+            <span className="block text-[11px] text-[var(--mtv-text-2)]/70">
+              Content flagged 18+ by our moderation is only shown to accounts old enough to see it.
+            </span>
           </label>
         </>
       )}

@@ -4,7 +4,7 @@ import uuid
 from datetime import date, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class _Out(BaseModel):
@@ -34,6 +34,14 @@ class SignupIn(BaseModel):
     username: str = Field(min_length=2, max_length=64, pattern=r"^[A-Za-z0-9_.-]+$")
     email: str = Field(max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
     password: str = Field(min_length=8, max_length=200)
+    birth_date: date = Field(description="Required so age-restricted content can be gated correctly.")
+
+    @field_validator("birth_date")
+    @classmethod
+    def _not_in_future(cls, v: date) -> date:
+        if v > date.today():
+            raise ValueError("Date of birth can't be in the future")
+        return v
 
 
 class LoginIn(BaseModel):
@@ -45,6 +53,8 @@ class MeOut(UserOut):
     email: str | None
     is_dev: bool
     can_act_as: bool = Field(default=False, description="May act as other users: dev accounts, or anyone while REQUIRE_LOGIN is off")
+    birth_date: date | None
+    is_adult: bool = Field(description="True when birth_date puts this account at 18 or older")
 
 
 class AuthOut(BaseModel):
@@ -93,6 +103,12 @@ SessionStatusLiteral = Literal[
 ModerationSeverity = Literal["none", "mild", "severe"]
 
 
+class ModerationViolationOut(_Out):
+    category: str
+    timestamp_ms: int | None = Field(description="Where in the video this occurs; null if not a specific moment")
+    note: str
+
+
 class SessionOut(_Out):
     id: uuid.UUID
     user: UserOut
@@ -115,6 +131,9 @@ class SessionOut(_Out):
     )
     moderation_reason: str | None = Field(default=None, description="One-line reason, owner-visible only")
     age_restricted: bool = Field(description="True for 'mild' or 'severe' moderation verdicts")
+    moderation_violations: list[ModerationViolationOut] = Field(
+        default_factory=list, description="Itemized findings with where in the video each occurs"
+    )
 
 
 class SessionStatusEvent(_Out):
@@ -130,6 +149,7 @@ class SessionStatusEvent(_Out):
     done: bool
     moderation_severity: ModerationSeverity
     age_restricted: bool
+    moderation_violations: list[ModerationViolationOut] = Field(default_factory=list)
 
 
 # --- clips ---
@@ -168,6 +188,9 @@ class ClipOut(_Out):
     age_restricted: bool = Field(default=False, description="Transcript moderation flagged this clip 18+")
     moderation_severity: ModerationSeverity = Field(default="none", description="The owning session's moderation verdict")
     moderation_reason: str | None = Field(default=None, description="One-line reason, owner-visible only")
+    moderation_violations: list[ModerationViolationOut] = Field(
+        default_factory=list, description="Itemized findings with where in the video each occurs"
+    )
     created_at: datetime
 
 

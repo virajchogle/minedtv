@@ -144,6 +144,7 @@ export default function ExplorePage() {
                       src={absoluteUrl(video.thumbnail_url)}
                       alt={video.title}
                       duration={formatDuration(video.duration_seconds)}
+                      ageRestricted={video.age_restricted}
                     />
                     <p className="mt-1.5 line-clamp-2 text-[13px] font-semibold group-hover:text-[var(--mtv-gold)]">
                       {video.title}

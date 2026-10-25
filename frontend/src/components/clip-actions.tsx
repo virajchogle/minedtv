@@ -242,6 +242,7 @@ function useJob<T extends { status: JobStatus; error: string | null }>(
 function PublishSection({ video, onChange }: { video: Video; onChange: (v: Video) => void }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [confirmingAgeRestricted, setConfirmingAgeRestricted] = useState(false);
   const state = video.publish_state ?? "published";
 
   const act = async (name: string, fn: (id: string) => Promise<Video>) => {
@@ -258,16 +259,36 @@ function PublishSection({ video, onChange }: { video: Video; onChange: (v: Video
     }
   };
 
+  const publish = () => {
+    if (video.age_restricted && !confirmingAgeRestricted) {
+      setConfirmingAgeRestricted(true);
+      return;
+    }
+    setConfirmingAgeRestricted(false);
+    void act("publish", publishClip);
+  };
+
   return (
     <Panel icon={Rocket} title="Publishing" aside={<PublishBadge state={state} />}>
       <p className="text-xs text-[var(--mtv-text-2)]">{STATE_COPY[state].hint}</p>
+
+      {confirmingAgeRestricted && (
+        <div className="flex items-start gap-2 rounded-lg border border-[var(--mtv-red)]/40 bg-[var(--mtv-red)]/10 p-2.5 text-xs text-[var(--mtv-red)]">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <p>This video can only be accessed by users 18 and older. Publish anyway?</p>
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-2">
         {state !== "published" && (
-          <ActionButton variant="gold" busy={busy === "publish"} onClick={() => act("publish", publishClip)}>
-            <Eye className="h-3.5 w-3.5" /> Publish
+          <ActionButton variant="gold" busy={busy === "publish"} onClick={publish}>
+            <Eye className="h-3.5 w-3.5" /> {confirmingAgeRestricted ? "Yes, publish" : "Publish"}
           </ActionButton>
         )}
-        {state === "published" && (
+        {confirmingAgeRestricted && (
+          <ActionButton onClick={() => setConfirmingAgeRestricted(false)}>Cancel</ActionButton>
+        )}
+        {state === "published" && !confirmingAgeRestricted && (
           <ActionButton busy={busy === "draft"} onClick={() => act("draft", unpublishClip)}>
             <EyeOff className="h-3.5 w-3.5" /> Unpublish
           </ActionButton>
