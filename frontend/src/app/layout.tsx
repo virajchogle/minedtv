@@ -41,7 +41,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: { default: "MinedIt", template: "%s — MinedIt" },
+  title: { default: "MinedIt", template: "%s · MinedIt" },
   description: "Semantic video moment retrieval across a gallery or within a single video",
 };
 

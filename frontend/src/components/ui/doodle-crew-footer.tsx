@@ -4,18 +4,18 @@
  * MinedIt's site footer: the wordmark stamps itself in letter by letter with
  * an ink-texture filter and a puff of dust, a hand-drawn ground line draws
  * itself underneath, and a handful of doodles (flame/star/sparkle/bolt)
- * drift around — pushed away by the pointer within reach, and popping when
+ * drift around, pushed away by the pointer within reach, and popping when
  * clicked. Everything plays once, when it scrolls into view, then stays
  * alive: the doodles keep drifting, letters wobble on hover.
  *
  * Adapted from the "DoodleCrewFooter" reference supplied in chat, reskinned
  * for MinedIt (black + sunflower-yellow) and simplified: the illustrated
  * mascot crew (named characters standing on the letters, with gaze-tracking
- * and speech bubbles) is left out — six cartoon animals didn't fit this
+ * and speech bubbles) is left out: six cartoon animals didn't fit this
  * site's plain, minimal look. The crew plumbing (CrewMember, ART, seatPoint,
  * gaze tracking) from the original is dropped for the same reason: no point
- * carrying code nobody exercises. Everything else — the wordmark stamp-in,
- * ink filter, ground line, floating doodles, reduced-motion handling — is
+ * carrying code nobody exercises. Everything else (the wordmark stamp-in,
+ * ink filter, ground line, floating doodles, reduced-motion handling) is
  * real and wired up.
  *
  * No dependencies beyond what's already in this app: React + framer-motion
@@ -662,7 +662,7 @@ export function DoodleCrewFooter({
 
 // ---- styles ------------------------------------------------------------------
 // MinedIt's own palette (black + sunflower-yellow), not the original demo's
-// configurable preset system — this footer only ever ships on one site.
+// configurable preset system; this footer only ever ships on one site.
 
 const CSS = `
 .dcf {

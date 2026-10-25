@@ -680,7 +680,7 @@ const GlowChart = React.forwardRef<HTMLDivElement, GlowChartProps>(
           // Static: role="img" with the one-line summary as its name, like any
           // other image. Interactive: role="application" instead, since this
           // handles its own arrow-key point-stepping (below) and announces the
-          // active point via the aria-live region further down — the pairing
+          // active point via the aria-live region further down; the pairing
           // ARIA expects for a custom-keyboard-driven widget, not a plain image.
           role={interactive ? "application" : "img"}
           aria-label={ariaLabel ?? summary}

@@ -99,7 +99,7 @@ export default function DashboardPage() {
             <>
               {/* Keeps the page's one h1 present even while a tile panel is open and the
                   visible heading becomes a back button instead of <ScreenTitle>. */}
-              <h1 className="sr-only">Dashboard — {PANEL_LABEL[open]}</h1>
+              <h1 className="sr-only">Dashboard: {PANEL_LABEL[open]}</h1>
               <button
                 type="button"
                 onClick={() => setOpen(null)}

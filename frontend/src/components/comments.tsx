@@ -66,7 +66,7 @@ function Compose({
         placeholder={placeholder}
         rows={2}
         // Only ever passed `true` by the reply box below, which mounts in
-        // direct response to clicking "Reply" — a user-initiated focus
+        // direct response to clicking "Reply", a user-initiated focus
         // move (WCAG 2.2 "On Focus"/"Change on Request" are about
         // unrequested context changes on load, not this).
         // eslint-disable-next-line jsx-a11y/no-autofocus
