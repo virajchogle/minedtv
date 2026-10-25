@@ -6,18 +6,23 @@
  * likes, comments and follows by when they happened. Days are UTC.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowDownRight, ArrowUpRight, Loader2, Minus, Table2, Youtube } from "lucide-react";
+import { motion, useSpring, useTransform } from "framer-motion";
+import { AlertTriangle, ArrowDownRight, ArrowUpRight, Loader2, Minus, Youtube } from "lucide-react";
 
+import { AudienceFlowSankey } from "@/components/audience-flow-sankey";
 import { PublishBadge } from "@/components/clip-actions";
 import { ChooseUserNotice, useCurrentUser } from "@/components/current-user";
+import { DailyEngagementChart } from "@/components/daily-engagement-chart";
+import { ForecastModule } from "@/components/forecast-module";
 import { SiteNav } from "@/components/hero/site-nav";
+import { IncomeForecastChart } from "@/components/income-forecast-chart";
 import { Pill, PillRow } from "@/components/ui/pill";
 import { ScreenTitle } from "@/components/ui/screen-header";
 import { ScoreRange, VerdictBadge } from "@/components/virality-report";
-import { fetchAnalytics, median, verdictFor } from "@/lib/api";
-import type { AnalyticsDay, AnalyticsOut, AnalyticsTotals, ClipAnalytics } from "@/lib/minedtv-types";
+import { clipViralityScore, fetchAnalytics, median, verdictFor } from "@/lib/api";
+import type { AnalyticsOut, AnalyticsTotals, ClipAnalytics } from "@/lib/minedtv-types";
 import { cn } from "@/lib/utils";
 
 type Metric = keyof AnalyticsTotals;
@@ -30,8 +35,6 @@ const METRICS: { id: Metric; label: string }[] = [
 ];
 
 const RANGES = [7, 30, 90] as const;
-
-const compact = (n: number) => new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(n);
 
 const dayLabel = (iso: string, withYear = false) =>
   new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", {
@@ -68,7 +71,7 @@ export default function DashboardPage() {
   const loading = Boolean(meId) && !error && data?.days !== days;
 
   // Keep polling while a virality check is still running somewhere.
-  const checking = data?.clips.some((c) => c.virality.status === "processing") ?? false;
+  const checking = data?.clips.some((c) => c.virality?.status === "processing") ?? false;
   useEffect(() => {
     if (!checking) return;
     const timer = setInterval(() => void load(), 15_000);
@@ -78,7 +81,7 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-[var(--mtv-bg)] px-4 pb-16 pt-28 text-[var(--mtv-text)] sm:px-8 sm:pt-32">
       <SiteNav />
-      <div className="mx-auto max-w-5xl space-y-8">
+      <div className="mx-auto max-w-7xl space-y-8">
         <ScreenTitle>Dashboard</ScreenTitle>
 
         {!me ? (
@@ -120,7 +123,14 @@ export default function DashboardPage() {
                   ))}
                 </div>
 
-                <ChartCard data={data} metric={metric} />
+                <div className="grid gap-6 xl:grid-cols-2">
+                  <IncomeForecastChart clips={data.clips} daily={data.daily} />
+                  <DailyEngagementChart data={data} highlight={metric} />
+                </div>
+
+                <ForecastModule clips={data.clips} />
+
+                <AudienceFlowSankey clips={data.clips} />
 
                 <ClipsTable clips={data.clips} days={data.days} />
 
@@ -138,6 +148,13 @@ export default function DashboardPage() {
       </div>
     </div>
   );
+}
+
+function AnimatedNumber({ value }: { value: number }) {
+  const spring = useSpring(0, { stiffness: 90, damping: 20 });
+  const display = useTransform(spring, (v) => Math.round(v).toLocaleString());
+  useEffect(() => void spring.set(value), [value, spring]);
+  return <motion.span>{display}</motion.span>;
 }
 
 function StatTile({
@@ -158,20 +175,26 @@ function StatTile({
   const change = value - previous;
   const Icon = change > 0 ? ArrowUpRight : change < 0 ? ArrowDownRight : Minus;
   return (
-    <button
+    <motion.button
       type="button"
       onClick={onClick}
       aria-pressed={selected}
+      whileHover={{ y: -3 }}
+      transition={{ type: "spring", stiffness: 400, damping: 25 }}
       className={cn(
-        "space-y-1 rounded-2xl border bg-[var(--mtv-surface)] p-4 text-left transition-colors",
-        selected ? "border-[var(--mtv-gold)]/60" : "border-[var(--mtv-divider)] hover:border-[var(--mtv-text-2)]/50"
+        "space-y-1 rounded-2xl border bg-[var(--mtv-surface)] p-4 text-left transition-[border-color,box-shadow]",
+        selected
+          ? "border-[var(--mtv-gold)]/60 shadow-[0_0_24px_-6px_var(--mtv-gold)]"
+          : "border-[var(--mtv-divider)] hover:border-[var(--mtv-gold)]/40 hover:shadow-[0_0_20px_-8px_var(--mtv-gold)]"
       )}
     >
-      <p className="text-xs text-[var(--mtv-text-2)]">{label}</p>
-      <p className="text-2xl font-semibold">{value.toLocaleString()}</p>
+      <p className="text-sm text-[var(--mtv-text-2)]">{label}</p>
+      <p className="text-3xl font-semibold tabular-nums">
+        <AnimatedNumber value={value} />
+      </p>
       <p
         className={cn(
-          "inline-flex items-center gap-1 text-[11px]",
+          "inline-flex items-center gap-1 text-[12px]",
           change > 0 ? "text-[var(--mtv-green)]" : change < 0 ? "text-[var(--mtv-red)]" : "text-[var(--mtv-text-2)]"
         )}
       >
@@ -179,171 +202,13 @@ function StatTile({
         {change === 0 ? "No change" : `${change > 0 ? "+" : ""}${change.toLocaleString()}`}
         <span className="text-[var(--mtv-text-2)]">vs previous {days} days</span>
       </p>
-    </button>
-  );
-}
-
-function ChartCard({ data, metric }: { data: AnalyticsOut; metric: Metric }) {
-  const [asTable, setAsTable] = useState(false);
-  const label = METRICS.find((m) => m.id === metric)?.label ?? metric;
-  return (
-    <section className="space-y-3 rounded-2xl border border-[var(--mtv-divider)] bg-[var(--mtv-surface)] p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold">{label} per day</h2>
-          <p className="text-xs text-[var(--mtv-text-2)]">
-            All your clips · {dayLabel(data.start)} – {dayLabel(data.end, true)}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setAsTable((v) => !v)}
-          aria-pressed={asTable}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--mtv-divider)] px-2.5 py-1 text-xs hover:bg-[var(--mtv-surface-high)]"
-        >
-          <Table2 className="h-3.5 w-3.5" />
-          {asTable ? "Show chart" : "Show table"}
-        </button>
-      </div>
-      {asTable ? <DayTable daily={data.daily} /> : <AreaChart daily={data.daily} metric={metric} label={label} />}
-    </section>
-  );
-}
-
-const CHART_H = 220;
-const PAD = { top: 12, right: 12, bottom: 24, left: 40 };
-
-/** Nice round tick values from 0 to at least `max`. */
-function ticks(max: number): number[] {
-  if (max <= 0) return [0, 1];
-  const rough = max / 3;
-  const pow = 10 ** Math.floor(Math.log10(rough));
-  const step = [1, 2, 5, 10].map((m) => m * pow).find((s) => s >= rough) ?? pow * 10;
-  const out: number[] = [];
-  for (let v = 0; v <= max + step * 0.001; v += step) out.push(v);
-  if (out[out.length - 1] < max) out.push(out[out.length - 1] + step);
-  return out;
-}
-
-function AreaChart({ daily, metric, label }: { daily: AnalyticsDay[]; metric: Metric; label: string }) {
-  const boxRef = useRef<HTMLDivElement>(null);
-  const [width, setWidth] = useState(640);
-  const [hover, setHover] = useState<number | null>(null);
-
-  useEffect(() => {
-    const el = boxRef.current;
-    if (!el) return;
-    const observer = new ResizeObserver(([entry]) => setWidth(Math.max(280, entry.contentRect.width)));
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-
-  const values = daily.map((d) => d[metric]);
-  const yTicks = useMemo(() => ticks(Math.max(...values, 0)), [values]);
-  const yMax = yTicks[yTicks.length - 1];
-  const innerW = width - PAD.left - PAD.right;
-  const innerH = CHART_H - PAD.top - PAD.bottom;
-  const x = (i: number) => PAD.left + (daily.length <= 1 ? innerW / 2 : (i / (daily.length - 1)) * innerW);
-  const y = (v: number) => PAD.top + innerH - (v / yMax) * innerH;
-
-  const line = values.map((v, i) => `${i ? "L" : "M"}${x(i)},${y(v)}`).join("");
-  const area = `${line}L${x(values.length - 1)},${y(0)}L${x(0)},${y(0)}Z`;
-  const xTickEvery = Math.max(1, Math.ceil(daily.length / 6));
-
-  const onMove = (event: React.PointerEvent<SVGRectElement>) => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const rel = (event.clientX - rect.left) / rect.width;
-    setHover(Math.round(rel * (daily.length - 1)));
-  };
-
-  const h = hover != null ? daily[hover] : null;
-
-  return (
-    <div ref={boxRef} className="relative">
-      <svg width={width} height={CHART_H} className="block" role="img" aria-label={`${label} per day`}>
-        {yTicks.map((t) => (
-          <g key={t}>
-            <line x1={PAD.left} x2={width - PAD.right} y1={y(t)} y2={y(t)} stroke="var(--mtv-divider)" strokeWidth={1} />
-            <text x={PAD.left - 8} y={y(t)} dy="0.32em" textAnchor="end" fontSize={11} fill="var(--mtv-text-2)" className="tabular-nums">
-              {compact(t)}
-            </text>
-          </g>
-        ))}
-        {daily.map((d, i) =>
-          i % xTickEvery === 0 || i === daily.length - 1 ? (
-            <text key={d.day} x={x(i)} y={CHART_H - 6} textAnchor="middle" fontSize={11} fill="var(--mtv-text-2)">
-              {dayLabel(d.day)}
-            </text>
-          ) : null
-        )}
-        <path d={area} fill="var(--mtv-gold)" fillOpacity={0.1} />
-        <path d={line} fill="none" stroke="var(--mtv-gold)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
-        {hover != null && (
-          <g>
-            <line x1={x(hover)} x2={x(hover)} y1={PAD.top} y2={PAD.top + innerH} stroke="var(--mtv-text-2)" strokeWidth={1} />
-            <circle cx={x(hover)} cy={y(values[hover])} r={4} fill="var(--mtv-gold)" stroke="var(--mtv-surface)" strokeWidth={2} />
-          </g>
-        )}
-        <rect
-          x={PAD.left}
-          y={PAD.top}
-          width={innerW}
-          height={innerH}
-          fill="transparent"
-          onPointerMove={onMove}
-          onPointerLeave={() => setHover(null)}
-        />
-      </svg>
-      {h && hover != null && (
-        <div
-          className="pointer-events-none absolute top-2 z-10 rounded-lg border border-[var(--mtv-divider)] bg-black/90 px-2.5 py-1.5 text-xs shadow-xl"
-          style={{ left: Math.min(Math.max(x(hover) - 60, 0), width - 130) }}
-        >
-          <p className="text-sm font-semibold">{h[metric].toLocaleString()}</p>
-          <p className="text-[var(--mtv-text-2)]">
-            {label.toLowerCase()} · {dayLabel(h.day, true)}
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function DayTable({ daily }: { daily: AnalyticsDay[] }) {
-  return (
-    <div className="max-h-72 overflow-auto">
-      <table className="w-full text-left text-[13px] tabular-nums">
-        <thead className="sticky top-0 bg-[var(--mtv-surface)] text-xs text-[var(--mtv-text-2)]">
-          <tr>
-            <th className="py-1.5 font-normal">Day</th>
-            {METRICS.map((m) => (
-              <th key={m.id} className="py-1.5 text-right font-normal">
-                {m.label}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {[...daily].reverse().map((d) => (
-            <tr key={d.day} className="border-t border-[var(--mtv-divider)]">
-              <td className="py-1.5">{dayLabel(d.day, true)}</td>
-              {METRICS.map((m) => (
-                <td key={m.id} className="py-1.5 text-right">
-                  {d[m.id].toLocaleString()}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    </motion.button>
   );
 }
 
 type Sort = "newest" | "views" | "score";
 
-const scoreOf = (c: ClipAnalytics) =>
-  c.virality.score_samples.length ? median(c.virality.score_samples) : c.virality.score ?? -1;
+const scoreOf = (c: ClipAnalytics) => clipViralityScore(c) ?? -1;
 
 function ClipsTable({ clips, days }: { clips: ClipAnalytics[]; days: number }) {
   const [sort, setSort] = useState<Sort>("newest");
@@ -357,7 +222,7 @@ function ClipsTable({ clips, days }: { clips: ClipAnalytics[]; days: number }) {
   return (
     <section className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-sm font-semibold">Your clips</h2>
+        <h2 className="text-lg font-bold">Your clips</h2>
         <label className="flex items-center gap-2 text-xs text-[var(--mtv-text-2)]">
           Sort by
           <select
@@ -406,7 +271,11 @@ function ClipsTable({ clips, days }: { clips: ClipAnalytics[]; days: number }) {
 
 function ClipRow({ row }: { row: ClipAnalytics }) {
   const { clip, virality } = row;
-  const scores = virality.score_samples.length ? virality.score_samples : virality.score != null ? [virality.score] : [];
+  const scores = virality?.score_samples?.length
+    ? virality.score_samples
+    : virality?.score != null
+      ? [virality.score]
+      : [];
   return (
     <tr className="border-t border-[var(--mtv-divider)] align-middle">
       <td className="px-4 py-2.5">

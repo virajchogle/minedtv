@@ -16,6 +16,7 @@
 
 import type {
   AnalyticsOut,
+  ClipAnalytics,
   ClipCreatorPackOut,
   ClipDetailOut,
   ClipOut,
@@ -960,6 +961,21 @@ export function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+/**
+ * A clip's virality score, median of the panel samples when there are several,
+ * else the single score, else null if it's never been checked. Defensively
+ * guards `virality` itself and `score_samples` in case either is missing or
+ * malformed in a response — the backend's own schema guarantees them, but
+ * this is a client/server boundary and crashing the whole dashboard over one
+ * clip's bad data is worse than reporting that clip as unscored.
+ */
+export function clipViralityScore(c: ClipAnalytics): number | null {
+  const v = c.virality;
+  if (!v) return null;
+  if (v.score_samples?.length) return median(v.score_samples);
+  return v.score ?? null;
 }
 
 /** The engine's verdict cut-offs on the 0–100 virality score. */

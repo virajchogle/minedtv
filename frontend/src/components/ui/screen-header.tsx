@@ -14,7 +14,7 @@ export function ScreenTitle({
 }) {
   return (
     <div className={cn("flex items-center justify-between", className)}>
-      <h1 className="text-[26px] font-extrabold tracking-tight text-[var(--mtv-text)]">
+      <h1 className="text-3xl font-extrabold tracking-tight text-[var(--mtv-text)] sm:text-4xl">
         {children}
       </h1>
       {action}
