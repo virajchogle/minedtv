@@ -70,7 +70,7 @@ class Settings(BaseSettings):
     creator_persona_model: str = "gemini-3.1-flash-lite"
     # Tried in order when the main model is overloaded or rate limited (creator packs for clips).
     gemini_fallback_models: Annotated[list[str], NoDecode] = Field(
-        default_factory=lambda: ["gemini-3.5-flash", "gemini-flash-latest"]
+        default_factory=lambda: ["gemini-3.5-flash"]
     )
 
     # --- processing ---
