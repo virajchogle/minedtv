@@ -14,3 +14,20 @@ demo_videos/
 *.mov
 *.mkv
 .DS_Store
+
+# Frontend (Next.js)
+node_modules/
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+.vercel/
+
+# Shipped UI assets. The media rules above are aimed at sample footage and
+# uploads; these files are part of the interface and must be versioned.
+!frontend/public/**/*.mp4
+
+# Full-resolution sources for those assets. The optimised exports under
+# frontend/public are what the app loads, so the originals stay local.
+frontend/public/images/mc_wallpaper_*.png
+frontend/public/images/minecraft-hero.png
