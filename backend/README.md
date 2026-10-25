@@ -73,7 +73,7 @@ Full spec: [`docs/openapi.json`](docs/openapi.json), or `/docs` on a running ser
 
 **API key:** when `API_KEYS` is set (it is in production), send `X-API-Key: <key>` on every request. Browser `EventSource` can't set headers, so `?api_key=<key>` also works. `/health`, `/docs` and `*.m3u8` playlists don't need it, so video players can fetch playlists directly. Get the key from whoever holds `.env.prod`. Don't commit it into a public repo; it's a speed bump against random traffic, not real auth.
 
-**Publish states:** a clip is `draft` (private, "My videos") or `published` (in the feed, search and other people's view of a profile). `ready` is a legacy private state kept for older clients. Unpublished clips are visible only to their owner: `GET /clips/{id}` returns 404 to anyone else, and `GET /users/{id}/clips?state=draft|ready|published|unpublished|all` is for the owner. Searching with `user_id` set to yourself includes your unpublished clips. `POST /clips/{id}/publish` also starts a YouTube virality check (which writes the creator pack on the way); virality checks run on any clip you own. Clip responses carry `youtube_url` once the clip has been posted to YouTube (`POST /clips/{id}/youtube`, for published clips). Clips the pipeline creates start as `NEW_CLIP_PUBLISH_STATE` (default `draft`). HLS playlists stay reachable by clip ID (players can't send headers), so treat an unpublished clip's ID as private.
+**Publish states:** a clip is `draft` (private, "My videos") or `published` (in the feed, search and other people's view of a profile). `ready` is a legacy private state kept for older clients. Unpublished clips are visible only to their owner: `GET /clips/{id}` returns 404 to anyone else, and `GET /users/{id}/clips?state=draft|ready|published|unpublished|all` is for the owner. Searching with `user_id` set to yourself includes your unpublished clips. Clip responses carry `youtube_url` once the clip has been posted to YouTube (`POST /clips/{id}/youtube`, for published clips). Clips the pipeline creates start as `NEW_CLIP_PUBLISH_STATE` (default `draft`). HLS playlists stay reachable by clip ID (players can't send headers), so treat an unpublished clip's ID as private.
 
 **Social:** comments allow one level of replies (replying to a reply attaches to its top-level comment) and are limited to 1000 characters. Only clips you can see can be commented on, so drafts are owner-only. Deleting a comment deletes its replies. Counts (comments, followers, following) are computed from the rows on each read, so they can't drift. **Notifications** are written in the same transaction as the action that causes them:
 - a like on your clip, written once per person per clip
@@ -116,7 +116,7 @@ For TikTok and Reels, use the MP4 export plus the phone's share sheet instead: t
 | POST/GET | `/clips/{id}/export` (MP4 for TikTok/Reels; POST starts it, GET polls until `ready`) | `clips.export.*.json` |
 | POST | `/clips/{id}/publish` · `/unpublish` · `/mark-ready` (owner only) | `clips.publish.json` |
 | POST/GET | `/clips/{id}/creator-pack` (Gemini titles, captions, YouTube metadata for an uploaded clip) | |
-| POST/GET | `/clips/{id}/virality` (synthetic audience panel; **unpublished clips only**, owner only) | |
+| GET/POST | `/clips/{id}/virality` (frame-scorer score, verdict, signals and per-moment curve; owner only. POST scores an upload from before auto-scoring) | |
 | GET/POST | `/clips/{id}/comments` (top-level newest first, each with replies; POST `{body, parent_id?}`) · DELETE `/comments/{id}` (author or clip owner) | `comments.list.json` |
 | GET | `/users/{id}` (profile: follower/following counts, published clip count, `followed_by_me`, `follows_me`) | `users.profile.json` |
 | POST/DELETE | `/users/{id}/follow` · GET `/users/{id}/followers` · `/users/{id}/following` · GET `/feed/following` | `users.follow.json` |
@@ -133,7 +133,10 @@ For TikTok and Reels, use the MP4 export plus the phone's share sheet instead: t
 | POST | `/creator/simulate-analysis` (JSON with an `/creator/analyze` result plus persona options) | `creator.simulate.json` |
 | GET | `/health` | `health.json` |
 
-**Frame highlights:** after a session is ready, POST `/sessions/{id}/frame-highlights` with an optional
+**Frame highlights:** this runs automatically when an upload finishes processing (`AUTO_FRAME_HIGHLIGHTS`,
+default on): its clips replace the pipeline's event-based ones, which are kept only if the scorer can't cut
+any. A clip's virality (`/clips/{id}/virality`) is the average of its strongest frame scores. To re-run by
+hand after a session is ready, POST `/sessions/{id}/frame-highlights` with an optional
 `{"count": 3, "clip_duration_ms": 30000}` body, then poll GET until `status` is `ready`. The worker reuses
 the sampled frame embeddings, visibility measurements, detector events, and transcript already produced by
 the upload pipeline; it does not decode or upload the video again. Legacy frames calculate and persist their

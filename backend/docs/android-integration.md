@@ -384,7 +384,7 @@ When a clip is opened, call `MinedTvApi.view(clip.remoteId!!)` once. Have the li
 - **Stable media URLs:** thumbnails, segments and exports now use a fixed public R2 URL, so Coil and
   ExoPlayer can cache them.
 
-## 8. My videos, publishing and the virality check
+## 8. My videos, publishing and virality
 
 The flow is **upload → My videos (private) → Publish → Post to YouTube**. A clip's `publish_state` is
 `draft` (private, "My videos") or `published` (public). `ready` is a legacy private state: treat it like
@@ -393,26 +393,25 @@ The flow is **upload → My videos (private) → Publish → Post to YouTube**. 
 - The feed, search and other users' profiles only show `published` clips. **New uploads start as
   `draft`, so add a Publish button** that calls `POST /clips/{id}/publish` (owner's `X-User-Id`).
   `POST /clips/{id}/unpublish` takes it back to private.
-- **Publishing also starts the virality check** for YouTube (it writes the AI creator pack on the way).
-  Show its result by polling `GET /clips/{id}/virality?platform=youtube` until `status == "ready"`.
 - On the user's own profile, `GET /users/{me}/clips?state=draft|ready|published|unpublished|all`
   (with `X-User-Id: {me}`) gives the buckets; `unpublished` = My videos. Each clip has `youtube_url`
   once it's been posted to YouTube. Anyone else only ever gets published clips.
 - "Search your clips" (library scope) should pass `user_id={me}`. That search includes the user's own
   private clips; global search never does.
-- **Virality check by hand** (any clip you own, other platforms or audiences): `POST /clips/{id}/virality`
-  with `{"platform": "tiktok", "target_audience": "...", "persona_count": 9}`, then poll
-  `GET /clips/{id}/virality?platform=tiktok&...` with the same options until `status == "ready"`.
-  `result` has `virality_score` (0–100), `verdict` and the persona panel. It takes a few minutes
-  (export + Gemini + persona panel). Each check now runs 3 panels and keeps every score in
-  `result.score_samples`: show the median and the range, so the dashboard's extra
-  `/creator/simulate-analysis` calls aren't needed any more.
+- **Virality (Nihal's frame scorer; the persona panel is gone):** every upload is scored moment by
+  moment when it's processed, and its auto-clips are cut at the highest-scoring peaks. `GET
+  /clips/{id}/virality` (owner only, no query options) returns `score` (0–100), `verdict`
+  (weak/mixed/promising/strong), `peak_offset_ms`, `components` (visual, scene, novelty, event, speech,
+  visibility, each 0–100) and `curve` (`[{offset_ms, score}]` for a "moment by moment" chart). Scores are
+  relative to the rest of the same upload. If `status` is `none` (uploads from before this), `POST
+  /clips/{id}/virality` scores it in a few seconds without touching any clips; poll GET. Remove the old
+  platform/persona options, `result`, `score_samples` and the extra `/creator/simulate-analysis` panels.
 - **Views:** `POST /clips/{id}/view` now counts once per viewer per clip every 30 minutes, and owners'
   own views don't count. Send `X-Viewer-Id: <random UUID kept per install>` when no user is picked, or
   every signed-out phone behind the same network counts as one viewer.
 - **Analytics:** `GET /users/{me}/analytics?days=30` (owner only) returns real per-day `views`, `likes`,
   `comments`, `new_followers` (UTC days, zero-filled), `period` vs `previous_period` totals, and each clip's
-  period stats plus `virality {status, score, verdict, score_samples}`. Use it for the dashboard's charts
+  period stats plus `virality {status, score, verdict}`. Use it for the dashboard's charts
   instead of the demo data.
 - **AI creator pack:** `POST /clips/{id}/creator-pack` returns titles, caption, hashtags and YouTube
   metadata for the clip. Poll `GET` the same way.

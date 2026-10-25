@@ -84,8 +84,6 @@ class Settings(BaseSettings):
     creator_virality_sample_fps: float = Field(default=0.5, gt=0, le=4)
     creator_virality_max_frames: int = Field(default=240, ge=12, le=2000)
     creator_virality_frame_weight: float = Field(default=0.25, ge=0, le=0.5)
-    # Extra persona panels per clip virality check, run in parallel; their scores give a range.
-    virality_extra_panels: int = Field(default=2, ge=0, le=5)
     # Content moderation (app/ml/moderation.py). Same cheap model tier as persona
     # generation — this is a short classification call, not full video analysis.
     moderation_model: str = "gemini-3.1-flash-lite"
@@ -122,6 +120,8 @@ class Settings(BaseSettings):
     auto_clip_count: int = 3
     # On-demand frame virality highlights. This uses the frame embeddings already produced by
     # the pipeline, so it does not re-read or re-upload the video.
+    # Run the frame scorer on every processed upload; its clips replace the event-based ones.
+    auto_frame_highlights: bool = True
     frame_highlight_count: int = Field(default=3, ge=1, le=10)
     frame_highlight_duration_ms: int = Field(default=30_000, ge=3_000, le=120_000)
     frame_virality_min_score: float = Field(default=0.42, ge=0, le=1)

@@ -2,12 +2,11 @@
 
 /**
  * Everything you can do with a clip beyond watching it:
- *  - publish state (owner): private (My videos) → published on MinedTV, which
- *    also starts the virality check and the AI creator pack
+ *  - publish state (owner): private (My videos) → published on MinedTV
  *  - post to YouTube (owner, published clips)
  *  - like (anyone acting as a user)
  *  - owner only: MP4 export for TikTok/Reels, the AI creator pack (titles,
- *    caption, hashtags, YouTube metadata) and the virality check
+ *    caption, hashtags, YouTube metadata) and the virality score (frame scorer)
  *
  * The last three are background jobs on the backend: start with POST, then
  * poll GET until `ready`. Existing results are loaded on mount.
@@ -45,16 +44,14 @@ import {
   setLiked,
   startCreatorPack,
   startExport,
-  startVirality,
+  scoreVirality,
   unpublishClip,
   type PublishState,
   type Video,
-  type ViralityOptions,
 } from "@/lib/api";
 import type {
   ClipCreatorPackOut,
   ClipViralityOut,
-  CreatorPlatform,
   ExportOut,
   JobStatus,
   YouTubePrivacy,
@@ -71,13 +68,13 @@ const STATE_COPY: Record<PublishState, { label: string; tone: string; hint: stri
   draft: {
     label: "Private",
     tone: "border-white/25 bg-white/10 text-white/80",
-    hint: "In My videos: only you can see it. Publishing puts it on MinedTV and runs the virality check.",
+    hint: "In My videos: only you can see it. Publish to put it on MinedTV.",
   },
   // Legacy state from before publish-then-post; shown exactly like a private clip.
   ready: {
     label: "Private",
     tone: "border-white/25 bg-white/10 text-white/80",
-    hint: "In My videos: only you can see it. Publishing puts it on MinedTV and runs the virality check.",
+    hint: "In My videos: only you can see it. Publish to put it on MinedTV.",
   },
   published: {
     label: "Published",
@@ -180,7 +177,7 @@ function CopyButton({ text }: { text: string }) {
 }
 
 /**
- * A backend job (export / creator pack / virality): loads the current state,
+ * A backend job (export / creator pack / virality scoring): loads the current state,
  * starts it on demand and polls while it's processing.
  */
 function useJob<T extends { status: JobStatus; error: string | null }>(
@@ -444,90 +441,38 @@ function CreatorPackSection({ video }: { video: Video }) {
   );
 }
 
-const PLATFORMS: CreatorPlatform[] = ["youtube", "tiktok", "instagram", "reddit", "general"];
 
 
 function ViralitySection({ video }: { video: Video }) {
-  const [options, setOptions] = useState<ViralityOptions>({ platform: "youtube", target_audience: "", persona_count: 9 });
-  const [submitted, setSubmitted] = useState<ViralityOptions>(options);
   const job = useJob<ClipViralityOut>(
-    () => getVirality(video.video_id, submitted),
-    () => startVirality(video.video_id, submitted),
-    [video.video_id, video.start_ms, video.end_ms, video.publish_state, submitted.platform, submitted.target_audience, submitted.persona_count]
+    () => getVirality(video.video_id),
+    () => scoreVirality(video.video_id),
+    [video.video_id, video.start_ms, video.end_ms]
   );
-  const result = job.state?.status === "ready" ? job.state.result : null;
-
-  // Changing the options switches to their own result; "Run check" then starts it.
-  const startAfterSwitch = useRef(false);
-  const runJob = job.run;
-  useEffect(() => {
-    if (startAfterSwitch.current) {
-      startAfterSwitch.current = false;
-      void runJob();
-    }
-  }, [submitted, runJob]);
-
-  const onRun = () => {
-    const next = { ...options, target_audience: options.target_audience?.trim() || null };
-    if (JSON.stringify(next) === JSON.stringify(submitted)) void job.run();
-    else {
-      startAfterSwitch.current = true;
-      setSubmitted(next);
-    }
-  };
-
+  const v = job.state;
   return (
-    <Panel icon={TrendingUp} title="Virality check" aside={<span className="text-[11px] text-[var(--mtv-text-2)]">runs on publish</span>}>
-      <p className="text-xs text-[var(--mtv-text-2)]">
-        A synthetic audience panel reacts to this clip. Publishing runs it for YouTube automatically; run it here
-        for other platforms or audiences. It&apos;s a creative testing aid, not a forecast. Takes a few minutes.
-      </p>
-      <div className="flex flex-wrap items-end gap-2">
-        <label className="space-y-1 text-[11px] text-[var(--mtv-text-2)]">
-          Platform
-          <select
-            value={options.platform}
-            onChange={(e) => setOptions({ ...options, platform: e.target.value as CreatorPlatform })}
-            className="block rounded-lg border border-[var(--mtv-divider)] bg-[var(--mtv-surface-high)] px-2 py-1.5 text-[13px] text-[var(--mtv-text)]"
-          >
-            {PLATFORMS.map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="min-w-[12rem] flex-1 space-y-1 text-[11px] text-[var(--mtv-text-2)]">
-          Target audience (optional)
-          <input
-            value={options.target_audience ?? ""}
-            onChange={(e) => setOptions({ ...options, target_audience: e.target.value })}
-            placeholder="e.g. competitive Valorant players"
-            className="block w-full rounded-lg border border-[var(--mtv-divider)] bg-[var(--mtv-surface-high)] px-2 py-1.5 text-[13px] text-[var(--mtv-text)]"
-          />
-        </label>
-        <label className="space-y-1 text-[11px] text-[var(--mtv-text-2)]">
-          Personas
-          <input
-            type="number"
-            min={3}
-            max={15}
-            value={options.persona_count ?? 9}
-            onChange={(e) => setOptions({ ...options, persona_count: Number(e.target.value) || 9 })}
-            className="block w-16 rounded-lg border border-[var(--mtv-divider)] bg-[var(--mtv-surface-high)] px-2 py-1.5 text-[13px] text-[var(--mtv-text)]"
-          />
-        </label>
-        <ActionButton variant="gold" busy={job.busy} onClick={onRun}>
-          {job.busy ? "Simulating…" : "Run check"}
-        </ActionButton>
-      </div>
-
-      {result && <ViralityReport result={result} />}
+    <Panel icon={TrendingUp} title="Virality">
+      {v?.status === "ready" ? (
+        <ViralityReport v={v} />
+      ) : job.busy ? (
+        <p className="flex items-center gap-2 text-xs text-[var(--mtv-text-2)]">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Scoring every moment of this upload… a few seconds.
+        </p>
+      ) : (
+        <>
+          <p className="text-xs text-[var(--mtv-text-2)]">
+            Uploads are scored automatically. This one is from before that, so score it now; it doesn&apos;t
+            change any of your clips.
+          </p>
+          <ActionButton variant="gold" onClick={() => void job.run()}>
+            Score this upload
+          </ActionButton>
+        </>
+      )}
       <ErrorLine message={job.error} />
     </Panel>
   );
 }
-
 
 const PRIVACY: { value: YouTubePrivacy; label: string }[] = [
   { value: "private", label: "Private" },

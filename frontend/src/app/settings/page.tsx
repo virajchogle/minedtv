@@ -136,7 +136,7 @@ export default function SettingsPage() {
                       ? [config.models.creator, ...config.models.creator_fallbacks].join(" → ")
                       : "off (no Gemini key)"}
                   </li>
-                  <li>virality personas: {config.models.personas ?? "off"}</li>
+                  <li>creator persona tools: {config.models.personas ?? "off"}</li>
                 </ul>
               </ConfigRow>
               <ConfigRow label="Search thresholds">

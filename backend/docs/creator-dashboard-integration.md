@@ -1637,15 +1637,7 @@ Returns `200 ClipCreatorPackResult`. The complete `ClipCreatorPackResult` and `C
 
 #### `POST /clips/{clip_id}/virality`
 
-Runs the persona panel asynchronously for any clip owned by the acting user. Request body:
-
-```ts
-interface ClipViralityRequest {
-  platform?: "general" | "youtube" | "reddit" | "instagram" | "tiktok"; // Default general.
-  target_audience?: string | null;
-  persona_count?: number | null; // 3-15; backend default when omitted.
-}
-```
+Starts a score-only frame-analysis run for the clip's upload when it has not already been scored. This is owner-only and takes no request body. It reuses the upload pipeline's extracted frames, embeddings, events, and transcript; it does not run a persona panel or make a model call per frame.
 
 Returns `202 ClipViralityResult`:
 
@@ -1653,19 +1645,30 @@ Returns `202 ClipViralityResult`:
 interface ClipViralityResult {
   clip_id: string;
   status: "none" | "processing" | "ready" | "failed";
-  platform: string;
-  result: AudienceSimulation | null;
+  score: number | null; // 0-100, strongest-frame average.
+  verdict: "weak" | "mixed" | "promising" | "strong" | null;
+  peak_offset_ms: number | null;
+  components: {
+    visual: number;
+    novelty: number;
+    event: number;
+    speech: number;
+    visibility: number;
+    scene: number;
+  } | null;
+  curve: Array<{ offset_ms: number; score: number }>;
+  algorithm_version: string | null;
   error: string | null;
   start_ms: number;
   end_ms: number;
 }
 ```
 
-The job builds/reuses the creator pack first. Poll GET with exactly the same platform, target audience, and persona count.
+If the upload is already scored or processing, POST is idempotent and returns the existing state. Otherwise, poll GET until `status` is `ready` or `failed`.
 
 #### `GET /clips/{clip_id}/virality`
 
-Owner-only polling endpoint. Query parameters mirror the POST body; defaults are `platform=general`, no explicit target audience, and the configured persona count. Returns `200 ClipViralityResult`.
+Owner-only polling endpoint with no query parameters. Returns `200 ClipViralityResult`. `curve` contains every sampled frame in the clip, while `score` and `components` are calculated from its three strongest frames. Scores are relative to other frames in the same upload.
 
 #### `GET /clips/{clip_id}/comments`
 
@@ -1955,7 +1958,7 @@ This is the compact implementation index. The named models point to the complete
 | `GET /clips/{clip_id}` | Optional viewer identity | `200 ClipDetail` | Clip plus events/transcript. |
 | `PATCH /clips/{clip_id}` | `ClipPatch` | `200 Clip` | Owner trim/title update. |
 | `DELETE /clips/{clip_id}` | No body | `204`, no body | Delete an owned clip. |
-| `POST /clips/{clip_id}/publish` | No body | `200 Clip` | Publish to MinedTV and trigger default virality. |
+| `POST /clips/{clip_id}/publish` | No body | `200 Clip` | Publish to MinedTV. |
 | `POST /clips/{clip_id}/unpublish` | No body | `200 Clip` | Return to private draft. |
 | `POST /clips/{clip_id}/mark-ready` | No body | `200 Clip` | Put in private ready-to-post state. |
 | `GET /clips/{clip_id}/playlist.m3u8` | Path ID | HLS playlist text | Play the clip range. |
@@ -1968,8 +1971,8 @@ This is the compact implementation index. The named models point to the complete
 | `GET /clips/{clip_id}/creator-pack` | Path ID | `200 ClipCreatorPackResult` | Poll AI metadata generation. |
 | `POST /clips/{clip_id}/highlights` | `ClipHighlightsIn` JSON | `202 ClipHighlightsResult` | Start/reuse the asynchronous AI-share render. |
 | `GET /clips/{clip_id}/highlights` | Matching query options | `200 ClipHighlightsResult` | Poll stage/progress and retrieve the ready review payload. |
-| `POST /clips/{clip_id}/virality` | `ClipViralityRequest` | `202 ClipViralityResult` | Start/reuse persona simulation. |
-| `GET /clips/{clip_id}/virality` | Platform/audience/count query | `200 ClipViralityResult` | Poll persona simulation. |
+| `POST /clips/{clip_id}/virality` | No body | `202 ClipViralityResult` | Start/reuse upload frame scoring. |
+| `GET /clips/{clip_id}/virality` | Path ID | `200 ClipViralityResult` | Poll/read frame-based clip virality. |
 | `GET /clips/{clip_id}/comments` | `cursor`, `limit` | `200 CommentsPage` | Read threaded comments. |
 | `POST /clips/{clip_id}/comments` | `CommentCreate` | `201 Comment` | Comment or reply. |
 | `DELETE /comments/{comment_id}` | No body | `204`, no body | Delete allowed comment/replies. |

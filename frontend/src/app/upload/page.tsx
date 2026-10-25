@@ -263,7 +263,7 @@ export default function UploadPage() {
             </div>
             <p className="text-xs text-[var(--mtv-text-2)]">
               Uploading as <span className="font-semibold text-[var(--mtv-text)]">@{me.username}</span>. New clips
-              land in My videos (private) first. Publish one to put it on MinedTV; that also runs the virality check.
+              land in My videos (private) first, each with a virality score. Publish one to put it on MinedTV.
             </p>
             <div className="flex justify-end gap-3">
               <OutlineButton href="/library">Cancel</OutlineButton>

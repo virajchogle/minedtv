@@ -1900,7 +1900,7 @@
           "clips"
         ],
         "summary": "Publish Clip",
-        "description": "Make the clip public: it appears in the feed, search and the owner's profile. Also starts\nthe YouTube virality check, which writes the clip's AI creator pack (title, description, tags)\non the way, so both are ready for posting.",
+        "description": "Make the clip public: it appears in the feed, search and the owner's profile.",
         "operationId": "publish_clip_clips__clip_id__publish_post",
         "parameters": [
           {
@@ -2138,101 +2138,12 @@
       }
     },
     "/clips/{clip_id}/virality": {
-      "post": {
-        "tags": [
-          "clips"
-        ],
-        "summary": "Start Virality",
-        "description": "Run the synthetic audience panel on a clip you own (any publish state; publishing starts one\nautomatically for YouTube). Builds the clip's creator pack first if needed; takes a few minutes.\nPoll GET with the same options.",
-        "operationId": "start_virality_clips__clip_id__virality_post",
-        "parameters": [
-          {
-            "name": "clip_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "title": "Clip Id"
-            }
-          },
-          {
-            "name": "x-user-id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "format": "uuid"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
-              "title": "X-User-Id"
-            },
-            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Bearer <token> from /auth/login",
-              "title": "Authorization"
-            },
-            "description": "Bearer <token> from /auth/login"
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ClipViralityIn"
-              }
-            }
-          }
-        },
-        "responses": {
-          "202": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ClipViralityOut"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
       "get": {
         "tags": [
           "clips"
         ],
         "summary": "Get Virality",
-        "description": "Status/result of the virality check for these options (same values you POSTed).",
+        "description": "The clip's virality score (0\u2013100), verdict, signal breakdown and per-frame curve, from the\nframe scorer that runs on every upload. Owner only.",
         "operationId": "get_virality_clips__clip_id__virality_get",
         "parameters": [
           {
@@ -2243,48 +2154,6 @@
               "type": "string",
               "format": "uuid",
               "title": "Clip Id"
-            }
-          },
-          {
-            "name": "platform",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "default": "general",
-              "title": "Platform"
-            }
-          },
-          {
-            "name": "target_audience",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Target Audience"
-            }
-          },
-          {
-            "name": "persona_count",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Persona Count"
             }
           },
           {
@@ -2327,6 +2196,85 @@
         ],
         "responses": {
           "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClipViralityOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "clips"
+        ],
+        "summary": "Score Virality",
+        "description": "Score the clip's upload if it hasn't been (uploads from before the frame scorer). Leaves\nevery clip as it is; takes a few seconds. Poll GET until status is 'ready'.",
+        "operationId": "score_virality_clips__clip_id__virality_post",
+        "parameters": [
+          {
+            "name": "clip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Clip Id"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
+              "title": "X-User-Id"
+            },
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
+          }
+        ],
+        "responses": {
+          "202": {
             "description": "Successful Response",
             "content": {
               "application/json": {
@@ -5382,14 +5330,6 @@
           "disclaimer": {
             "type": "string",
             "title": "Disclaimer"
-          },
-          "score_samples": {
-            "items": {
-              "type": "number"
-            },
-            "type": "array",
-            "title": "Score Samples",
-            "description": "virality_score of every persona panel run (the first is this report's); show the median and the spread. Empty for one-panel results and /creator/simulate."
           }
         },
         "type": "object",
@@ -6593,49 +6533,6 @@
         "type": "object",
         "title": "ClipPatch"
       },
-      "ClipViralityIn": {
-        "properties": {
-          "platform": {
-            "type": "string",
-            "enum": [
-              "general",
-              "youtube",
-              "reddit",
-              "instagram",
-              "tiktok"
-            ],
-            "title": "Platform",
-            "default": "general"
-          },
-          "target_audience": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 500
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Target Audience"
-          },
-          "persona_count": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "maximum": 15.0,
-                "minimum": 3.0
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Persona Count"
-          }
-        },
-        "type": "object",
-        "title": "ClipViralityIn"
-      },
       "ClipViralityOut": {
         "properties": {
           "clip_id": {
@@ -6651,28 +6548,79 @@
               "ready",
               "failed"
             ],
-            "title": "Status"
+            "title": "Status",
+            "description": "'none' = this upload hasn't been scored yet; POST to score it"
           },
-          "platform": {
-            "type": "string",
-            "enum": [
-              "general",
-              "youtube",
-              "reddit",
-              "instagram",
-              "tiktok"
-            ],
-            "title": "Platform"
-          },
-          "result": {
+          "score": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/AudienceSimulationOut"
+                "type": "number",
+                "maximum": 100.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "verdict": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "weak",
+                  "mixed",
+                  "promising",
+                  "strong"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verdict"
+          },
+          "peak_offset_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Peak Offset Ms",
+            "description": "The clip's strongest moment, from its start"
+          },
+          "components": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ViralityComponentsOut"
               },
               {
                 "type": "null"
               }
             ]
+          },
+          "curve": {
+            "items": {
+              "$ref": "#/components/schemas/ViralityPointOut"
+            },
+            "type": "array",
+            "title": "Curve",
+            "description": "Score of every sampled frame in the clip"
+          },
+          "algorithm_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Algorithm Version"
           },
           "error": {
             "anyOf": [
@@ -6698,11 +6646,11 @@
         "required": [
           "clip_id",
           "status",
-          "platform",
           "start_ms",
           "end_ms"
         ],
-        "title": "ClipViralityOut"
+        "title": "ClipViralityOut",
+        "description": "The clip's virality from the frame scorer: every sampled frame is scored 0\u20131 from the\nupload's own data (CLIP embeddings, events, transcript), and the clip gets the average of\nits strongest frames. Scores are relative to the rest of the same upload."
       },
       "CommentCreate": {
         "properties": {
@@ -9247,6 +9195,72 @@
         "title": "VideoViralityMomentOut",
         "description": "One contextual peak from the video's deterministic frame-score curve."
       },
+      "ViralityComponentsOut": {
+        "properties": {
+          "visual": {
+            "type": "number",
+            "title": "Visual",
+            "description": "Looks like a highlight (action, skill, payoff), ranked within the upload"
+          },
+          "novelty": {
+            "type": "number",
+            "title": "Novelty",
+            "description": "Visual change between neighbouring frames"
+          },
+          "event": {
+            "type": "number",
+            "title": "Event",
+            "description": "Detected highlight events nearby"
+          },
+          "speech": {
+            "type": "number",
+            "title": "Speech",
+            "description": "Excited or reaction speech nearby"
+          },
+          "visibility": {
+            "type": "number",
+            "title": "Visibility",
+            "description": "Readable frame: brightness, contrast, visible area"
+          },
+          "scene": {
+            "type": "number",
+            "title": "Scene",
+            "description": "Sustained strength across the surrounding scene"
+          }
+        },
+        "type": "object",
+        "required": [
+          "visual",
+          "novelty",
+          "event",
+          "speech",
+          "visibility",
+          "scene"
+        ],
+        "title": "ViralityComponentsOut",
+        "description": "Average 0\u2013100 of each signal over the clip's strongest frames."
+      },
+      "ViralityPointOut": {
+        "properties": {
+          "offset_ms": {
+            "type": "integer",
+            "title": "Offset Ms",
+            "description": "Time from the start of the clip"
+          },
+          "score": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Score"
+          }
+        },
+        "type": "object",
+        "required": [
+          "offset_ms",
+          "score"
+        ],
+        "title": "ViralityPointOut"
+      },
       "ViralitySummaryOut": {
         "properties": {
           "status": {
@@ -9286,13 +9300,6 @@
               }
             ],
             "title": "Verdict"
-          },
-          "score_samples": {
-            "items": {
-              "type": "number"
-            },
-            "type": "array",
-            "title": "Score Samples"
           }
         },
         "type": "object",
@@ -9300,7 +9307,7 @@
           "status"
         ],
         "title": "ViralitySummaryOut",
-        "description": "The clip's YouTube virality check (the one publishing starts), without the full report."
+        "description": "The clip's frame virality, without the curve."
       },
       "YouTubeConnectOut": {
         "properties": {

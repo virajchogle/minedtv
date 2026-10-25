@@ -4,14 +4,12 @@ Likes, comments and follows are counted from their own rows (each has created_at
 from clip_daily_views plus whatever Redis hasn't flushed yet. Days are UTC.
 """
 
-import asyncio
 import uuid
 from datetime import date, timedelta
 
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import Date, cast, func, select
 
-from app.api.clips import _virality_state
 from app.api.deps import Db, OptionalUser, Urls
 from app.db.models import Clip, ClipDailyViews, Comment, Follow, Like, Session
 from app.schemas import (
@@ -19,17 +17,13 @@ from app.schemas import (
     AnalyticsOut,
     AnalyticsTotalsOut,
     ClipAnalyticsOut,
-    ClipViralityIn,
-    ViralitySummaryOut,
 )
 from app.services import counters, youtube
+from app.services.clip_virality import clip_virality_summary
 from app.services.serialize import clip_out
 from app.services.social import comment_counts
 
 router = APIRouter(prefix="/users", tags=["analytics"])
-
-_YOUTUBE_CHECK = ClipViralityIn(platform="youtube")
-
 
 def _utc_day(column):
     return cast(func.timezone("UTC", column), Date)
@@ -46,17 +40,6 @@ async def _per_clip_day(db, model, clip_ids: list[uuid.UUID], since: date) -> di
         .group_by(model.clip_id, day)
     )
     return {(cid, d): n for cid, d, n in rows}
-
-
-async def _virality(clip: Clip) -> ViralitySummaryOut:
-    state = await _virality_state(clip, _YOUTUBE_CHECK)
-    r = state.result
-    return ViralitySummaryOut(
-        status=state.status,
-        score=r.virality_score if r else None,
-        verdict=r.verdict if r else None,
-        score_samples=(r.score_samples or [r.virality_score]) if r else [],
-    )
 
 
 @router.get("/{user_id}/analytics", response_model=AnalyticsOut)
@@ -141,7 +124,7 @@ async def user_analytics(
     pending = await counters.pending(ids)
     all_comments = await comment_counts(db, ids)
     on_youtube = await youtube.posted_urls(db, ids)
-    virality = await asyncio.gather(*(_virality(c) for c in clips))
+    virality = [await clip_virality_summary(db, c) for c in clips]
 
     def in_period(series: dict[tuple[uuid.UUID, date], int], cid: uuid.UUID) -> int:
         return sum(n for (c, d), n in series.items() if c == cid and d >= start)
