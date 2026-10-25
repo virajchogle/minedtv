@@ -23,6 +23,8 @@ def clip_out(
     urls: UrlBuilder,
     pending: tuple[int, int] = (0, 0),
     liked_ids: set[uuid.UUID] | None = None,
+    comment_count: int = 0,
+    youtube_url: str | None = None,
 ) -> ClipOut:
     return ClipOut(
         id=clip.id,
@@ -43,6 +45,11 @@ def clip_out(
         view_count=clip.view_count + pending[0],
         like_count=clip.like_count + pending[1],
         liked_by_me=None if liked_ids is None else clip.id in liked_ids,
+        comment_count=comment_count,
+        youtube_url=youtube_url,
+        age_restricted=clip.age_restricted,
+        moderation_severity=session.moderation_severity,
+        moderation_reason=session.moderation_reason,
         created_at=clip.created_at,
     )
 
@@ -64,4 +71,7 @@ def session_out(session: Session, user: User, urls: UrlBuilder) -> SessionOut:
         poster_url=url_or_none(session.poster_key),
         playlist_url=urls.session_playlist(session.id) if session.status == "ready" else None,
         created_at=session.created_at,
+        moderation_severity=session.moderation_severity,
+        moderation_reason=session.moderation_reason,
+        age_restricted=session.age_restricted,
     )

@@ -44,6 +44,7 @@ def test_capacity_errors_detected_through_cause_chain():
     except RuntimeError as outer:
         assert is_capacity_error(outer)
     assert is_capacity_error(Exception("429 RESOURCE_EXHAUSTED"))
+    assert is_capacity_error(Exception("Error code: 400 - Thinking level THINKING_LEVEL_MINIMAL is not supported for this model."))
     assert not is_capacity_error(ValueError("invalid JSON"))
 
 

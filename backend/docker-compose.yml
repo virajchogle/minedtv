@@ -56,6 +56,8 @@ services:
     build: {context: ., dockerfile: Dockerfile.api}
     environment: *app-env
     command: sh -c "alembic upgrade head && python -m scripts.init_storage"
+    # Mount the code like api/worker do, so new migrations run without rebuilding the image.
+    volumes: ["./app:/srv/app", "./scripts:/srv/scripts"]
     depends_on:
       postgres: {condition: service_healthy}
       s3: {condition: service_started}

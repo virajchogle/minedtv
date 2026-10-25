@@ -7,16 +7,54 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.db.models import User
 from app.db.session import get_db
+from app.services import accounts
 
 Db = Annotated[AsyncSession, Depends(get_db)]
 
 
+async def signed_in_user(
+    db: Db,
+    authorization: Annotated[str | None, Header(description="Bearer <token> from /auth/login")] = None,
+) -> User | None:
+    """The account behind the login token, if one was sent (never an impersonated user)."""
+    if not authorization:
+        return None
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        raise HTTPException(401, "Authorization must be 'Bearer <token>'")
+    try:
+        user_id = accounts.read_token(get_settings(), token.strip())
+    except accounts.AuthNotConfigured as e:
+        raise HTTPException(503, str(e)) from e
+    except accounts.InvalidToken as e:
+        raise HTTPException(401, str(e)) from e
+    user = await db.get(User, user_id)
+    if user is None:
+        raise HTTPException(401, "Account no longer exists")
+    return user
+
+
+SignedInUser = Annotated[User | None, Depends(signed_in_user)]
+
+
 async def current_user_optional(
     db: Db,
-    x_user_id: Annotated[uuid.UUID | None, Header(description="Acting user's ID (demo identity, no auth yet)")] = None,
+    account: SignedInUser,
+    x_user_id: Annotated[
+        uuid.UUID | None,
+        Header(description="Act as this user. Dev accounts may act as anyone; others only as themselves."),
+    ] = None,
 ) -> User | None:
-    if x_user_id is None:
-        return None
+    """Who the request acts as: the X-User-Id user if sent and allowed, else the signed-in account.
+    While REQUIRE_LOGIN is off (testing), anyone may act as anyone, as before accounts existed.
+    With it on, a login token is required and only dev accounts may act as someone else."""
+    if x_user_id is None or (account is not None and x_user_id == account.id):
+        return account
+    if get_settings().require_login:
+        if account is None:
+            raise HTTPException(401, "Sign in first (Authorization: Bearer <token>)")
+        if not account.is_dev:
+            raise HTTPException(403, "Only dev accounts can act as another user")
     user = await db.get(User, x_user_id)
     if user is None:
         raise HTTPException(401, "Unknown X-User-Id")
@@ -25,7 +63,7 @@ async def current_user_optional(
 
 async def current_user(user: Annotated[User | None, Depends(current_user_optional)]) -> User:
     if user is None:
-        raise HTTPException(401, "X-User-Id header required")
+        raise HTTPException(401, "Sign in first (or send X-User-Id)")
     return user
 
 

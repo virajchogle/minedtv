@@ -27,6 +27,7 @@ from app.db.models import (
     Event,
     Frame,
     FrameHighlightRun,
+    NotificationType,
     Segment,
     Session,
     SessionStatus,
@@ -36,7 +37,9 @@ from app.db.session import get_sessionmaker
 from app.log import bind
 from app.ml.interfaces import DetectedEvent, Embedder, HighlightDetector, Transcriber, TranscriptChunk
 from app.services.frame_virality import image_visibility_score
+from app.ml.moderation import ContentPolicyViolation, get_moderator
 from app.services.queries import nearest_frame_key
+from app.services.social import notify
 from app.services.storage import Storage, get_storage
 from app.worker import media
 
@@ -114,6 +117,9 @@ def _sha256(path: Path) -> str:
 
 async def step_probe(ctx: Ctx) -> None:
     info = await asyncio.to_thread(media.probe, await ctx.source_path())
+    max_min = ctx.deps.settings.max_video_minutes
+    if info.duration_ms and info.duration_ms > max_min * 60_000:
+        raise ValueError(f"Video is {info.duration_ms / 60_000:.0f} minutes long; the limit is {max_min} minutes")
     async with ctx.deps.sessionmaker() as db:
         s = await ctx.session(db)
         s.duration_ms, s.width, s.height, s.fps, s.has_audio = (
@@ -282,6 +288,63 @@ async def step_audio(ctx: Ctx) -> None:
             await db.commit()
 
 
+def _sample_evenly(items: list, n: int) -> list:
+    """n evenly-spaced items across the list, in original order. All of them if n >= len."""
+    if n <= 0 or not items:
+        return []
+    if len(items) <= n:
+        return items
+    step = len(items) / n
+    return [items[int(i * step)] for i in range(n)]
+
+
+def _fetch_frames(storage: Storage, keys: list[str]) -> list[bytes]:
+    """Best-effort: a frame storage hiccup shouldn't fail moderation over one image."""
+    out: list[bytes] = []
+    for key in keys:
+        try:
+            out.append(storage.get_bytes(key))
+        except Exception:
+            log.warning("moderation: could not fetch frame %s, skipping", key)
+    return out
+
+
+async def step_moderate(ctx: Ctx) -> None:
+    """Classify the real transcript plus a sample of the real extracted frames —
+    on-screen text and imagery, not just speech. Raises ContentPolicyViolation on
+    severe content, which stops the pipeline before finalize — see run_pipeline's
+    except clause."""
+    st = ctx.settings
+    async with ctx.deps.sessionmaker() as db:
+        rows = (
+            await db.execute(select(Transcript.text).where(Transcript.session_id == ctx.session_id).order_by(Transcript.start_ms))
+        ).scalars().all()
+        frame_keys = (
+            await db.execute(
+                select(Frame.thumbnail_key)
+                .where(Frame.session_id == ctx.session_id, Frame.thumbnail_key.is_not(None))
+                .order_by(Frame.t_ms)
+            )
+        ).scalars().all()
+    text = " ".join(rows).strip()
+
+    sampled_keys = _sample_evenly(list(frame_keys), st.moderation_max_frames)
+    frames = await asyncio.to_thread(_fetch_frames, ctx.deps.storage, sampled_keys)
+
+    result = await asyncio.to_thread(get_moderator().classify, text, frames)
+
+    async with ctx.deps.sessionmaker() as db:
+        s = await ctx.session(db)
+        s.moderation_severity = result.severity
+        s.moderation_reason = result.reason or None
+        s.age_restricted = result.severity in ("mild", "severe")
+        await db.commit()
+    log.info("moderation classified", extra={"severity": result.severity, "categories": result.categories})
+
+    if result.severity == "severe":
+        raise ContentPolicyViolation(result.reason, result.categories)
+
+
 async def step_highlights(ctx: Ctx) -> None:
     detector = ctx.deps.detector
     events: list[DetectedEvent] = await asyncio.to_thread(detector.detect, str(await ctx.source_path()), str(ctx.session_id))
@@ -344,6 +407,7 @@ async def step_finalize(ctx: Ctx) -> None:
                         generation_source="pipeline",
                         publish_state=st.new_clip_publish_state,
                         published_at=func.now() if st.new_clip_publish_state == "published" else None,
+                        age_restricted=s.age_restricted,
                     )
                 )
         else:
@@ -360,8 +424,21 @@ async def step_finalize(ctx: Ctx) -> None:
                     generation_source="pipeline",
                     publish_state=st.new_clip_publish_state,
                     published_at=func.now() if st.new_clip_publish_state == "published" else None,
+                    age_restricted=s.age_restricted,
                 )
             )
+        await db.flush()
+        clip_ids = (await db.scalars(select(Clip.id).where(Clip.session_id == s.id, Clip.kind == "auto"))).all()
+        # once=True: reprocessing the same upload doesn't notify again.
+        await notify(
+            db,
+            user_id=s.user_id,
+            type=NotificationType.UPLOAD_READY,
+            session_id=s.id,
+            clip_id=clip_ids[0] if clip_ids else None,
+            data={"title": base_title, "clip_ids": [str(c) for c in clip_ids]},
+            once=True,
+        )
         await db.commit()
     log.info("created default clips", extra={"clips": len(windows) or 1})
 
@@ -372,6 +449,7 @@ STEP_FUNCS = {
     "thumbnails": step_thumbnails,
     "frames": step_frames,
     "audio": step_audio,
+    "moderate": step_moderate,
     "highlights": step_highlights,
     "finalize": step_finalize,
 }
@@ -382,7 +460,8 @@ assert list(STEP_FUNCS) == PIPELINE_STEPS
 
 
 async def run_pipeline(session_id: uuid.UUID | str, *, resume: bool = False, deps: Deps | None = None) -> str:
-    """Process a session. Returns the final status ("ready" or "failed"); never raises for step errors."""
+    """Process a session. Returns the final status ("ready", "failed", or "blocked" for
+    severe moderation content); never raises for step errors."""
     session_id = uuid.UUID(str(session_id))
     deps = deps or Deps.default()
     with bind(session_id=str(session_id)):
@@ -420,6 +499,14 @@ async def run_pipeline(session_id: uuid.UUID | str, *, resume: bool = False, dep
                 await db.commit()
             log.info("pipeline ready", extra={"secs": round(time.monotonic() - t_all, 2)})
             return SessionStatus.READY
+        except ContentPolicyViolation as e:
+            with bind(step=step):
+                log.warning("pipeline blocked by content policy", extra={"categories": e.categories})
+            async with deps.sessionmaker() as db:
+                s = await ctx.session(db)
+                s.status, s.failed_step, s.error = SessionStatus.BLOCKED, step, e.reason
+                await db.commit()
+            return SessionStatus.BLOCKED
         except Exception as e:
             with bind(step=step):
                 log.exception("pipeline step failed")

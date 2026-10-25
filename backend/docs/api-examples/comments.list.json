@@ -1,0 +1,52 @@
+{
+  "items": [
+    {
+      "id": "00000000-0000-0000-0000-000000001b59",
+      "clip_id": "00000000-0000-0000-0000-0000000003e8",
+      "user": {
+        "id": "00000000-0000-0000-0000-000000000065",
+        "username": "NovaQueen",
+        "avatar_url": "https://pub-xxxxxxxx.r2.dev/avatars/novaqueen.png"
+      },
+      "body": "that flick was disgusting 🔥",
+      "parent_id": null,
+      "created_at": "2026-10-24T17:50:00Z",
+      "reply_count": 2,
+      "replies": [
+        {
+          "id": "00000000-0000-0000-0000-000000001b5a",
+          "clip_id": "00000000-0000-0000-0000-0000000003e8",
+          "user": {
+            "id": "00000000-0000-0000-0000-000000000066",
+            "username": "xPixel",
+            "avatar_url": "https://pub-xxxxxxxx.r2.dev/avatars/xpixel.png"
+          },
+          "body": "aim assist on real life",
+          "parent_id": "00000000-0000-0000-0000-000000001b59",
+          "created_at": "2026-10-24T18:00:00Z",
+          "reply_count": 0,
+          "replies": [],
+          "can_delete": false
+        },
+        {
+          "id": "00000000-0000-0000-0000-000000001b5b",
+          "clip_id": "00000000-0000-0000-0000-0000000003e8",
+          "user": {
+            "id": "00000000-0000-0000-0000-000000000064",
+            "username": "ShadowSniper",
+            "avatar_url": "https://pub-xxxxxxxx.r2.dev/avatars/shadowsniper.png"
+          },
+          "body": "thanks both!",
+          "parent_id": "00000000-0000-0000-0000-000000001b59",
+          "created_at": "2026-10-24T18:10:00Z",
+          "reply_count": 0,
+          "replies": [],
+          "can_delete": true
+        }
+      ],
+      "can_delete": false
+    }
+  ],
+  "next_cursor": null,
+  "total": 3
+}

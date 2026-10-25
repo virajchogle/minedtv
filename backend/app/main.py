@@ -48,9 +48,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["*"],
     )
 
-    from app.api import clips, creator, feed, search, sessions, uploads, users
+    from app.api import accounts, analytics, clips, creator, feed, notifications, search, sessions, social, uploads, users, youtube
 
-    for module in (uploads, sessions, clips, feed, search, users, creator):
+    for module in (accounts, uploads, sessions, clips, feed, search, users, analytics, social, notifications, creator, youtube):
         app.include_router(module.router)
 
     @app.post("/warmup", tags=["health"])
@@ -67,6 +67,39 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             log.warning("warmup failed", exc_info=True)
             status = "failed"
         return {"status": status, "ms": round((asyncio.get_running_loop().time() - t0) * 1000)}
+
+    @app.get("/config", tags=["health"])
+    async def config() -> dict:
+        """Read-only view of the models and search settings this server runs with (no secrets)."""
+        st = get_settings()
+        return {
+            "models": {
+                "embedder": st.embedder_backend,
+                "transcriber": st.transcriber_backend,
+                "highlights": st.highlight_backend,
+                "creator": st.gemini_model if st.gemini_api_key else None,
+                "creator_fallbacks": st.gemini_fallback_models if st.gemini_api_key else [],
+                "personas": st.creator_persona_model if st.gemini_api_key else None,
+            },
+            "search": {
+                "rrf_k": st.rrf_k,
+                "visual_min_score": st.visual_min_score,
+                "visual_full_score": st.visual_full_score,
+                "visual_relative_cutoff": st.visual_relative_cutoff,
+                "speech_min_score": st.speech_min_score,
+                "speech_full_score": st.speech_full_score,
+                "speech_only_min_score": st.speech_only_min_score,
+                "image_min_sim": st.image_min_sim,
+                "image_full_sim": st.image_full_sim,
+            },
+            "features": {
+                "gemini": bool(st.gemini_api_key),
+                "youtube": bool(st.youtube_client_id and st.youtube_client_secret and st.youtube_token_key),
+                "accounts": bool(st.auth_secret),
+                "require_login": st.require_login,
+            },
+            "limits": {"max_upload_mb": st.max_upload_mb, "max_video_minutes": st.max_video_minutes},
+        }
 
     @app.get("/health", response_model=HealthOut, tags=["health"])
     async def health() -> HealthOut:

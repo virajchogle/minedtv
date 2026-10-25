@@ -6,6 +6,11 @@ Drop-in code for [rishikesh-web/MinedTv](https://github.com/rishikesh-web/MinedT
 
 - Base URL: `https://minedtv-api-818252181045.us-east1.run.app` (interactive docs at `/docs`)
 - Every request needs `X-API-Key: <key>`. Requests that act as a user also need `X-User-Id: <uuid>`.
+- Real sign-in exists too: `POST /auth/login {"login": "<username or email>", "password": "..."}` (or
+  `/auth/signup {"username", "email", "password"}`) returns `{token, expires_at, user}`. Send
+  `Authorization: Bearer <token>` and the API knows who you are without `X-User-Id`. While testing
+  (`REQUIRE_LOGIN=false` on the server), `X-User-Id` alone keeps working and anyone may act as any user,
+  so keep the demo-user picker; moving to login can wait until after the demo.
 - `*.m3u8` playlist URLs need no key, so the player can fetch them directly.
 - Example responses for every endpoint: [`api-examples/`](api-examples/)
 
@@ -372,27 +377,75 @@ When a clip is opened, call `MinedTvApi.view(clip.remoteId!!)` once. Have the li
 - **Stable media URLs:** thumbnails, segments and exports now use a fixed public R2 URL, so Coil and
   ExoPlayer can cache them.
 
-## 8. Drafts, "ready to post" and publishing
+## 8. My videos, publishing and the virality check
 
-Clips have a `publish_state`: `draft` → `ready` (queued to post to YouTube) → `published`.
+The flow is **upload → My videos (private) → Publish → Post to YouTube**. A clip's `publish_state` is
+`draft` (private, "My videos") or `published` (public). `ready` is a legacy private state: treat it like
+`draft`. `POST /clips/{id}/mark-ready` still works but the web app no longer uses it.
 
-- The feed, search and other users' profiles only show `published` clips. **New uploads may start as
+- The feed, search and other users' profiles only show `published` clips. **New uploads start as
   `draft`, so add a Publish button** that calls `POST /clips/{id}/publish` (owner's `X-User-Id`).
-  `POST /clips/{id}/unpublish` takes a clip back to draft, and `POST /clips/{id}/mark-ready` puts it in
-  the "ready to post to YouTube" bucket.
+  `POST /clips/{id}/unpublish` takes it back to private.
+- **Publishing also starts the virality check** for YouTube (it writes the AI creator pack on the way).
+  Show its result by polling `GET /clips/{id}/virality?platform=youtube` until `status == "ready"`.
 - On the user's own profile, `GET /users/{me}/clips?state=draft|ready|published|unpublished|all`
-  (with `X-User-Id: {me}`) gives the buckets. Anyone else only ever gets published clips.
+  (with `X-User-Id: {me}`) gives the buckets; `unpublished` = My videos. Each clip has `youtube_url`
+  once it's been posted to YouTube. Anyone else only ever gets published clips.
 - "Search your clips" (library scope) should pass `user_id={me}`. That search includes the user's own
-  drafts; global search never does.
-- **Virality check (drafts only):** `POST /clips/{id}/virality` with
-  `{"platform": "youtube", "target_audience": "...", "persona_count": 9}`, then poll
-  `GET /clips/{id}/virality?platform=youtube&...` with the same options until `status == "ready"`.
-  `result` has `virality_score` (0–100), `verdict` and the persona panel. A published clip returns
-  409, so unpublish it first. It takes a few minutes (export + Gemini + persona panel).
+  private clips; global search never does.
+- **Virality check by hand** (any clip you own, other platforms or audiences): `POST /clips/{id}/virality`
+  with `{"platform": "tiktok", "target_audience": "...", "persona_count": 9}`, then poll
+  `GET /clips/{id}/virality?platform=tiktok&...` with the same options until `status == "ready"`.
+  `result` has `virality_score` (0–100), `verdict` and the persona panel. It takes a few minutes
+  (export + Gemini + persona panel). Each check now runs 3 panels and keeps every score in
+  `result.score_samples`: show the median and the range, so the dashboard's extra
+  `/creator/simulate-analysis` calls aren't needed any more.
+- **Analytics:** `GET /users/{me}/analytics?days=30` (owner only) returns real per-day `views`, `likes`,
+  `comments`, `new_followers` (UTC days, zero-filled), `period` vs `previous_period` totals, and each clip's
+  period stats plus `virality {status, score, verdict, score_samples}`. Use it for the dashboard's charts
+  instead of the demo data.
 - **AI creator pack:** `POST /clips/{id}/creator-pack` returns titles, caption, hashtags and YouTube
   metadata for the clip. Poll `GET` the same way.
 
-## 9. Uploading from the phone (optional)
+## 9. Comments, follows and the Inbox
+
+- **Comments** (clip detail): `GET /clips/{id}/comments` returns top-level comments newest first, each with
+  `replies` (oldest first), `reply_count` and `can_delete`, plus `total` and `next_cursor`. Post with
+  `POST /clips/{id}/comments {"body": "...", "parent_id": null}`; set `parent_id` to reply. Delete with
+  `DELETE /comments/{id}` (author or clip owner). Every clip response also has `comment_count`.
+- **Profile:** `GET /users/{id}` (with `X-User-Id`) adds `follower_count`, `following_count`,
+  `published_clip_count`, `followed_by_me` and `follows_me`.
+- **Follow button:** `POST`/`DELETE /users/{id}/follow` returns `{following, follower_count}`. Lists are at
+  `GET /users/{id}/followers` and `/following`.
+- **Home "Following" tab:** `GET /feed/following` (same shape and pagination as `/feed`).
+- **Inbox:** `GET /notifications` returns items with `type` (like, comment, reply, follow, upload_ready,
+  virality_ready), a ready-to-show `message`, `actor`, `clip {id, title, thumbnail_url}`, `read` and
+  `created_at`, plus `unread_count`. For the badge, poll `GET /notifications/unread-count`. When the
+  Inbox opens, call `POST /notifications/read {"all": true}`, or send `{"ids": [...]}` for specific ones.
+
+## 10. Post to YouTube
+
+1. `GET /youtube/status` returns `{configured, connected, channel_title}`.
+2. If not connected: `GET /youtube/connect` returns `auth_url`. Open it in a Custom Tab or browser. The user approves on Google and lands on a "YouTube connected" page (or the web app). Then check status again.
+3. On a **published** clip: `POST /clips/{id}/youtube {"privacy": "unlisted"}`. Title, description and tags default to the AI creator pack; pass your own to override them. Then poll `GET /clips/{id}/youtube` until `status` is `published` and show the `url`. The owner also gets a `youtube_posted` notification.
+
+Uploads are private-only until Google audits the app, and only Google accounts added as test users in
+the Cloud console can connect (ask Viraj to add yours). Each clip in lists carries `youtube_url` once
+posted: show an "On YouTube" badge or link with it. For TikTok and Reels, share the MP4 from `/clips/{id}/export` through the Android share sheet (`IntentPlatformPublisher`), since their APIs need an app review.
+
+## 10b. Content moderation
+
+Every upload's transcript and some sampled frames are checked by Gemini (Jasper's step, between
+transcription and highlights):
+
+- Sessions and clips carry `moderation_severity` (`none` | `mild` | `severe`), `age_restricted`
+  (true for mild or severe) and, for the owner, `moderation_reason`. Show an 18+ badge or a
+  tap-to-reveal cover on `age_restricted` clips.
+- **Severe** content stops processing: the session's `status` becomes `blocked` (a new value next to
+  `ready` and `failed`) and no clips are made. Treat `blocked` as finished, and show the owner
+  `moderation_reason` instead of a spinner.
+
+## 11. Uploading from the phone (optional)
 
 1. `POST /uploads` with `{"filename": "x.mp4", "content_type": "video/mp4", "game": "Valorant", "title": "..."}`
    returns `upload_url` and `session_id`.

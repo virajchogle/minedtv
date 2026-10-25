@@ -202,6 +202,12 @@ async def test_pipeline_end_to_end(sessionmaker, video, tmp_path):
         assert await db.scalar(select(func.count()).select_from(Frame).where(Frame.session_id == sid)) == VIDEO_S
         kinds = (await db.scalars(select(Clip.kind).where(Clip.session_id == sid))).all()
         assert sorted(kinds) == ["auto", "auto", "user"]
+        # The uploader heard once that it's ready, even though it was processed twice.
+        from app.db.models import Notification
+
+        notes = (await db.scalars(select(Notification).where(Notification.session_id == sid))).all()
+        assert [n.type for n in notes] == ["upload_ready"]
+        assert len(notes[0].data["clip_ids"]) == 2 and notes[0].user_id == s.user_id
 
 
 async def test_failed_step_resumes(sessionmaker, video, tmp_path):
@@ -211,7 +217,7 @@ async def test_failed_step_resumes(sessionmaker, video, tmp_path):
     assert await run_pipeline(sid, deps=_deps(sessionmaker, storage, BrokenDetector())) == SessionStatus.FAILED
     async with sessionmaker() as db:
         s = await db.get(Session, sid)
-        assert (s.status, s.failed_step, s.last_step) == ("failed", "highlights", "audio")
+        assert (s.status, s.failed_step, s.last_step) == ("failed", "highlights", "moderate")
         assert "model exploded" in s.error
         seg_ids = set((await db.scalars(select(Segment.id).where(Segment.session_id == sid))).all())
 
@@ -277,8 +283,8 @@ async def test_creator_pack_for_existing_clip(sessionmaker, video, tmp_path):
     assert calls == ["busy-model", "ok-model"]
 
 
-async def test_virality_only_for_unpublished_clips(sessionmaker, video, tmp_path):
-    from app.worker.virality import ClipAlreadyPublished, run_virality
+async def test_virality_runs_panels_on_any_clip(sessionmaker, video, tmp_path):
+    from app.worker.virality import run_virality
     from tests.test_creator_pack import engine_factory
 
     storage = LocalStorage(tmp_path / "storage")
@@ -304,14 +310,26 @@ async def test_virality_only_for_unpublished_clips(sessionmaker, video, tmp_path
     deps = _deps(sessionmaker, storage, FakeDetector())
     key = await run_virality(clip.id, deps, "youtube", None, 5, simulator_factory=FakeSimulator,
                              engine_factory=engine_factory({}, []))
-    assert storage.exists(key) and seen == [("t", "youtube", 5)]
+    panels = 1 + deps.settings.virality_extra_panels
+    assert storage.exists(key) and seen == [("t", "youtube", 5)] * panels
+    from app.schemas import AudienceSimulationOut
+
+    saved = AudienceSimulationOut.model_validate_json(storage.get_bytes(key))
+    assert len(saved.score_samples) == panels and saved.score_samples[0] == saved.virality_score
+    from app.db.models import Notification
+
+    async with sessionmaker() as db:
+        types = (await db.scalars(select(Notification.type).where(Notification.clip_id == clip.id))).all()
+    assert "virality_ready" in types
 
     async with sessionmaker() as db:
         await db.execute(update(Clip).where(Clip.id == clip.id).values(publish_state="published"))
         await db.commit()
-    with pytest.raises(ClipAlreadyPublished):
-        await run_virality(clip.id, deps, "youtube", None, 6, simulator_factory=FakeSimulator,
-                           engine_factory=engine_factory({}, []))
+    # Published clips get checked too (publishing starts one).
+    seen.clear()
+    assert storage.exists(await run_virality(clip.id, deps, "youtube", None, 6, simulator_factory=FakeSimulator,
+                                             engine_factory=engine_factory({}, [])))
+    assert len(seen) == panels
 
 
 async def test_frame_virality_reuses_pipeline_frames_and_creates_clips(sessionmaker, video, tmp_path):

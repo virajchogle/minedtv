@@ -2,12 +2,13 @@ import uuid
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.api.deps import Db, OptionalUser, Urls
 from app.api.feed import base_clip_query, clip_page
 from app.db.models import PUBLISH_STATES, UNPUBLISHED_STATES, Clip, User
-from app.schemas import FeedOut, UserCreate, UserOut
+from app.schemas import FeedOut, ProfileOut, UserCreate, UserOut
+from app.services import social
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -29,12 +30,29 @@ async def list_users(db: Db, limit: int = Query(default=50, ge=1, le=200)) -> li
     return [UserOut.model_validate(u) for u in users]
 
 
-@router.get("/{user_id}", response_model=UserOut)
-async def get_user(user_id: uuid.UUID, db: Db) -> UserOut:
+@router.get("/{user_id}", response_model=ProfileOut)
+async def get_user(user_id: uuid.UUID, db: Db, me: OptionalUser) -> ProfileOut:
+    """A user's profile: follower/following counts, published clip count, and (with X-User-Id)
+    whether you follow them and they follow you."""
     user = await db.get(User, user_id)
     if user is None:
         raise HTTPException(404, "User not found")
-    return UserOut.model_validate(user)
+    followers, following = await social.follow_counts(db, user.id)
+    published = await db.scalar(
+        select(func.count()).select_from(Clip).where(Clip.user_id == user.id, Clip.publish_state == "published")
+    )
+    followed_by_me = follows_me = None
+    if me is not None and me.id != user.id:
+        followed_by_me = user.id in await social.following_set(db, me.id, [user.id])
+        follows_me = me.id in await social.following_set(db, user.id, [me.id])
+    return ProfileOut(
+        **UserOut.model_validate(user).model_dump(),
+        follower_count=followers,
+        following_count=following,
+        published_clip_count=published or 0,
+        followed_by_me=followed_by_me,
+        follows_me=follows_me,
+    )
 
 
 @router.get("/{user_id}/clips", response_model=FeedOut)

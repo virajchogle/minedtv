@@ -16,6 +16,13 @@ from app.main import create_app
 from app.ml.audience_simulator import AudiencePanelDraft, build_audience_simulation
 from app.schemas import (
     ClipDetailOut,
+    CommentOut,
+    CommentsPage,
+    FollowOut,
+    NotificationClip,
+    NotificationOut,
+    NotificationsPage,
+    ProfileOut,
     MomentOut,
     ClipOut,
     CountsOut,
@@ -82,7 +89,9 @@ def session(status: str = "ready", last_step: str | None = "finalize", **kw) -> 
         duration_ms=2_712_000 if last_step else None, width=1920 if last_step else None,
         height=1080 if last_step else None, status=status, last_step=last_step, failed_step=kw.get("failed_step"),
         error=kw.get("error"), poster_url=f"{CDN}/sessions/{sid}/poster.jpg" if ready else None,
-        playlist_url=f"{API}/sessions/{sid}/playlist.m3u8" if ready else None, created_at=NOW - timedelta(hours=1),
+        playlist_url=f"{API}/sessions/{sid}/playlist.m3u8" if ready else None,
+        moderation_severity="none", moderation_reason=None, age_restricted=False,
+        created_at=NOW - timedelta(hours=1),
     )
 
 
@@ -91,7 +100,7 @@ def status_event(status: str, last_step: str | None, **kw) -> SessionStatusEvent
     return SessionStatusEvent(
         session_id=uid(500), status=status, progress=1.0 if status == "ready" else done / len(PIPELINE_STEPS),
         steps=PIPELINE_STEPS, last_step=last_step, failed_step=kw.get("failed_step"), error=kw.get("error"),
-        done=status in ("ready", "failed"),
+        done=status in ("ready", "failed", "blocked"), moderation_severity="none", age_restricted=False,
     )
 
 
@@ -239,7 +248,7 @@ def examples() -> dict[str, object]:
         "feed.json": FeedOut(items=[clip(i) for i in range(5)], next_cursor="MjAyNi0xMC0yNFQwNjozMDowMCswMDowMHwwMDAw"),
         "users.clips.json": FeedOut(items=[clip(0)], next_cursor=None),
         "clips.get.json": ClipDetailOut(
-            **c0.model_dump(), session_duration_ms=2_712_000,
+            **c0.model_dump(), session_duration_ms=2_712_000, frame_count=31,
             events=[
                 EventOut(id=uid(9001), t_ms=318_400, type="kill", score=0.62, source="HighlightDetector", metadata={"weapon": "vandal"}),
                 EventOut(id=uid(9002), t_ms=331_000, type="clutch", score=0.97, source="HighlightDetector", metadata={"enemies": 5}),
@@ -258,6 +267,48 @@ def examples() -> dict[str, object]:
         "clips.export.processing.json": ExportOut(clip_id=c0.id, status="processing", url=None, start_ms=c0.start_ms, end_ms=c0.end_ms),
         "clips.export.ready.json": ExportOut(clip_id=c0.id, status="ready", url=f"{CDN}/exports/{c0.id}/{c0.start_ms}-{c0.end_ms}.mp4",
                                              start_ms=c0.start_ms, end_ms=c0.end_ms),
+        "comments.list.json": CommentsPage(
+            total=3,
+            next_cursor=None,
+            items=[
+                CommentOut(
+                    id=uid(7001), clip_id=c0.id, user=USERS[1], body="that flick was disgusting 🔥", parent_id=None,
+                    created_at=NOW - timedelta(minutes=40), reply_count=2, can_delete=False,
+                    replies=[
+                        CommentOut(id=uid(7002), clip_id=c0.id, user=USERS[2], body="aim assist on real life",
+                                   parent_id=uid(7001), created_at=NOW - timedelta(minutes=30), can_delete=False),
+                        CommentOut(id=uid(7003), clip_id=c0.id, user=USERS[0], body="thanks both!",
+                                   parent_id=uid(7001), created_at=NOW - timedelta(minutes=20), can_delete=True),
+                    ],
+                )
+            ],
+        ),
+        "users.profile.json": ProfileOut(**USERS[0].model_dump(), follower_count=1204, following_count=87,
+                                         published_clip_count=42, followed_by_me=True, follows_me=False),
+        "users.follow.json": FollowOut(user_id=USERS[0].id, following=True, follower_count=1205),
+        "notifications.json": NotificationsPage(
+            unread_count=2,
+            next_cursor=None,
+            items=[
+                NotificationOut(id=uid(8001), type="like", message=f"NovaQueen liked your clip “{c0.title}”",
+                                actor=USERS[1], clip=NotificationClip(id=c0.id, title=c0.title, thumbnail_url=c0.thumbnail_url),
+                                comment_id=None, session_id=None, data={}, read=False, created_at=NOW - timedelta(minutes=2)),
+                NotificationOut(id=uid(8002), type="comment",
+                                message=f"xPixel commented on your clip “{c0.title}”: how did you hit that??",
+                                actor=USERS[2], clip=NotificationClip(id=c0.id, title=c0.title, thumbnail_url=c0.thumbnail_url),
+                                comment_id=uid(7004), session_id=None, data={"preview": "how did you hit that??"},
+                                read=False, created_at=NOW - timedelta(minutes=32)),
+                NotificationOut(id=uid(8003), type="follow", message="Kairo started following you", actor=USERS[4],
+                                clip=None, comment_id=None, session_id=None, data={}, read=True,
+                                created_at=NOW - timedelta(hours=5)),
+                NotificationOut(id=uid(8004), type="upload_ready",
+                                message="Your upload “Ranked on Ascent” is ready (3 clips, saved as drafts)", actor=None,
+                                clip=NotificationClip(id=c0.id, title=c0.title, thumbnail_url=c0.thumbnail_url),
+                                comment_id=None, session_id=c0.session_id,
+                                data={"title": "Ranked on Ascent", "clip_ids": [str(c0.id)]}, read=True,
+                                created_at=NOW - timedelta(hours=6)),
+            ],
+        ),
         "search.json": search_results(),
         "search.image.json": search_results().model_copy(update={"query": "image:screenshot.png", "took_ms": 241}),
         "creator.analyze.json": creator,
@@ -301,21 +352,27 @@ def dump(obj) -> str:
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     for name, obj in examples().items():
-        (OUT / name).write_text(dump(obj) + "\n")
+        (OUT / name).write_text(dump(obj) + "\n", encoding="utf-8")
 
     sse = [status_event("queued", None), status_event("probing", None), status_event("segmenting", "probe"),
            status_event("frames", "thumbnails"), status_event("audio", "frames"), status_event("ready", "finalize")]
-    (OUT / "sessions.status.sse.txt").write_text("".join(f"event: status\ndata: {e.model_dump_json()}\n\n" for e in sse))
+    (OUT / "sessions.status.sse.txt").write_text(
+        "".join(f"event: status\ndata: {e.model_dump_json()}\n\n" for e in sse),
+        encoding="utf-8",
+    )
 
     c = clip(0)
     playlist = ["#EXTM3U", "#EXT-X-VERSION:6", "#EXT-X-TARGETDURATION:2", "#EXT-X-MEDIA-SEQUENCE:156",
                 "#EXT-X-PLAYLIST-TYPE:VOD", "#EXT-X-INDEPENDENT-SEGMENTS"]
     for i in range(156, 171):
         playlist += ["#EXTINF:2.000,", f"{CDN}/sessions/{c.session_id}/hls/seg_{i:05d}.ts"]
-    (OUT / "clips.playlist.m3u8").write_text("\n".join(playlist + ["#EXT-X-ENDLIST"]) + "\n")
+    (OUT / "clips.playlist.m3u8").write_text(
+        "\n".join(playlist + ["#EXT-X-ENDLIST"]) + "\n",
+        encoding="utf-8",
+    )
 
     spec = create_app().openapi()
-    (ROOT / "docs" / "openapi.json").write_text(json.dumps(spec, indent=2) + "\n")
+    (ROOT / "docs" / "openapi.json").write_text(json.dumps(spec, indent=2) + "\n", encoding="utf-8")
     print(f"wrote {len(list(OUT.iterdir()))} examples to {OUT.relative_to(ROOT)} and docs/openapi.json")
 
 

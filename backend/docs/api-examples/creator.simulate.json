@@ -177,5 +177,6 @@
     ],
     "content_warnings": []
   },
-  "disclaimer": "Synthetic persona feedback is a creative testing aid, not a statistically valid forecast of views, engagement, or platform distribution. Validate important decisions with real audience tests."
+  "disclaimer": "Synthetic persona feedback is a creative testing aid, not a statistically valid forecast of views, engagement, or platform distribution. Validate important decisions with real audience tests.",
+  "score_samples": []
 }

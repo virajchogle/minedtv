@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
@@ -7,6 +7,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Computed,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -45,23 +46,29 @@ class SessionStatus:
     THUMBNAILS = "thumbnails"
     FRAMES = "frames"
     AUDIO = "audio"
+    MODERATING = "moderating"
     HIGHLIGHTS = "highlights"
     FINALIZING = "finalizing"
     READY = "ready"
     FAILED = "failed"
+    # Terminal: transcript moderation found severe content. No clip is ever
+    # created for this session — distinct from FAILED, which is a technical error.
+    BLOCKED = "blocked"
 
 
 PUBLISH_STATES = ("draft", "ready", "published")
 UNPUBLISHED_STATES = ("draft", "ready")
+MODERATION_SEVERITIES = ("none", "mild", "severe")
 
 # Pipeline steps in order, and the session status shown while each one runs.
-PIPELINE_STEPS = ["probe", "segment", "thumbnails", "frames", "audio", "highlights", "finalize"]
+PIPELINE_STEPS = ["probe", "segment", "thumbnails", "frames", "audio", "moderate", "highlights", "finalize"]
 STEP_STATUS = {
     "probe": SessionStatus.PROBING,
     "segment": SessionStatus.SEGMENTING,
     "thumbnails": SessionStatus.THUMBNAILS,
     "frames": SessionStatus.FRAMES,
     "audio": SessionStatus.AUDIO,
+    "moderate": SessionStatus.MODERATING,
     "highlights": SessionStatus.HIGHLIGHTS,
     "finalize": SessionStatus.FINALIZING,
 }
@@ -73,6 +80,11 @@ class User(Base):
     id: Mapped[uuid.UUID] = _pk()
     username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     avatar_url: Mapped[str | None] = mapped_column(Text)
+    # Set for accounts that sign up with a password; demo users made via POST /users have neither.
+    email: Mapped[str | None] = mapped_column(String(254), unique=True)
+    password_hash: Mapped[str | None] = mapped_column(Text)
+    # Dev accounts (emails in DEV_EMAILS) may act as any user via X-User-Id.
+    is_dev: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     created_at: Mapped[datetime] = _created()
 
 
@@ -80,6 +92,9 @@ class Session(Base):
     """One uploaded recording."""
 
     __tablename__ = "sessions"
+    __table_args__ = (
+        CheckConstraint("moderation_severity IN ('none', 'mild', 'severe')", name="ck_sessions_moderation_severity"),
+    )
 
     id: Mapped[uuid.UUID] = _pk()
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -104,6 +119,12 @@ class Session(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
     )
+
+    # Transcript moderation (see app/ml/moderation.py). "severe" never reaches
+    # this row as READY — the pipeline stops and leaves status=BLOCKED instead.
+    moderation_severity: Mapped[str] = mapped_column(String(16), nullable=False, default="none", server_default="none")
+    moderation_reason: Mapped[str | None] = mapped_column(Text)
+    age_restricted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
 
 
 class Segment(Base):
@@ -153,6 +174,8 @@ class Clip(Base):
     # clips are owner-only; virality simulation only runs on them.
     publish_state: Mapped[str] = mapped_column(String(16), nullable=False, default="draft", server_default="draft")
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Copied from the owning session's moderation verdict when this clip is created.
+    age_restricted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
 
 
 class Frame(Base):
@@ -278,3 +301,121 @@ class Like(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
     clip_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("clips.id", ondelete="CASCADE"), primary_key=True, index=True)
     created_at: Mapped[datetime] = _created()
+
+
+class ClipDailyViews(Base):
+    """Views per clip per UTC day, for analytics. Flushed from Redis with the view counters."""
+
+    __tablename__ = "clip_daily_views"
+
+    clip_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("clips.id", ondelete="CASCADE"), primary_key=True)
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    views: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class Comment(Base):
+    """A comment on a clip. parent_id makes it a reply (one level of threading)."""
+
+    __tablename__ = "comments"
+    __table_args__ = (
+        Index("ix_comments_clip_created", "clip_id", "created_at"),
+        Index("ix_comments_parent", "parent_id"),
+        CheckConstraint("char_length(body) BETWEEN 1 AND 1000", name="ck_comments_body_length"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    clip_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("clips.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    parent_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("comments.id", ondelete="CASCADE"))
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = _created()
+
+
+class Follow(Base):
+    __tablename__ = "follows"
+    __table_args__ = (
+        Index("ix_follows_followee", "followee_id", "created_at"),
+        CheckConstraint("follower_id <> followee_id", name="ck_follows_not_self"),
+    )
+
+    follower_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    followee_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    created_at: Mapped[datetime] = _created()
+
+
+class NotificationType:
+    LIKE = "like"  # someone liked your clip
+    COMMENT = "comment"  # someone commented on your clip
+    REPLY = "reply"  # someone replied to your comment
+    FOLLOW = "follow"  # someone followed you
+    UPLOAD_READY = "upload_ready"  # your upload finished processing
+    VIRALITY_READY = "virality_ready"  # your virality check finished
+    YOUTUBE_POSTED = "youtube_posted"  # your clip is on YouTube (or the post failed)
+
+    ALL = (LIKE, COMMENT, REPLY, FOLLOW, UPLOAD_READY, VIRALITY_READY, YOUTUBE_POSTED)
+
+
+class Notification(Base):
+    """Something that happened that a user should hear about. Written by the action itself."""
+
+    __tablename__ = "notifications"
+    __table_args__ = (
+        Index("ix_notifications_user_created", "user_id", "created_at"),
+        Index("ix_notifications_unread", "user_id", postgresql_where="read_at IS NULL"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    actor_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    type: Mapped[str] = mapped_column(String(32), nullable=False)
+    clip_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("clips.id", ondelete="CASCADE"))
+    comment_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("comments.id", ondelete="CASCADE"))
+    session_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("sessions.id", ondelete="CASCADE"))
+    data: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = _created()
+
+
+class YouTubeAccount(Base):
+    """A user's connected YouTube channel. The refresh token is stored encrypted."""
+
+    __tablename__ = "youtube_accounts"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    channel_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    channel_title: Mapped[str | None] = mapped_column(Text)
+    refresh_token_enc: Mapped[str] = mapped_column(Text, nullable=False)
+    scopes: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = _created()
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class YouTubeUploadStatus:
+    QUEUED = "queued"
+    UPLOADING = "uploading"
+    PUBLISHED = "published"
+    FAILED = "failed"
+
+
+class YouTubeUpload(Base):
+    """One attempt to post a clip to YouTube."""
+
+    __tablename__ = "youtube_uploads"
+    __table_args__ = (Index("ix_youtube_uploads_clip_created", "clip_id", "created_at"),)
+
+    id: Mapped[uuid.UUID] = _pk()
+    clip_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("clips.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default=YouTubeUploadStatus.QUEUED)
+    privacy: Mapped[str] = mapped_column(String(16), nullable=False, default="private")
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    tags: Mapped[list] = mapped_column(JSONB, nullable=False, default=list, server_default="[]")
+    video_id: Mapped[str | None] = mapped_column(String(32))
+    error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = _created()
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )

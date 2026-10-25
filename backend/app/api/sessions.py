@@ -30,7 +30,7 @@ from app.worker.enqueue import enqueue_frame_highlights, enqueue_pipeline
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
 HLS_MEDIA_TYPE = "application/vnd.apple.mpegurl"
-_TERMINAL = {SessionStatus.READY, SessionStatus.FAILED}
+_TERMINAL = {SessionStatus.READY, SessionStatus.FAILED, SessionStatus.BLOCKED}
 
 
 def status_event(s: Session) -> SessionStatusEvent:
@@ -44,6 +44,8 @@ def status_event(s: Session) -> SessionStatusEvent:
         failed_step=s.failed_step,
         error=s.error,
         done=s.status in _TERMINAL,
+        moderation_severity=s.moderation_severity,
+        age_restricted=s.age_restricted,
     )
 
 

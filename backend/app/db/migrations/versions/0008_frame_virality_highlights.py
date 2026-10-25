@@ -1,7 +1,7 @@
 """frame virality scores and highlight run state
 
-Revision ID: 0003
-Revises: 0002
+Revision ID: 0008
+Revises: 0007
 Create Date: 2026-10-24
 """
 
@@ -10,8 +10,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0003"
-down_revision: str | None = "0002"
+revision: str = "0008"
+down_revision: str | None = "0007"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

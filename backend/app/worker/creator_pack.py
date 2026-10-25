@@ -33,13 +33,20 @@ def pack_status_key(clip_id: uuid.UUID | str, start_ms: int, end_ms: int) -> str
 
 
 def is_capacity_error(exc: BaseException) -> bool:
-    """Overloaded or rate-limited model: worth retrying on a different model."""
+    """Worth retrying on a different model: overloaded, rate limited, or this model doesn't
+    support the request (e.g. a thinking level or feature only some models accept)."""
     chain, seen = [], exc
     while seen is not None and len(chain) < 5:
         chain.append(seen)
         seen = seen.__cause__ or seen.__context__
     text = " ".join(f"{type(e).__name__} {e}" for e in chain).lower()
-    return any(s in text for s in ("503", "429", "high demand", "unavailable", "resource_exhausted", "overloaded", "rate limit"))
+    return any(
+        s in text
+        for s in (
+            "503", "429", "high demand", "unavailable", "resource_exhausted", "overloaded", "rate limit",
+            "not supported for this model", "is not supported by this model", "is not found for api version",
+        )
+    )
 
 
 def analyze_with_fallback(

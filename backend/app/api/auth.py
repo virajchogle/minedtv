@@ -14,7 +14,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 HEADER = "x-api-key"
 QUERY_PARAM = "api_key"
-_OPEN_PATHS = re.compile(r"^/(health|docs|redoc|openapi\.json)$|\.m3u8$")
+_OPEN_PATHS = re.compile(r"^/(health|docs|redoc|openapi\.json|youtube/callback)$|\.m3u8$")
 
 
 def key_matches(candidate: str | None, keys: list[str]) -> bool:

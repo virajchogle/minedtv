@@ -1,18 +1,18 @@
 event: status
-data: {"session_id":"00000000-0000-0000-0000-0000000001f4","status":"queued","progress":0.0,"steps":["probe","segment","thumbnails","frames","audio","highlights","finalize"],"last_step":null,"failed_step":null,"error":null,"done":false}
+data: {"session_id":"00000000-0000-0000-0000-0000000001f4","status":"queued","progress":0.0,"steps":["probe","segment","thumbnails","frames","audio","moderate","highlights","finalize"],"last_step":null,"failed_step":null,"error":null,"done":false,"moderation_severity":"none","age_restricted":false}
 
 event: status
-data: {"session_id":"00000000-0000-0000-0000-0000000001f4","status":"probing","progress":0.0,"steps":["probe","segment","thumbnails","frames","audio","highlights","finalize"],"last_step":null,"failed_step":null,"error":null,"done":false}
+data: {"session_id":"00000000-0000-0000-0000-0000000001f4","status":"probing","progress":0.0,"steps":["probe","segment","thumbnails","frames","audio","moderate","highlights","finalize"],"last_step":null,"failed_step":null,"error":null,"done":false,"moderation_severity":"none","age_restricted":false}
 
 event: status
-data: {"session_id":"00000000-0000-0000-0000-0000000001f4","status":"segmenting","progress":0.14285714285714285,"steps":["probe","segment","thumbnails","frames","audio","highlights","finalize"],"last_step":"probe","failed_step":null,"error":null,"done":false}
+data: {"session_id":"00000000-0000-0000-0000-0000000001f4","status":"segmenting","progress":0.125,"steps":["probe","segment","thumbnails","frames","audio","moderate","highlights","finalize"],"last_step":"probe","failed_step":null,"error":null,"done":false,"moderation_severity":"none","age_restricted":false}
 
 event: status
-data: {"session_id":"00000000-0000-0000-0000-0000000001f4","status":"frames","progress":0.42857142857142855,"steps":["probe","segment","thumbnails","frames","audio","highlights","finalize"],"last_step":"thumbnails","failed_step":null,"error":null,"done":false}
+data: {"session_id":"00000000-0000-0000-0000-0000000001f4","status":"frames","progress":0.375,"steps":["probe","segment","thumbnails","frames","audio","moderate","highlights","finalize"],"last_step":"thumbnails","failed_step":null,"error":null,"done":false,"moderation_severity":"none","age_restricted":false}
 
 event: status
-data: {"session_id":"00000000-0000-0000-0000-0000000001f4","status":"audio","progress":0.5714285714285714,"steps":["probe","segment","thumbnails","frames","audio","highlights","finalize"],"last_step":"frames","failed_step":null,"error":null,"done":false}
+data: {"session_id":"00000000-0000-0000-0000-0000000001f4","status":"audio","progress":0.5,"steps":["probe","segment","thumbnails","frames","audio","moderate","highlights","finalize"],"last_step":"frames","failed_step":null,"error":null,"done":false,"moderation_severity":"none","age_restricted":false}
 
 event: status
-data: {"session_id":"00000000-0000-0000-0000-0000000001f4","status":"ready","progress":1.0,"steps":["probe","segment","thumbnails","frames","audio","highlights","finalize"],"last_step":"finalize","failed_step":null,"error":null,"done":true}
+data: {"session_id":"00000000-0000-0000-0000-0000000001f4","status":"ready","progress":1.0,"steps":["probe","segment","thumbnails","frames","audio","moderate","highlights","finalize"],"last_step":"finalize","failed_step":null,"error":null,"done":true,"moderation_severity":"none","age_restricted":false}
 

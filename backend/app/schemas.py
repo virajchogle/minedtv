@@ -1,7 +1,7 @@
 """Pydantic models for every API request and response."""
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -30,6 +30,29 @@ class UserOut(_Out):
     avatar_url: str | None = None
 
 
+class SignupIn(BaseModel):
+    username: str = Field(min_length=2, max_length=64, pattern=r"^[A-Za-z0-9_.-]+$")
+    email: str = Field(max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    password: str = Field(min_length=8, max_length=200)
+
+
+class LoginIn(BaseModel):
+    login: str = Field(min_length=1, max_length=254, description="Username or email")
+    password: str = Field(min_length=1, max_length=200)
+
+
+class MeOut(UserOut):
+    email: str | None
+    is_dev: bool
+    can_act_as: bool = Field(default=False, description="May act as other users: dev accounts, or anyone while REQUIRE_LOGIN is off")
+
+
+class AuthOut(BaseModel):
+    token: str = Field(description="Send as Authorization: Bearer <token>")
+    expires_at: datetime
+    user: MeOut
+
+
 # --- uploads / sessions ---
 
 
@@ -52,8 +75,22 @@ class UploadOut(_Out):
 
 
 SessionStatusLiteral = Literal[
-    "uploading", "queued", "probing", "segmenting", "thumbnails", "frames", "audio", "highlights", "finalizing", "ready", "failed"
+    "uploading",
+    "queued",
+    "probing",
+    "segmenting",
+    "thumbnails",
+    "frames",
+    "audio",
+    "moderating",
+    "highlights",
+    "finalizing",
+    "ready",
+    "failed",
+    "blocked",
 ]
+
+ModerationSeverity = Literal["none", "mild", "severe"]
 
 
 class SessionOut(_Out):
@@ -72,6 +109,12 @@ class SessionOut(_Out):
     poster_url: str | None
     playlist_url: str | None
     created_at: datetime
+    moderation_severity: ModerationSeverity = Field(
+        description="Transcript moderation verdict. 'severe' never reaches this as a readable session — "
+        "the pipeline stops and status becomes 'blocked' instead."
+    )
+    moderation_reason: str | None = Field(default=None, description="One-line reason, owner-visible only")
+    age_restricted: bool = Field(description="True for 'mild' or 'severe' moderation verdicts")
 
 
 class SessionStatusEvent(_Out):
@@ -85,6 +128,8 @@ class SessionStatusEvent(_Out):
     failed_step: str | None
     error: str | None
     done: bool
+    moderation_severity: ModerationSeverity
+    age_restricted: bool
 
 
 # --- clips ---
@@ -112,12 +157,17 @@ class ClipOut(_Out):
     )
     publish_state: PublishState = Field(
         default="published",
-        description="draft (owner only) -> ready (queued to post to YouTube, owner only) -> published (public)",
+        description="draft (owner only) -> published (public). 'ready' is a legacy owner-only state the web app treats as draft",
     )
     published_at: datetime | None = None
     view_count: int
     like_count: int
     liked_by_me: bool | None = Field(default=None, description="Only set when X-User-Id is sent")
+    comment_count: int = 0
+    youtube_url: str | None = Field(default=None, description="Latest successful post of this clip to YouTube")
+    age_restricted: bool = Field(default=False, description="Transcript moderation flagged this clip 18+")
+    moderation_severity: ModerationSeverity = Field(default="none", description="The owning session's moderation verdict")
+    moderation_reason: str | None = Field(default=None, description="One-line reason, owner-visible only")
     created_at: datetime
 
 
@@ -227,6 +277,7 @@ class TranscriptOut(_Out):
 
 class ClipDetailOut(ClipOut):
     session_duration_ms: int | None
+    frame_count: int = Field(description="Sampled, embedded frames inside the clip's range")
     events: list[EventOut]
     transcript: list[TranscriptOut]
 
@@ -420,6 +471,11 @@ class AudienceSimulationOut(_Out):
     recommended_changes: list[str]
     analysis: CreatorPackOut
     disclaimer: str
+    score_samples: list[float] = Field(
+        default_factory=list,
+        description="virality_score of every persona panel run (the first is this report's); show the median "
+        "and the spread. Empty for one-panel results and /creator/simulate.",
+    )
 
 
 class ClipCreatorPackOut(_Out):
@@ -448,3 +504,174 @@ class ClipViralityOut(_Out):
     error: str | None = None
     start_ms: int
     end_ms: int
+
+
+# --- analytics ---
+
+
+class AnalyticsDayOut(BaseModel):
+    day: date
+    views: int
+    likes: int
+    comments: int
+    new_followers: int
+
+
+class AnalyticsTotalsOut(BaseModel):
+    views: int
+    likes: int
+    comments: int
+    new_followers: int
+
+
+class ViralitySummaryOut(BaseModel):
+    """The clip's YouTube virality check (the one publishing starts), without the full report."""
+
+    status: Literal["none", "processing", "ready", "failed"]
+    score: float | None = None
+    verdict: Literal["weak", "mixed", "promising", "strong"] | None = None
+    score_samples: list[float] = Field(default_factory=list)
+
+
+class ClipAnalyticsOut(BaseModel):
+    clip: ClipOut
+    period_views: int
+    period_likes: int
+    period_comments: int
+    virality: ViralitySummaryOut
+
+
+class AnalyticsOut(BaseModel):
+    days: int
+    start: date
+    end: date
+    tracking_since: date | None = Field(description="First day with recorded daily views; earlier views only count in totals")
+    lifetime: AnalyticsTotalsOut
+    period: AnalyticsTotalsOut
+    previous_period: AnalyticsTotalsOut
+    follower_count: int
+    daily: list[AnalyticsDayOut] = Field(description="One row per UTC day in the period, oldest first, zero-filled")
+    clips: list[ClipAnalyticsOut] = Field(description="All the owner's clips, newest first")
+
+
+# --- social: profiles, follows, comments, notifications ---
+
+
+class ProfileOut(UserOut):
+    follower_count: int
+    following_count: int
+    published_clip_count: int
+    followed_by_me: bool | None = Field(default=None, description="Only set when X-User-Id is sent")
+    follows_me: bool | None = Field(default=None, description="Only set when X-User-Id is sent")
+
+
+class FollowOut(_Out):
+    user_id: uuid.UUID
+    following: bool
+    follower_count: int
+
+
+class UsersPage(_Out):
+    items: list[UserOut]
+    next_cursor: str | None
+
+
+class CommentCreate(BaseModel):
+    body: str = Field(min_length=1, max_length=1000)
+    parent_id: uuid.UUID | None = Field(default=None, description="Reply to this comment (one level of threading)")
+
+
+class CommentOut(_Out):
+    id: uuid.UUID
+    clip_id: uuid.UUID
+    user: UserOut
+    body: str
+    parent_id: uuid.UUID | None
+    created_at: datetime
+    reply_count: int = 0
+    replies: list["CommentOut"] = Field(default_factory=list, description="Oldest first; only on top-level comments")
+    can_delete: bool | None = Field(default=None, description="Author or clip owner; only set when X-User-Id is sent")
+
+
+class CommentsPage(_Out):
+    items: list[CommentOut] = Field(description="Top-level comments, newest first, each with its replies")
+    next_cursor: str | None
+    total: int = Field(description="All comments on the clip, replies included")
+
+
+NotificationTypeLiteral = Literal["like", "comment", "reply", "follow", "upload_ready", "virality_ready", "youtube_posted"]
+
+
+class NotificationClip(_Out):
+    id: uuid.UUID
+    title: str | None
+    thumbnail_url: str | None
+
+
+class NotificationOut(_Out):
+    id: uuid.UUID
+    type: NotificationTypeLiteral
+    message: str = Field(description="Ready-to-show text, e.g. 'NovaQueen liked your clip'")
+    actor: UserOut | None
+    clip: NotificationClip | None
+    comment_id: uuid.UUID | None
+    session_id: uuid.UUID | None
+    data: dict[str, Any] = Field(default_factory=dict)
+    read: bool
+    created_at: datetime
+
+
+class NotificationsPage(_Out):
+    items: list[NotificationOut]
+    next_cursor: str | None
+    unread_count: int
+
+
+class UnreadCountOut(_Out):
+    unread_count: int
+
+
+class MarkReadIn(BaseModel):
+    ids: list[uuid.UUID] | None = Field(default=None, description="Notifications to mark read")
+    all: bool = Field(default=False, description="Mark every notification read")
+
+
+# --- YouTube ---
+
+YouTubePrivacy = Literal["private", "unlisted", "public"]
+
+
+class YouTubeStatusOut(_Out):
+    configured: bool = Field(description="Whether the server has YouTube OAuth credentials")
+    connected: bool
+    channel_id: str | None = None
+    channel_title: str | None = None
+
+
+class YouTubeConnectOut(_Out):
+    auth_url: str = Field(description="Open in a browser; Google redirects back to /youtube/callback")
+
+
+class YouTubePostIn(BaseModel):
+    title: str | None = Field(default=None, max_length=100, description="Defaults to the creator pack's YouTube title, then the clip title")
+    description: str | None = Field(default=None, max_length=5000)
+    tags: list[str] | None = None
+    privacy: YouTubePrivacy = Field(
+        default="private",
+        description="Until the Google project passes YouTube's API audit, uploads may be forced to private",
+    )
+
+
+class YouTubeUploadOut(_Out):
+    id: uuid.UUID
+    clip_id: uuid.UUID
+    status: Literal["queued", "uploading", "published", "failed"]
+    privacy: YouTubePrivacy
+    title: str
+    description: str
+    tags: list[str]
+    video_id: str | None
+    url: str | None
+    error: str | None
+    created_at: datetime
+    updated_at: datetime

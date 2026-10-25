@@ -26,6 +26,9 @@ async def create_upload(body: UploadCreate, user: CurrentUser, db: Db) -> Upload
     ext = PurePosixPath(body.filename).suffix.lower() or ".mp4"
     if ext not in _ALLOWED_EXT:
         raise HTTPException(422, f"Unsupported file type {ext}")
+    max_mb = get_settings().max_upload_mb
+    if body.size_bytes and body.size_bytes > max_mb * 1024 * 1024:
+        raise HTTPException(413, f"File is {body.size_bytes / 1024**2:.0f} MB; the limit is {max_mb} MB")
     session_id = uuid.uuid4()
     prefix = f"sessions/{session_id}"
     source_key = f"{prefix}/source{ext}"

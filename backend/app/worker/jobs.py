@@ -95,3 +95,22 @@ def frame_highlights(session_id: str, requested_count: int, clip_duration_ms: in
             await get_engine().dispose()
 
     return asyncio.run(main())
+
+
+def youtube_post(upload_id: str) -> str:
+    from app.db.session import get_engine
+    from app.services.redis import get_redis
+    from app.worker.pipeline import Deps
+    from app.worker.youtube_post import post_to_youtube
+
+    settings = get_settings()
+    setup_logging(settings.log_level, settings.log_json)
+
+    async def main() -> str:
+        try:
+            return await post_to_youtube(upload_id, Deps.default(), get_redis())
+        finally:
+            await get_engine().dispose()
+            await get_redis().aclose()
+
+    return asyncio.run(main())

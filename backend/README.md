@@ -73,9 +73,30 @@ Full spec: [`docs/openapi.json`](docs/openapi.json), or `/docs` on a running ser
 
 **API key:** when `API_KEYS` is set (it is in production), send `X-API-Key: <key>` on every request. Browser `EventSource` can't set headers, so `?api_key=<key>` also works. `/health`, `/docs` and `*.m3u8` playlists don't need it, so video players can fetch playlists directly. Get the key from whoever holds `.env.prod`. Don't commit it into a public repo; it's a speed bump against random traffic, not real auth.
 
-**Publish states:** every clip is `draft` → `ready` (queued to post to YouTube) → `published`. Only `published` clips appear in the feed, search and other people's view of a profile. Drafts and `ready` clips are visible only to their owner: `GET /clips/{id}` returns 404 to anyone else, and `GET /users/{id}/clips?state=draft|ready|published|unpublished|all` is for the owner. Searching with `user_id` set to your own `X-User-Id` includes your unpublished clips. Virality checks only run on unpublished clips (409 otherwise). Clips the pipeline creates start as `NEW_CLIP_PUBLISH_STATE` (default `draft`), and clips that existed before this change were migrated as `published`. HLS playlists stay reachable by clip ID (players can't send headers), so treat an unpublished clip's ID as private.
+**Publish states:** a clip is `draft` (private, "My videos") or `published` (in the feed, search and other people's view of a profile). `ready` is a legacy private state kept for older clients. Unpublished clips are visible only to their owner: `GET /clips/{id}` returns 404 to anyone else, and `GET /users/{id}/clips?state=draft|ready|published|unpublished|all` is for the owner. Searching with `user_id` set to yourself includes your unpublished clips. `POST /clips/{id}/publish` also starts a YouTube virality check (which writes the creator pack on the way); virality checks run on any clip you own. Clip responses carry `youtube_url` once the clip has been posted to YouTube (`POST /clips/{id}/youtube`, for published clips). Clips the pipeline creates start as `NEW_CLIP_PUBLISH_STATE` (default `draft`). HLS playlists stay reachable by clip ID (players can't send headers), so treat an unpublished clip's ID as private.
 
-**Identity:** there are no user accounts with passwords yet. Create a user with `POST /users` and send `X-User-Id: <uuid>` on requests that act as someone (upload, like, create/edit clips). Reads work without it; when it's sent, `liked_by_me` is filled in.
+**Social:** comments allow one level of replies (replying to a reply attaches to its top-level comment) and are limited to 1000 characters. Only clips you can see can be commented on, so drafts are owner-only. Deleting a comment deletes its replies. Counts (comments, followers, following) are computed from the rows on each read, so they can't drift. **Notifications** are written in the same transaction as the action that causes them:
+- a like on your clip, written once per person per clip
+- a comment on your clip
+- a reply to your comment
+- a new follower, written once per person
+- your upload finishing processing, once per upload
+- your virality check finishing
+
+Nobody is notified about their own actions. Each notification carries a ready-to-show `message`.
+
+**YouTube posting:** a user connects their channel once. `GET /youtube/connect` returns a Google sign-in URL; after they approve, Google redirects to `/youtube/callback`, which stores an encrypted refresh token. That callback route is exempt from the API key, and a signed, 15-minute `state` value ties it to the user who started.
+
+Clips in the **ready** bucket (or already published) can be posted with `POST /clips/{id}/youtube`. Title, description and tags default to the AI creator pack's YouTube metadata. The worker renders the MP4, uploads it with YouTube's resumable upload, records the video link, and sends a `youtube_posted` notification on success or failure.
+
+Limits:
+- Until the Google project passes YouTube's API audit, uploaded videos may be forced to private.
+- The default quota allows about 6 uploads a day.
+- In OAuth "testing" mode, only Google accounts listed as test users can connect.
+
+For TikTok and Reels, use the MP4 export plus the phone's share sheet instead: their posting APIs need an app review first.
+
+**Identity:** `POST /auth/signup {username, email, password}` or `POST /auth/login {login, password}` (login = username or email) returns a token; send it as `Authorization: Bearer <token>` (it lasts `AUTH_TOKEN_TTL_DAYS`, and `GET /auth/me` returns the account). While `REQUIRE_LOGIN=false` (the default, for testing), `X-User-Id` picks who a request acts as, with or without a token, so demo clients keep working and anyone can act as any user; `POST /users` still makes password-less demo users. With `REQUIRE_LOGIN=true`, a token is required and only dev accounts (email in `DEV_EMAILS`) may act as someone else via `X-User-Id` (others get 403). `/auth/me` reports this as `can_act_as`. Reads work without either; when one is sent, `liked_by_me` is filled in.
 
 | Method | Path | Example |
 |---|---|---|
@@ -96,6 +117,12 @@ Full spec: [`docs/openapi.json`](docs/openapi.json), or `/docs` on a running ser
 | POST | `/clips/{id}/publish` · `/unpublish` · `/mark-ready` (owner only) | `clips.publish.json` |
 | POST/GET | `/clips/{id}/creator-pack` (Gemini titles, captions, YouTube metadata for an uploaded clip) | |
 | POST/GET | `/clips/{id}/virality` (synthetic audience panel; **unpublished clips only**, owner only) | |
+| GET/POST | `/clips/{id}/comments` (top-level newest first, each with replies; POST `{body, parent_id?}`) · DELETE `/comments/{id}` (author or clip owner) | `comments.list.json` |
+| GET | `/users/{id}` (profile: follower/following counts, published clip count, `followed_by_me`, `follows_me`) | `users.profile.json` |
+| POST/DELETE | `/users/{id}/follow` · GET `/users/{id}/followers` · `/users/{id}/following` · GET `/feed/following` | `users.follow.json` |
+| GET | `/youtube/status` · `/youtube/connect` (returns `auth_url`) · DELETE `/youtube/connection` | |
+| POST/GET | `/clips/{id}/youtube` (post a **ready** clip to your channel; `{title?, description?, tags?, privacy}`) | |
+| GET | `/notifications?unread_only=` · `/notifications/unread-count` · POST `/notifications/read` `{ids}` or `{all: true}` | `notifications.json` |
 | POST | `/warmup` (wake the GPU; call on app launch without awaiting) | |
 | GET | `/users/{id}/clips` | `users.clips.json` |
 | GET | `/search?q=&game=&user_id=&from=&to=&limit=` | `search.json` |

@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import uuid
 
 from fastapi import APIRouter, HTTPException, Response
@@ -10,7 +11,18 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.api.deps import CurrentUser, Db, OptionalUser, Urls
 from app.config import get_settings
-from app.db.models import UNPUBLISHED_STATES, Clip, Event, Like, Segment, Session, SessionStatus, Transcript, User
+from app.db.models import (
+    Clip,
+    Event,
+    Frame,
+    Like,
+    NotificationType,
+    Segment,
+    Session,
+    SessionStatus,
+    Transcript,
+    User,
+)
 from app.schemas import (
     ClipCreate,
     ClipCreatorPackOut,
@@ -25,11 +37,12 @@ from app.schemas import (
     ExportOut,
     TranscriptOut,
 )
-from app.services import counters
+from app.services import counters, youtube
 from app.services.playlist import build_playlist, validate_clip_range
 from app.services.queries import nearest_frame_key
 from app.services.redis import get_redis
 from app.services.serialize import clip_out
+from app.services.social import comment_counts, notify
 from app.services.storage import get_storage
 from app.worker.creator_pack import pack_key, pack_status_key
 from app.worker.enqueue import enqueue_creator_pack, enqueue_export, enqueue_virality
@@ -37,6 +50,7 @@ from app.worker.export import export_key, status_key
 from app.worker.virality import virality_key, virality_status_key
 
 router = APIRouter(prefix="/clips", tags=["clips"])
+log = logging.getLogger(__name__)
 
 HLS_MEDIA_TYPE = "application/vnd.apple.mpegurl"
 
@@ -70,7 +84,9 @@ async def _liked(db, user: User | None, clip_ids: list[uuid.UUID]) -> set[uuid.U
 
 async def _clip_out(db, clip, session, user, urls, me) -> ClipOut:
     pending = (await counters.pending([clip.id]))[clip.id]
-    return clip_out(clip, session, user, urls, pending, await _liked(db, me, [clip.id]))
+    comments = (await comment_counts(db, [clip.id]))[clip.id]
+    on_youtube = (await youtube.posted_urls(db, [clip.id])).get(clip.id)
+    return clip_out(clip, session, user, urls, pending, await _liked(db, me, [clip.id]), comments, on_youtube)
 
 
 @router.get("/{clip_id}", response_model=ClipDetailOut)
@@ -97,10 +113,16 @@ async def get_clip(clip_id: uuid.UUID, db: Db, urls: Urls, me: OptionalUser) -> 
             .order_by(Transcript.start_ms)
         )
     ).all()
+    frame_count = await db.scalar(
+        select(func.count())
+        .select_from(Frame)
+        .where(Frame.session_id == session.id, Frame.t_ms >= clip.start_ms, Frame.t_ms < clip.end_ms)
+    )
     base = await _clip_out(db, clip, session, user, urls, me)
     return ClipDetailOut(
         **base.model_dump(),
         session_duration_ms=session.duration_ms,
+        frame_count=frame_count or 0,
         events=[
             EventOut(id=e.id, t_ms=e.t_ms, type=e.type, score=e.score, source=e.source, metadata=e.metadata_ or {})
             for e in events
@@ -152,6 +174,7 @@ async def create_clip(body: ClipCreate, user: CurrentUser, db: Db, urls: Urls) -
         thumbnail_key=await nearest_frame_key(db, session.id, (body.start_ms + body.end_ms) // 2),
         status="ready",
         kind="user",
+        age_restricted=session.age_restricted,
     )
     db.add(clip)
     await db.commit()
@@ -200,6 +223,7 @@ async def like(clip_id: uuid.UUID, user: CurrentUser, db: Db) -> CountsOut:
         pg_insert(Like).values(user_id=user.id, clip_id=clip.id).on_conflict_do_nothing().returning(Like.clip_id)
     )
     if inserted.first() is not None:
+        await notify(db, user_id=clip.user_id, actor_id=user.id, type=NotificationType.LIKE, clip_id=clip.id, once=True)
         await db.commit()
         await counters.incr_like(clip.id, 1)
     return await _counts(db, clip, user)
@@ -250,17 +274,17 @@ async def _export_state(clip: Clip) -> ExportOut:
 
 
 @router.get("/{clip_id}/export", response_model=ExportOut)
-async def get_export(clip_id: uuid.UUID, db: Db) -> ExportOut:
-    """Status of the MP4 export for the clip's current range."""
-    clip, _, _ = await _load(db, clip_id)
+async def get_export(clip_id: uuid.UUID, user: CurrentUser, db: Db) -> ExportOut:
+    """Status of the MP4 export for the clip's current range (owner only)."""
+    clip = await _load_owned(db, clip_id, user)
     return await _export_state(clip)
 
 
 @router.post("/{clip_id}/export", response_model=ExportOut, status_code=202)
-async def start_export(clip_id: uuid.UUID, db: Db) -> ExportOut:
-    """Render the clip as an MP4 (for TikTok/Reels). Idempotent: returns the existing export if
-    it's ready or in progress. Poll GET until status is 'ready', then download `url`."""
-    clip, _, _ = await _load(db, clip_id)
+async def start_export(clip_id: uuid.UUID, user: CurrentUser, db: Db) -> ExportOut:
+    """Render the clip as an MP4 (for TikTok/Reels; owner only). Idempotent: returns the existing
+    export if it's ready or in progress. Poll GET until status is 'ready', then download `url`."""
+    clip = await _load_owned(db, clip_id, user)
     state = await _export_state(clip)
     if state.status in ("ready", "processing"):
         return state
@@ -287,19 +311,20 @@ async def _pack_state(clip: Clip) -> ClipCreatorPackOut:
 
 
 @router.get("/{clip_id}/creator-pack", response_model=ClipCreatorPackOut)
-async def get_creator_pack(clip_id: uuid.UUID, db: Db) -> ClipCreatorPackOut:
-    """Status of the AI creator pack (titles, caption, hashtags, YouTube/Reddit metadata) for this clip."""
-    clip, _, _ = await _load(db, clip_id)
+async def get_creator_pack(clip_id: uuid.UUID, user: CurrentUser, db: Db) -> ClipCreatorPackOut:
+    """Status of the AI creator pack (titles, caption, hashtags, YouTube/Reddit metadata) for this
+    clip. Owner only."""
+    clip = await _load_owned(db, clip_id, user)
     return await _pack_state(clip)
 
 
 @router.post("/{clip_id}/creator-pack", response_model=ClipCreatorPackOut, status_code=202)
-async def start_creator_pack(clip_id: uuid.UUID, db: Db) -> ClipCreatorPackOut:
-    """Generate the creator pack for an already-uploaded clip (no re-upload). Gemini watches the
-    clip's MP4; takes ~1-2 min. Idempotent; poll GET until status is 'ready'."""
+async def start_creator_pack(clip_id: uuid.UUID, user: CurrentUser, db: Db) -> ClipCreatorPackOut:
+    """Generate the creator pack for a clip you own (no re-upload). Gemini watches the clip's MP4;
+    takes ~1-2 min. Idempotent; poll GET until status is 'ready'."""
+    clip = await _load_owned(db, clip_id, user)
     if not get_settings().gemini_api_key:
         raise HTTPException(503, "Creator packs are not configured (GEMINI_API_KEY missing)")
-    clip, _, _ = await _load(db, clip_id)
     state = await _pack_state(clip)
     if state.status in ("ready", "processing"):
         return state
@@ -325,8 +350,17 @@ async def _set_state(clip_id: uuid.UUID, state: str, user: User, db, urls) -> Cl
 
 @router.post("/{clip_id}/publish", response_model=ClipOut)
 async def publish_clip(clip_id: uuid.UUID, user: CurrentUser, db: Db, urls: Urls) -> ClipOut:
-    """Make the clip public: it appears in the feed, search and the owner's profile."""
-    return await _set_state(clip_id, "published", user, db, urls)
+    """Make the clip public: it appears in the feed, search and the owner's profile. Also starts
+    the YouTube virality check, which writes the clip's AI creator pack (title, description, tags)
+    on the way, so both are ready for posting."""
+    out = await _set_state(clip_id, "published", user, db, urls)
+    if get_settings().gemini_api_key:
+        clip, _, _ = await _load(db, clip_id)
+        try:
+            await _start_virality(clip, ClipViralityIn(platform="youtube"))
+        except Exception:  # noqa: BLE001 - publishing must not fail because the follow-up job couldn't queue
+            log.warning("could not start virality after publish", exc_info=True, extra={"clip_id": str(clip_id)})
+    return out
 
 
 @router.post("/{clip_id}/unpublish", response_model=ClipOut)
@@ -341,11 +375,13 @@ async def mark_ready(clip_id: uuid.UUID, user: CurrentUser, db: Db, urls: Urls) 
     return await _set_state(clip_id, "ready", user, db, urls)
 
 
-# ---------------------------------------------------------------- virality (unpublished clips only)
+# ---------------------------------------------------------------- virality
 
 
 def _virality_args(clip: Clip, body: ClipViralityIn) -> tuple:
-    return (clip.id, clip.start_ms, clip.end_ms, body.platform, body.target_audience, body.persona_count)
+    # Default persona count spelled out, so "not sent" and "sent the default" share one result.
+    persona_count = body.persona_count or get_settings().creator_persona_count
+    return (clip.id, clip.start_ms, clip.end_ms, body.platform, body.target_audience, persona_count)
 
 
 async def _virality_state(clip: Clip, body: ClipViralityIn) -> ClipViralityOut:
@@ -366,28 +402,32 @@ async def _virality_state(clip: Clip, body: ClipViralityIn) -> ClipViralityOut:
     return ClipViralityOut(**base, status="processing")
 
 
-async def _load_unpublished(db, clip_id: uuid.UUID, user: User) -> Clip:
+async def _load_owned(db, clip_id: uuid.UUID, user: User) -> Clip:
     clip, _, _ = await _load(db, clip_id)
     if clip.user_id != user.id:
         raise HTTPException(403, "Not your clip")
-    if clip.publish_state not in UNPUBLISHED_STATES:
-        raise HTTPException(409, "Virality checks run on unpublished clips only; unpublish it first")
     return clip
 
 
-@router.post("/{clip_id}/virality", response_model=ClipViralityOut, status_code=202)
-async def start_virality(clip_id: uuid.UUID, body: ClipViralityIn, user: CurrentUser, db: Db) -> ClipViralityOut:
-    """Run the synthetic audience panel on an unpublished (draft or ready) clip you own. Builds the
-    clip's creator pack first if needed; takes a few minutes. Poll GET with the same options."""
-    clip = await _load_unpublished(db, clip_id, user)
+async def _start_virality(clip: Clip, body: ClipViralityIn) -> ClipViralityOut:
     if not get_settings().gemini_api_key:
         raise HTTPException(503, "Virality checks are not configured (GEMINI_API_KEY missing)")
     state = await _virality_state(clip, body)
     if state.status in ("ready", "processing"):
         return state
-    await get_redis().set(virality_status_key(*_virality_args(clip, body)), "processing", ex=6 * 3600)
-    await run_in_threadpool(enqueue_virality, clip.id, body.platform, body.target_audience, body.persona_count)
+    args = _virality_args(clip, body)
+    await get_redis().set(virality_status_key(*args), "processing", ex=6 * 3600)
+    await run_in_threadpool(enqueue_virality, clip.id, *args[3:])
     return state.model_copy(update={"status": "processing", "error": None})
+
+
+@router.post("/{clip_id}/virality", response_model=ClipViralityOut, status_code=202)
+async def start_virality(clip_id: uuid.UUID, body: ClipViralityIn, user: CurrentUser, db: Db) -> ClipViralityOut:
+    """Run the synthetic audience panel on a clip you own (any publish state; publishing starts one
+    automatically for YouTube). Builds the clip's creator pack first if needed; takes a few minutes.
+    Poll GET with the same options."""
+    clip = await _load_owned(db, clip_id, user)
+    return await _start_virality(clip, body)
 
 
 @router.get("/{clip_id}/virality", response_model=ClipViralityOut)
