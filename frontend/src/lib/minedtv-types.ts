@@ -18,6 +18,9 @@ export interface UserOut {
 /** Upstream lifecycle values seen on sessions and clips. */
 export type UpstreamStatus = string;
 
+/** Clip visibility. draft/ready are owner-only; published is public. */
+export type PublishState = "draft" | "ready" | "published";
+
 export interface ClipOut {
   id: string;
   session_id: string;
@@ -31,6 +34,8 @@ export interface ClipOut {
   playlist_url: string;
   status: UpstreamStatus;
   kind: string;
+  publish_state?: PublishState;
+  published_at?: string | null;
   view_count: number;
   like_count: number;
   liked_by_me: boolean | null;

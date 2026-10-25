@@ -66,6 +66,8 @@ export interface Video {
   game: string | null;
   view_count: number;
   like_count: number;
+  publish_state: "draft" | "ready" | "published" | null;
+  published_at: string | null;
 }
 
 export interface SignalBreakdown {
@@ -315,6 +317,8 @@ function clipToVideo(clip: ClipOut): Video {
     game: clip.game,
     view_count: clip.view_count,
     like_count: clip.like_count,
+    publish_state: clip.publish_state ?? "published",
+    published_at: clip.published_at ?? null,
   };
 }
 
@@ -341,6 +345,8 @@ function sessionToVideo(session: SessionOut): Video {
     game: session.game,
     view_count: 0,
     like_count: 0,
+    publish_state: null,
+    published_at: null,
   };
 }
 

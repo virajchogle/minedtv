@@ -20,6 +20,8 @@ const NOT_FROM_API = {
   game: null,
   view_count: 0,
   like_count: 0,
+  publish_state: null,
+  published_at: null,
 } as const;
 
 type SampleClip = Omit<Video, keyof typeof NOT_FROM_API>;
