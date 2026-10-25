@@ -213,7 +213,7 @@ export default function UploadPage() {
             <p className="text-[15px] font-semibold">{PHASE_LABEL[phase]}</p>
             {phase === "idle" && (
               <p className="text-[13px] text-[var(--mtv-text-2)]">
-                MP4 files up to 90 minutes. Indexing runs in the background.
+                MP4, MOV, MKV or WebM, up to 90 minutes and 4 GB. Indexing runs in the background.
               </p>
             )}
             {phase === "processing" && (

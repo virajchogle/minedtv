@@ -3,9 +3,9 @@
 /**
  * Chooses the chrome for a route.
  *
- * Legacy app routes (eval, settings, the single-video page) keep the old
+ * Legacy app routes (settings, the single-video page) keep the old
  * fixed Sidebar and scroll inside <main>. The redesigned routes — home,
- * explore, library, upload, profile — render their own SiteNav and must NOT
+ * explore, library, upload, profile, login — render their own SiteNav and must NOT
  * also get the Sidebar: the Sidebar is `fixed` with `pl-16` compensation on
  * <main>, so stacking it under a page that already has its own full-bleed
  * nav produced the layout clash ("switches back to the old UI") these pages
@@ -16,12 +16,17 @@ import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 
 import { Sidebar } from "@/components/sidebar";
-import { warmup } from "@/lib/api";
+import { refreshAccount, warmup } from "@/lib/api";
 
-const BARE_ROUTES = new Set(["/", "/explore", "/library", "/upload", "/profile"]);
+const BARE_ROUTES = new Set(["/", "/explore", "/library", "/upload", "/profile", "/login"]);
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+
+  // Confirm the login cookie is still good (or drop a stale signed-in state).
+  useEffect(() => {
+    void refreshAccount();
+  }, []);
 
   // Wake the GPU embedder once per tab, so the first search isn't a 15-30 s cold start.
   useEffect(() => {

@@ -115,6 +115,9 @@ def _sha256(path: Path) -> str:
 
 async def step_probe(ctx: Ctx) -> None:
     info = await asyncio.to_thread(media.probe, await ctx.source_path())
+    max_min = ctx.deps.settings.max_video_minutes
+    if info.duration_ms and info.duration_ms > max_min * 60_000:
+        raise ValueError(f"Video is {info.duration_ms / 60_000:.0f} minutes long; the limit is {max_min} minutes")
     async with ctx.deps.sessionmaker() as db:
         s = await ctx.session(db)
         s.duration_ms, s.width, s.height, s.fps, s.has_audio = (

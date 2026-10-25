@@ -11,20 +11,25 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { PublishBadge } from "@/components/clip-actions";
 import {
+  BAND_MODERATE,
+  BAND_STRONG,
+  BAND_WEAK,
   STATUS_COPY,
   deleteVideo,
-  fetchSearchConfig,
   fetchMyVideos,
+  fetchServerConfig,
+  formatDuration,
   reindexVideo,
-  type SearchConfig,
   type Video,
 } from "@/lib/api";
+import type { ServerConfigOut } from "@/lib/minedtv-types";
 
 export default function SettingsPage() {
   const [isDark, setIsDark] = useState(true);
   const [videos, setVideos] = useState<Video[]>([]);
-  const [config, setConfig] = useState<SearchConfig | null>(null);
+  const [config, setConfig] = useState<ServerConfigOut | null>(null);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -39,7 +44,7 @@ export default function SettingsPage() {
       .then(setVideos)
       .catch((caught: Error) => setError(caught.message))
       .finally(() => setLoading(false));
-    fetchSearchConfig().then(setConfig).catch(() => setConfig(null));
+    fetchServerConfig().then(setConfig).catch(() => setConfig(null));
   }, []);
 
   const toggleTheme = () => {
@@ -52,7 +57,7 @@ export default function SettingsPage() {
   const handleDelete = async (video: Video) => {
     if (
       !window.confirm(
-        `Delete “${video.title}”? Its frames, segments and index entries are removed permanently.`
+        `Delete the clip “${video.title}”? The original upload stays in your library's search index; only this clip goes.`
       )
     ) {
       return;
@@ -88,7 +93,7 @@ export default function SettingsPage() {
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Appearance, retrieval configuration, and library management.
+          Appearance, server configuration, and your clips.
         </p>
       </header>
 
@@ -111,51 +116,55 @@ export default function SettingsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Retrieval configuration</CardTitle>
+          <CardTitle>Server configuration</CardTitle>
           <CardDescription>
-            Read-only view of the server settings. Change these in the backend .env file.
+            What the server runs with (read-only; set in the backend&apos;s environment).
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3 text-xs">
+        <CardContent className="space-y-4 text-xs">
           {!config && <p className="text-muted-foreground">Backend unreachable.</p>}
           {config && (
             <>
-              <div>
-                <p className="mb-1 font-semibold uppercase tracking-wide text-muted-foreground">
-                  Models
-                </p>
+              <ConfigRow label="Models">
                 <ul className="space-y-0.5 font-mono">
-                  {Object.entries(config.models).map(([role, model]) => (
-                    <li key={role}>
-                      {role}: {model}
-                    </li>
-                  ))}
+                  <li>visual + text embeddings: {config.models.embedder}</li>
+                  <li>speech to text: {config.models.transcriber}</li>
+                  <li>highlight detector: {config.models.highlights}</li>
+                  <li>
+                    AI creator pack:{" "}
+                    {config.models.creator
+                      ? [config.models.creator, ...config.models.creator_fallbacks].join(" → ")
+                      : "off (no Gemini key)"}
+                  </li>
+                  <li>virality personas: {config.models.personas ?? "off"}</li>
                 </ul>
-              </div>
-              <div>
-                <p className="mb-1 font-semibold uppercase tracking-wide text-muted-foreground">
-                  Signal weights
-                </p>
+              </ConfigRow>
+              <ConfigRow label="Search thresholds">
                 <p className="font-mono">
-                  {Object.entries(config.weights)
-                    .map(([name, weight]) => `${name} ${weight}`)
-                    .join(" · ")}
-                </p>
-              </div>
-              <div>
-                <p className="mb-1 font-semibold uppercase tracking-wide text-muted-foreground">
-                  Calibration anchors
-                </p>
-                <p className="font-mono">
-                  {Object.entries(config.calibration)
-                    .map(([name, [lo, hi]]) => `${name} ${lo}–${hi}`)
+                  {Object.entries(config.search)
+                    .map(([name, value]) => `${name} ${value}`)
                     .join(" · ")}
                 </p>
                 <p className="mt-1 text-muted-foreground">
-                  Heuristic anchors that put each signal on a comparable 0–1 scale. They are
-                  not probability calibrations.
+                  Similarity cut-offs for counting a frame or line as a match. Visual and speech scores are
+                  contrastive: similarity to the query minus similarity to generic gameplay or talk.
                 </p>
-              </div>
+              </ConfigRow>
+              <ConfigRow label="Match labels">
+                <p className="font-mono">
+                  strong ≥ {BAND_STRONG} · moderate ≥ {BAND_MODERATE} · weak ≥ {BAND_WEAK}
+                </p>
+                <p className="mt-1 text-muted-foreground">
+                  How this app labels the confidence the server returns. Display bands, not probabilities.
+                </p>
+              </ConfigRow>
+              <ConfigRow label="Features and limits">
+                <p className="font-mono">
+                  Gemini {config.features.gemini ? "on" : "off"} · YouTube posting{" "}
+                  {config.features.youtube ? "on" : "off"} · accounts {config.features.accounts ? "on" : "off"} ·
+                  uploads up to {config.limits.max_video_minutes} min / {(config.limits.max_upload_mb / 1024).toFixed(0)} GB
+                </p>
+              </ConfigRow>
             </>
           )}
         </CardContent>
@@ -165,7 +174,8 @@ export default function SettingsPage() {
         <CardHeader>
           <CardTitle>Library</CardTitle>
           <CardDescription>
-            Re-index a video after changing the embedding model, or delete it permanently.
+            Your clips. Re-index re-runs processing on the clip&apos;s upload (after a model change);
+            delete removes the clip.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-1">
@@ -180,10 +190,13 @@ export default function SettingsPage() {
               className="flex items-center justify-between gap-3 border-b border-border py-3 last:border-0"
             >
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium">{video.title}</p>
+                <p className="flex items-center gap-2 truncate text-sm font-medium">
+                  {video.title}
+                  {video.publish_state && <PublishBadge state={video.publish_state} />}
+                </p>
                 <p className="text-xs text-muted-foreground">
-                  {STATUS_COPY[video.processing_status].label} · {video.frame_count} frames ·{" "}
-                  {video.segment_count} segments
+                  {STATUS_COPY[video.processing_status].label} · {formatDuration(video.duration_seconds)}
+                  {video.game && <> · {video.game}</>}
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-1">
@@ -216,6 +229,15 @@ export default function SettingsPage() {
           ))}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function ConfigRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <p className="mb-1 font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
+      {children}
     </div>
   );
 }

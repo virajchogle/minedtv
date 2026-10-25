@@ -12,13 +12,16 @@
 
 import { NextRequest } from "next/server";
 
+import {
+  SESSION_COOKIE,
+  UPSTREAM,
+  missingKeyResponse,
+  unreachableResponse,
+} from "@/lib/server/upstream";
+
 export const runtime = "nodejs";
 // The upstream is a live service; nothing here may be cached at build time.
 export const dynamic = "force-dynamic";
-
-const UPSTREAM =
-  process.env.MINEDTV_API_BASE_URL ??
-  "https://minedtv-api-818252181045.us-east1.run.app";
 
 /** Request headers worth forwarding. Hop-by-hop and auth headers are dropped. */
 const FORWARD_REQUEST_HEADERS = ["content-type", "accept", "x-user-id"];
@@ -26,15 +29,7 @@ const FORWARD_RESPONSE_HEADERS = ["content-type", "cache-control", "etag"];
 
 async function proxy(request: NextRequest, path: string[]) {
   const apiKey = process.env.MINEDTV_API_KEY;
-  if (!apiKey) {
-    return Response.json(
-      {
-        detail:
-          "MINEDTV_API_KEY is not set on the server, so the deployed MinedTV API cannot be reached. Add it to frontend/.env.local and restart the dev server.",
-      },
-      { status: 503 }
-    );
-  }
+  if (!apiKey) return missingKeyResponse();
 
   const target = new URL(`${UPSTREAM}/${path.join("/")}`);
   target.search = request.nextUrl.search;
@@ -44,6 +39,9 @@ async function proxy(request: NextRequest, path: string[]) {
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
   }
+  // The login token sits in an httpOnly cookie; the API wants it as a bearer token.
+  const session = request.cookies.get(SESSION_COOKIE)?.value;
+  if (session) headers.set("Authorization", `Bearer ${session}`);
 
   const method = request.method;
   const hasBody = method !== "GET" && method !== "HEAD";
@@ -58,14 +56,7 @@ async function proxy(request: NextRequest, path: string[]) {
       cache: "no-store",
     });
   } catch (error) {
-    return Response.json(
-      {
-        detail: `Could not reach the MinedTV API at ${UPSTREAM}: ${
-          error instanceof Error ? error.message : "network error"
-        }`,
-      },
-      { status: 502 }
-    );
+    return unreachableResponse(error);
   }
 
   const responseHeaders = new Headers();

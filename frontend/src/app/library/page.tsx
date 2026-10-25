@@ -6,10 +6,10 @@
  * Search here is scoped to your clips and includes drafts.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { AlertTriangle, Loader2, RefreshCw, Upload } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Loader2, RefreshCw, Upload, X } from "lucide-react";
 
 import { ChooseUserNotice, useCurrentUser } from "@/components/current-user";
 import { SiteNav } from "@/components/hero/site-nav";
@@ -30,6 +30,43 @@ const BUCKETS: { id: ClipBucket; label: string }[] = [
 ];
 
 export default function LibraryPage() {
+  // useSearchParams needs a Suspense boundary for static rendering.
+  return (
+    <Suspense>
+      <Library />
+    </Suspense>
+  );
+}
+
+/** After Google's consent screen, /youtube/callback lands here with ?youtube=connected|error. */
+function YouTubeConnectBanner() {
+  const params = useSearchParams();
+  const router = useRouter();
+  const result = params.get("youtube");
+  if (result !== "connected" && result !== "error") return null;
+  const ok = result === "connected";
+  return (
+    <div
+      className={
+        ok
+          ? "flex items-start gap-2 rounded-lg border border-[var(--mtv-green)]/40 bg-[var(--mtv-green)]/10 p-3 text-sm text-[var(--mtv-green)]"
+          : "flex items-start gap-2 rounded-lg border border-[var(--mtv-red)]/40 bg-[var(--mtv-red)]/10 p-3 text-sm text-[var(--mtv-red)]"
+      }
+    >
+      {ok ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /> : <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />}
+      <p className="flex-1">
+        {ok
+          ? "YouTube connected. Open a clip in Ready to post and use Post to YouTube."
+          : `Couldn't connect YouTube${params.get("message") ? `: ${params.get("message")}` : "."}`}
+      </p>
+      <button type="button" onClick={() => router.replace("/library")} aria-label="Dismiss">
+        <X className="h-4 w-4" />
+      </button>
+    </div>
+  );
+}
+
+function Library() {
   const router = useRouter();
   const me = useCurrentUser();
   const [bucket, setBucket] = useState<ClipBucket>("all");
@@ -101,6 +138,8 @@ export default function LibraryPage() {
           My Library
         </ScreenTitle>
 
+        <YouTubeConnectBanner />
+
         {!me ? (
           <ChooseUserNotice action="see your clips, drafts and what's ready to post" />
         ) : (
@@ -139,7 +178,8 @@ export default function LibraryPage() {
 
               {bucket === "ready" && (
                 <p className="text-xs text-[var(--mtv-text-2)]">
-                  Clips queued to post to YouTube. They stay private until you publish them.
+                  Clips ready to post. Open one and use Post to YouTube; they stay private on MinedTV until you
+                  publish them here.
                 </p>
               )}
 

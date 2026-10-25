@@ -6,6 +6,10 @@ Drop-in code for [rishikesh-web/MinedTv](https://github.com/rishikesh-web/MinedT
 
 - Base URL: `https://minedtv-api-818252181045.us-east1.run.app` (interactive docs at `/docs`)
 - Every request needs `X-API-Key: <key>`. Requests that act as a user also need `X-User-Id: <uuid>`.
+- Real sign-in exists too: `POST /auth/login {"login": "<username or email>", "password": "..."}` (or
+  `/auth/signup {"username", "email", "password"}`) returns `{token, expires_at, user}`. Send
+  `Authorization: Bearer <token>` and the API knows who you are without `X-User-Id`. `X-User-Id` alone keeps
+  working for now (`REQUIRE_LOGIN=false` on the server), so moving to login can wait until after the demo.
 - `*.m3u8` playlist URLs need no key, so the player can fetch them directly.
 - Example responses for every endpoint: [`api-examples/`](api-examples/)
 

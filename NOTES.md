@@ -9,7 +9,8 @@ Who owns what, and where each open piece plugs into the backend. Update this as 
 - **Android app (Rishi):** connected to the live API using [`backend/docs/android-integration.md`](backend/docs/android-integration.md).
 - **Creator analysis + audience personas (Nihal):** `/creator/analyze`, `/creator/simulate` and `/creator/simulate-analysis` are live. Clip-based versions: `/clips/{id}/creator-pack` and `/clips/{id}/virality` (unpublished clips only).
 - **Social (Viraj):** comments with replies, follows plus a following feed, and notifications (like, comment, reply, follow, upload ready, virality ready) are live. The web frontend doesn't show them yet.
-- **Publish states:** clips go `draft` → `ready` (to post to YouTube) → `published`; only published clips are public. Posting clips from the `ready` bucket to YouTube is built (`/youtube/*`, `/clips/{id}/youtube`); it needs the Google OAuth client set up in `.env.prod`.
+- **Accounts (Viraj):** sign up / sign in / log out at https://minedtv.vercel.app/login. Accounts made with the emails in `DEV_EMAILS` (Viraj, Jasper, Nihal so far) are dev accounts: the nav menu lets them act as any user, including the seeded demo users. The Android app can keep sending `X-User-Id` for now.
+- **Publish states:** clips go `draft` → `ready` (to post to YouTube) → `published`; only published clips are public. Posting clips from the `ready` bucket to YouTube is live: open a clip on the web app and use **Post to YouTube**. Google keeps the app in testing, so only test users (added in the Google Cloud console) can connect, and uploads stay private.
 
 ## Open work
 

@@ -14,6 +14,7 @@ from app.db.models import (
     UNPUBLISHED_STATES,
     Clip,
     Event,
+    Frame,
     Like,
     NotificationType,
     Segment,
@@ -110,10 +111,16 @@ async def get_clip(clip_id: uuid.UUID, db: Db, urls: Urls, me: OptionalUser) -> 
             .order_by(Transcript.start_ms)
         )
     ).all()
+    frame_count = await db.scalar(
+        select(func.count())
+        .select_from(Frame)
+        .where(Frame.session_id == session.id, Frame.t_ms >= clip.start_ms, Frame.t_ms < clip.end_ms)
+    )
     base = await _clip_out(db, clip, session, user, urls, me)
     return ClipDetailOut(
         **base.model_dump(),
         session_duration_ms=session.duration_ms,
+        frame_count=frame_count or 0,
         events=[
             EventOut(id=e.id, t_ms=e.t_ms, type=e.type, score=e.score, source=e.source, metadata=e.metadata_ or {})
             for e in events

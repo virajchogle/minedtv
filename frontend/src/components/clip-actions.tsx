@@ -3,6 +3,7 @@
 /**
  * Everything you can do with a clip beyond watching it:
  *  - publish state (owner): draft → ready to post to YouTube → published
+ *  - post to YouTube (owner, ready or published clips)
  *  - like (anyone acting as a user)
  *  - MP4 export for TikTok/Reels
  *  - AI creator pack (titles, caption, hashtags, YouTube metadata)
@@ -18,6 +19,7 @@ import {
   Check,
   Copy,
   Download,
+  ExternalLink,
   Eye,
   EyeOff,
   Heart,
@@ -30,10 +32,15 @@ import {
 
 import { ChooseUserNotice, useCurrentUser } from "@/components/current-user";
 import {
+  disconnectYouTube,
   getCreatorPack,
+  getYouTubeConnectUrl,
+  getYouTubeStatus,
+  getYouTubeUploads,
   getExport,
   getVirality,
   markClipReady,
+  postToYouTube,
   publishClip,
   setLiked,
   startCreatorPack,
@@ -50,6 +57,9 @@ import type {
   CreatorPlatform,
   ExportOut,
   JobStatus,
+  YouTubePrivacy,
+  YouTubeStatusOut,
+  YouTubeUploadOut,
 } from "@/lib/minedtv-types";
 import { cn } from "@/lib/utils";
 
@@ -66,7 +76,7 @@ const STATE_COPY: Record<PublishState, { label: string; tone: string; hint: stri
   ready: {
     label: "Ready to post",
     tone: "border-[var(--mtv-gold)]/40 bg-[var(--mtv-gold)]/15 text-[var(--mtv-gold)]",
-    hint: "Queued to post to YouTube. Still private until published.",
+    hint: "Ready to post to YouTube. Still private on MinedTV until published.",
   },
   published: {
     label: "Published",
@@ -297,7 +307,7 @@ function LikeButton({ video, onChange }: { video: Video; onChange: (v: Video) =>
         type="button"
         onClick={() => void toggle()}
         disabled={!me || busy}
-        title={me ? undefined : "Choose a user to like clips"}
+        title={me ? undefined : "Sign in to like clips"}
         className={cn(
           "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[13px] font-semibold transition-colors disabled:opacity-50",
           video.liked_by_me
@@ -567,6 +577,186 @@ function ViralitySection({ video }: { video: Video }) {
   );
 }
 
+
+const PRIVACY: { value: YouTubePrivacy; label: string }[] = [
+  { value: "private", label: "Private" },
+  { value: "unlisted", label: "Unlisted" },
+  { value: "public", label: "Public" },
+];
+
+const UPLOAD_COPY: Record<YouTubeUploadOut["status"], string> = {
+  queued: "Queued…",
+  uploading: "Uploading to YouTube…",
+  published: "Posted",
+  failed: "Failed",
+};
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Starts (or finds) the AI creator pack and waits for it, so the post gets its title and tags. */
+async function ensureCreatorPack(clipId: string, onWaiting: () => void): Promise<void> {
+  let pack = await getCreatorPack(clipId).catch(() => null);
+  if (pack?.status === "ready") return;
+  if (pack?.status !== "processing") pack = await startCreatorPack(clipId);
+  onWaiting();
+  const deadline = Date.now() + 4 * 60_000;
+  while (pack?.status === "processing" && Date.now() < deadline) {
+    await sleep(POLL_MS);
+    pack = await getCreatorPack(clipId);
+  }
+  // A failed or slow pack isn't fatal: the post falls back to the clip's own title.
+}
+
+function YouTubeSection({ video }: { video: Video }) {
+  const [status, setStatus] = useState<YouTubeStatusOut | null>(null);
+  const [uploads, setUploads] = useState<YouTubeUploadOut[]>([]);
+  const [privacy, setPrivacy] = useState<YouTubePrivacy>("private");
+  const [phase, setPhase] = useState<"idle" | "connecting" | "writing" | "posting">("idle");
+  const [error, setError] = useState<string | null>(null);
+  const clipId = video.video_id;
+
+  useEffect(() => {
+    let cancelled = false;
+    getYouTubeStatus().then((s) => !cancelled && setStatus(s), (e: Error) => !cancelled && setError(e.message));
+    getYouTubeUploads(clipId).then((u) => !cancelled && setUploads(u), () => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [clipId]);
+
+  const latest = uploads[0] ?? null;
+  const inFlight = latest?.status === "queued" || latest?.status === "uploading";
+  useEffect(() => {
+    if (!inFlight) return;
+    const timer = setTimeout(() => {
+      getYouTubeUploads(clipId).then(setUploads, () => undefined);
+    }, POLL_MS);
+    return () => clearTimeout(timer);
+  }, [inFlight, uploads, clipId]);
+
+  const connect = async () => {
+    setPhase("connecting");
+    setError(null);
+    try {
+      window.location.href = await getYouTubeConnectUrl();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not start the YouTube connection");
+      setPhase("idle");
+    }
+  };
+
+  const post = async () => {
+    setError(null);
+    try {
+      await ensureCreatorPack(clipId, () => setPhase("writing"));
+      setPhase("posting");
+      const upload = await postToYouTube(clipId, { privacy });
+      setUploads((list) => [upload, ...list.filter((u) => u.id !== upload.id)]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not post to YouTube");
+    } finally {
+      setPhase("idle");
+    }
+  };
+
+  const disconnect = async () => {
+    setError(null);
+    try {
+      await disconnectYouTube();
+      setStatus((s) => s && { ...s, connected: false, channel_id: null, channel_title: null });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not disconnect");
+    }
+  };
+
+  const postable = video.publish_state === "ready" || video.publish_state === "published";
+
+  return (
+    <Panel
+      icon={Youtube}
+      title="Post to YouTube"
+      aside={
+        status?.connected && (
+          <button type="button" onClick={() => void disconnect()} className="text-[11px] text-[var(--mtv-text-2)] underline-offset-2 hover:underline">
+            Disconnect {status.channel_title ?? "channel"}
+          </button>
+        )
+      }
+    >
+      {!status && !error && <Loader2 className="h-4 w-4 animate-spin text-[var(--mtv-text-2)]" />}
+      {status && !status.configured && (
+        <p className="text-xs text-[var(--mtv-text-2)]">YouTube posting isn&apos;t set up on this server.</p>
+      )}
+      {status?.configured && !status.connected && (
+        <>
+          <p className="text-xs text-[var(--mtv-text-2)]">
+            Connect your channel once; clips then upload straight from MinedTV.
+          </p>
+          <ActionButton variant="gold" busy={phase === "connecting"} onClick={() => void connect()}>
+            <Youtube className="h-3.5 w-3.5" /> Connect YouTube
+          </ActionButton>
+        </>
+      )}
+      {status?.connected && (
+        <>
+          <p className="text-xs text-[var(--mtv-text-2)]">
+            {postable
+              ? "Uploads this clip with the title, description and tags from its AI creator pack (written first if it doesn't exist yet)."
+              : "Mark this clip ready to post (or publish it) first."}{" "}
+            Until Google approves the app, YouTube keeps uploads private.
+          </p>
+          {postable && (
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="space-y-1 text-[11px] text-[var(--mtv-text-2)]">
+                Visibility
+                <select
+                  value={privacy}
+                  onChange={(e) => setPrivacy(e.target.value as YouTubePrivacy)}
+                  className="block rounded-lg border border-[var(--mtv-divider)] bg-[var(--mtv-surface-high)] px-2 py-1.5 text-[13px] text-[var(--mtv-text)]"
+                >
+                  {PRIVACY.map((p) => (
+                    <option key={p.value} value={p.value}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <ActionButton variant="gold" busy={phase !== "idle" || inFlight} onClick={() => void post()}>
+                <Youtube className="h-3.5 w-3.5" />
+                {phase === "writing"
+                  ? "Writing title and tags…"
+                  : phase === "posting"
+                    ? "Starting upload…"
+                    : latest?.status === "published"
+                      ? "Post again"
+                      : "Post to YouTube"}
+              </ActionButton>
+            </div>
+          )}
+        </>
+      )}
+      {latest && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg bg-[var(--mtv-surface-high)] px-2.5 py-1.5 text-[13px]">
+          {inFlight && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+          <span className={cn("font-semibold", latest.status === "published" && "text-[var(--mtv-green)]", latest.status === "failed" && "text-[var(--mtv-red)]")}>
+            {UPLOAD_COPY[latest.status]}
+          </span>
+          <span className="min-w-0 flex-1 truncate text-[var(--mtv-text-2)]">
+            “{latest.title}” · {latest.privacy}
+          </span>
+          {latest.url && (
+            <a href={latest.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[var(--mtv-gold)] underline-offset-2 hover:underline">
+              Open on YouTube <ExternalLink className="h-3 w-3" />
+            </a>
+          )}
+        </div>
+      )}
+      {latest?.status === "failed" && <ErrorLine message={latest.error} />}
+      <ErrorLine message={error} />
+    </Panel>
+  );
+}
+
 // ── the panel ────────────────────────────────────────────────────────────────
 
 export function ClipActions({ video, onChange }: { video: Video; onChange: (v: Video) => void }) {
@@ -580,6 +770,7 @@ export function ClipActions({ video, onChange }: { video: Video; onChange: (v: V
       <LikeButton video={video} onChange={onChange} />
       {!me && <ChooseUserNotice action="like, publish and run AI tools on clips" />}
       {isOwner && <PublishSection video={video} onChange={onChange} />}
+      {isOwner && <YouTubeSection video={video} />}
       <div className="grid gap-4 lg:grid-cols-2">
         <ExportSection video={video} />
         <CreatorPackSection video={video} />

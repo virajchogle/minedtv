@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { AlertTriangle, ArrowLeft, Film, Loader2 } from "lucide-react";
@@ -11,8 +11,7 @@ import { HlsPlayer, type HlsPlayerHandle } from "@/components/hls-player";
 import { SearchPanel } from "@/components/search-panel";
 import {
   STATUS_COPY,
-  fetchSegments,
-  fetchVideo,
+  fetchVideoWithSegments,
   formatTimestamp,
   recordView,
   streamUrlFor,
@@ -20,6 +19,8 @@ import {
   type Segment,
   type Video,
 } from "@/lib/api";
+
+const noopSubscribe = () => () => {};
 
 export default function VideoPage() {
   const params = useParams<{ videoId: string }>();
@@ -39,15 +40,22 @@ export default function VideoPage() {
   // Unpublished clips are only visible to their owner, so reload when the acting user changes.
   const me = useCurrentUser();
   const meId = me?.id ?? null;
+  // The stored user is read after hydration; wait for it so the clip isn't fetched twice.
+  const mounted = useSyncExternalStore(
+    noopSubscribe,
+    () => true,
+    () => false
+  );
 
   useEffect(() => {
+    if (!mounted) return;
     let cancelled = false;
     setLoading(true);
-    Promise.all([fetchVideo(videoId), fetchSegments(videoId).catch(() => null)])
-      .then(([loadedVideo, loadedSegments]) => {
+    fetchVideoWithSegments(videoId)
+      .then((loaded) => {
         if (cancelled) return;
-        setVideo(loadedVideo);
-        setSegments(loadedSegments?.segments ?? []);
+        setVideo(loaded.video);
+        setSegments(loaded.segments);
         setError(null);
       })
       .catch((caught: Error) => {
@@ -59,7 +67,7 @@ export default function VideoPage() {
     return () => {
       cancelled = true;
     };
-  }, [videoId, meId]);
+  }, [videoId, meId, mounted]);
 
   // Counted once per page view; failures are swallowed inside recordView.
   useEffect(() => {
@@ -100,8 +108,15 @@ export default function VideoPage() {
   }
 
   const status = STATUS_COPY[video.processing_status];
-  const transcriptSegments = segments.filter((s) => s.kind === "transcript").length;
-  const sceneSegments = segments.filter((s) => s.kind === "scene").length;
+  const transcriptLines = segments.filter((s) => s.kind === "transcript").length;
+  const events = segments.filter((s) => s.kind === "scene").length;
+  const stats = [
+    formatTimestamp(video.duration_seconds),
+    status.label,
+    video.kind === "clip" && `${video.frame_count} frames indexed`,
+    video.kind === "clip" && `${transcriptLines} transcript ${transcriptLines === 1 ? "line" : "lines"}`,
+    events > 0 && `${events} highlight ${events === 1 ? "event" : "events"}`,
+  ].filter(Boolean);
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-8">
@@ -120,8 +135,7 @@ export default function VideoPage() {
           </p>
         )}
         <p className="text-xs text-muted-foreground">
-          {formatTimestamp(video.duration_seconds)} · {status.label} · {video.frame_count} frames ·{" "}
-          {transcriptSegments} transcript and {sceneSegments} scene segments indexed
+          {stats.join(" · ")}
         </p>
         {video.summary && (
           <p className="max-w-3xl pt-1 text-sm text-muted-foreground">{video.summary}</p>

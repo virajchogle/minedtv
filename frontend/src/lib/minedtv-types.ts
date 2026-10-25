@@ -15,6 +15,12 @@ export interface UserOut {
   avatar_url: string | null;
 }
 
+/** The signed-in account (GET /auth/me). Dev accounts may act as any user. */
+export interface MeOut extends UserOut {
+  email: string | null;
+  is_dev: boolean;
+}
+
 /** Upstream lifecycle values seen on sessions and clips. */
 export type UpstreamStatus = string;
 
@@ -69,6 +75,8 @@ export interface TranscriptOut {
 
 export interface ClipDetailOut extends ClipOut {
   session_duration_ms: number | null;
+  /** Sampled, embedded frames inside the clip's range. */
+  frame_count: number;
   events: EventOut[];
   transcript: TranscriptOut[];
 }
@@ -254,4 +262,46 @@ export interface ClipViralityOut {
   error: string | null;
   start_ms: number;
   end_ms: number;
+}
+
+// ── server config (GET /config) ──────────────────────────────────────────────
+
+export interface ServerConfigOut {
+  models: {
+    embedder: string;
+    transcriber: string;
+    highlights: string;
+    creator: string | null;
+    creator_fallbacks: string[];
+    personas: string | null;
+  };
+  search: Record<string, number>;
+  features: { gemini: boolean; youtube: boolean; accounts: boolean; require_login: boolean };
+  limits: { max_upload_mb: number; max_video_minutes: number };
+}
+
+// ── YouTube posting ──────────────────────────────────────────────────────────
+
+export type YouTubePrivacy = "private" | "unlisted" | "public";
+
+export interface YouTubeStatusOut {
+  configured: boolean;
+  connected: boolean;
+  channel_id: string | null;
+  channel_title: string | null;
+}
+
+export interface YouTubeUploadOut {
+  id: string;
+  clip_id: string;
+  status: "queued" | "uploading" | "published" | "failed";
+  privacy: YouTubePrivacy;
+  title: string;
+  description: string;
+  tags: string[];
+  video_id: string | null;
+  url: string | null;
+  error: string | null;
+  created_at: string;
+  updated_at: string;
 }

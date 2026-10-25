@@ -10,11 +10,8 @@
  * Requests go to `/api/minedtv/...`, a Next route handler that attaches the
  * `X-API-Key` server-side. The key is never present in the browser bundle.
  *
- * Two upstream gaps are surfaced honestly rather than papered over:
- *  - there is no server-side scope filter, so single-video search is a client
- *    filter and says so (`scope_enforced`);
- *  - there is no retrieval-config endpoint, so the settings and eval pages get
- *    the display bands this file applies, not model internals.
+ * There is no server-side single-clip search filter, so single-video search is
+ * a client filter and says so (`scope_enforced`).
  */
 
 import type {
@@ -26,13 +23,18 @@ import type {
   CreatorPlatform,
   ExportOut,
   FeedOut,
+  MeOut,
   ModerationSeverity,
   PublishState,
   SearchOut,
+  ServerConfigOut,
   SessionOut,
   UploadOut,
   UpstreamSearchResult,
   UserOut,
+  YouTubePrivacy,
+  YouTubeStatusOut,
+  YouTubeUploadOut,
 } from "@/lib/minedtv-types";
 
 export type { ModerationSeverity, PublishState } from "@/lib/minedtv-types";
@@ -178,17 +180,6 @@ export interface Segment {
   scene_description: string | null;
 }
 
-export interface SearchConfig {
-  buckets: { strong: number; moderate: number; weak: number };
-  weights: Record<string, number>;
-  calibration: Record<string, [number, number]>;
-  models: Record<string, string>;
-  gemini_enabled: boolean;
-  /** Upstream health checks, when the service reports them. */
-  checks: Record<string, string>;
-  backend: string;
-}
-
 export interface UploadResponse {
   video_id: string;
   filename: string;
@@ -276,12 +267,12 @@ const toStatus = (raw: string | null | undefined): ProcessingStatus =>
  *
  * The number itself is the backend's; these cut-points are a presentation
  * choice made here so the UI can group results, and they are reported as such
- * through `fetchSearchConfig`. They are not model probabilities and nothing
+ * on the Settings page. They are not model probabilities and nothing
  * here invents a score.
  */
-const BAND_STRONG = 0.75;
-const BAND_MODERATE = 0.5;
-const BAND_WEAK = 0.3;
+export const BAND_STRONG = 0.75;
+export const BAND_MODERATE = 0.5;
+export const BAND_WEAK = 0.3;
 
 const BUCKET_LABELS: Record<MatchBucket, string> = {
   strong: "Strong match",
@@ -433,38 +424,8 @@ export async function fetchVideos(limit = 40): Promise<Video[]> {
   return Array.isArray(feed?.items) ? feed.items.map(clipToVideo) : [];
 }
 
-/**
- * An id may be either a clip or a session: search returns session ids for
- * session-kind hits, while the feed returns clip ids. Clips are tried first
- * because they are what the UI links to most often.
- */
-export async function fetchVideo(id: string): Promise<Video> {
-  try {
-    const clip = await request<ClipDetailOut>(`/clips/${id}`);
-    const video = clipToVideo(clip);
-    video.segment_count = clip.transcript?.length ?? 0;
-    video.frame_count = clip.events?.length ?? 0;
-    return video;
-  } catch {
-    return sessionToVideo(await request<SessionOut>(`/sessions/${id}`));
-  }
-}
-
-/**
- * Transcript cues and detected events, both presented as segments. Sessions
- * have no segment route upstream, so an id that is not a clip yields none.
- */
-export async function fetchSegments(
-  id: string
-): Promise<{ video_id: string; count: number; segments: Segment[] }> {
-  let clip: ClipDetailOut;
-  try {
-    clip = await request<ClipDetailOut>(`/clips/${id}`);
-  } catch {
-    return { video_id: id, count: 0, segments: [] };
-  }
-
-  const segments: Segment[] = [
+function clipSegments(clip: ClipDetailOut): Segment[] {
+  return [
     ...(clip.transcript ?? []).map((cue) => ({
       segment_id: cue.id,
       kind: "transcript" as const,
@@ -482,36 +443,38 @@ export async function fetchSegments(
       scene_description: event.type,
     })),
   ].sort((a, b) => a.start_seconds - b.start_seconds);
-
-  return { video_id: id, count: segments.length, segments };
 }
 
 /**
- * Upstream has no retrieval-config endpoint. What is returned describes the
- * display bands applied in this file plus the service's own health checks —
- * it deliberately does not claim to report model internals.
+ * A clip with its transcript lines and detected events, from one request.
+ * An id may also be a session (search returns those for moments no clip
+ * covers); sessions have no segment route, so they come back with none.
  */
-export async function fetchSearchConfig(): Promise<SearchConfig> {
-  let checks: Record<string, string> = {};
+export async function fetchVideoWithSegments(
+  id: string
+): Promise<{ video: Video; segments: Segment[] }> {
+  let clip: ClipDetailOut;
   try {
-    const health = await request<{ status: string; checks?: Record<string, string> }>(
-      "/health"
-    );
-    checks = health.checks ?? {};
-  } catch {
-    /* health is informational here */
+    clip = await request<ClipDetailOut>(`/clips/${id}`);
+  } catch (clipError) {
+    try {
+      return { video: sessionToVideo(await request<SessionOut>(`/sessions/${id}`)), segments: [] };
+    } catch {
+      throw clipError; // "not found" for the clip is the more useful message
+    }
   }
-
-  return {
-    buckets: { strong: BAND_STRONG, moderate: BAND_MODERATE, weak: BAND_WEAK },
-    weights: {},
-    calibration: {},
-    models: {},
-    gemini_enabled: false,
-    checks,
-    backend: "deployed MinedTV API",
-  };
+  const video = clipToVideo(clip);
+  video.frame_count = clip.frame_count ?? 0;
+  video.segment_count = clip.transcript?.length ?? 0;
+  return { video, segments: clipSegments(clip) };
 }
+
+export async function fetchVideo(id: string): Promise<Video> {
+  return (await fetchVideoWithSegments(id)).video;
+}
+
+/** Models, search thresholds, feature flags and limits the server runs with. */
+export const fetchServerConfig = () => request<ServerConfigOut>("/config");
 
 /**
  * HLS manifest for a clip, served through the proxy so the API key is applied.
@@ -727,34 +690,134 @@ function putWithProgress(
 // ── identity ─────────────────────────────────────────────────────────────────
 
 /**
- * The backend has no login yet: requests act as a user by sending X-User-Id.
- * The chosen user lives in localStorage and is attached by `request()`.
+ * Two things are tracked here:
+ *  - the signed-in account (`getAccount`), whose login token lives in an
+ *    httpOnly cookie the proxy forwards — browser code never sees it;
+ *  - the user requests act as (`getCurrentUser`), sent as X-User-Id. For a
+ *    normal account that's always itself; dev accounts can switch to anyone.
+ * Both are cached in localStorage so components can read them synchronously;
+ * `refreshAccount()` re-checks the cookie with the server on load.
  */
 const USER_KEY = "minedtv-user";
+const ACCOUNT_KEY = "minedtv-account";
 export const USER_CHANGED_EVENT = "minedtv-user-changed";
 
-export function getCurrentUser(): UserOut | null {
+function readStored<T>(key: string): T | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = window.localStorage.getItem(USER_KEY);
-    return raw ? (JSON.parse(raw) as UserOut) : null;
+    const raw = window.localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : null;
   } catch {
     return null;
   }
 }
 
-export function setCurrentUser(user: UserOut | null): void {
+function writeStored(key: string, value: unknown): void {
   try {
-    if (user) window.localStorage.setItem(USER_KEY, JSON.stringify(user));
-    else window.localStorage.removeItem(USER_KEY);
+    if (value) window.localStorage.setItem(key, JSON.stringify(value));
+    else window.localStorage.removeItem(key);
   } catch {
     /* storage may be unavailable (private mode); the session just won't persist */
   }
+}
+
+/** Who requests act as. */
+export function getCurrentUser(): UserOut | null {
+  return readStored<UserOut>(USER_KEY);
+}
+
+/** The signed-in account, or null when signed out. */
+export function getAccount(): MeOut | null {
+  return readStored<MeOut>(ACCOUNT_KEY);
+}
+
+/** Act as another user. Only dev accounts may pick someone other than themselves. */
+export function setCurrentUser(user: UserOut | null): void {
+  writeStored(USER_KEY, user);
   window.dispatchEvent(new Event(USER_CHANGED_EVENT));
+}
+
+function setAccount(account: MeOut | null): void {
+  writeStored(ACCOUNT_KEY, account);
+  const acting = getCurrentUser();
+  // Signed out, or a normal account: requests act as the account itself.
+  if (!account || !account.is_dev || !acting) writeStored(USER_KEY, account);
+  window.dispatchEvent(new Event(USER_CHANGED_EVENT));
+}
+
+async function authRequest<T>(action: string, body?: unknown): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch(`/api/auth/${action}`, {
+      method: body === undefined && action === "me" ? "GET" : "POST",
+      headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      cache: "no-store",
+    });
+  } catch {
+    throw new Error("Could not reach the MinedTV API.");
+  }
+  if (!response.ok) {
+    let message = `${response.status} ${response.statusText}`;
+    try {
+      const data = (await response.json()) as { detail?: unknown };
+      if (typeof data.detail === "string") message = data.detail;
+      else if (Array.isArray(data.detail)) message = humanizeValidation(data.detail);
+    } catch {
+      /* keep the status-line message */
+    }
+    throw new Error(message);
+  }
+  return response.status === 204 ? (undefined as T) : ((await response.json()) as T);
+}
+
+/** FastAPI's 422 detail list, as one readable line. */
+function humanizeValidation(detail: unknown[]): string {
+  const first = detail[0] as { loc?: unknown[]; msg?: string } | undefined;
+  const field = first?.loc?.[first.loc.length - 1];
+  if (field === "email") return "Enter a valid email address.";
+  if (field === "username") return "Usernames are 2–64 letters, numbers, dots, dashes or underscores.";
+  if (field === "password") return "Passwords need at least 8 characters.";
+  return first?.msg ?? "Check the form and try again.";
+}
+
+export async function signIn(login: string, password: string): Promise<MeOut> {
+  const account = await authRequest<MeOut>("login", { login, password });
+  setAccount(account);
+  return account;
+}
+
+export async function signUp(username: string, email: string, password: string): Promise<MeOut> {
+  const account = await authRequest<MeOut>("signup", { username, email, password });
+  setAccount(account);
+  return account;
+}
+
+export async function signOut(): Promise<void> {
+  await authRequest<void>("logout", {}).catch(() => {
+    /* the cookie is cleared server-side; local state is cleared regardless */
+  });
+  setAccount(null);
+}
+
+/** Re-checks the login cookie with the server (call once on load). */
+export async function refreshAccount(): Promise<MeOut | null> {
+  try {
+    const account = await authRequest<MeOut>("me");
+    setAccount(account);
+    return account;
+  } catch (e) {
+    // Only a definite "not signed in" clears state; a network blip keeps it.
+    if (e instanceof Error && /not signed in|expired|invalid|malformed|no longer exists/i.test(e.message)) {
+      setAccount(null);
+    }
+    return null;
+  }
 }
 
 export const fetchUsers = () => request<UserOut[]>("/users?limit=200");
 
+/** A password-less demo user (dev accounts act as these). */
 export const createUser = (username: string) =>
   request<UserOut>("/users", {
     method: "POST",
@@ -826,6 +889,31 @@ export const startVirality = (clipId: string, o: ViralityOptions) =>
   });
 export const getVirality = (clipId: string, o: ViralityOptions) =>
   request<ClipViralityOut>(`/clips/${clipId}/virality?${viralityQuery(o)}`);
+
+// ── YouTube posting ──────────────────────────────────────────────────────────
+
+export const getYouTubeStatus = () => request<YouTubeStatusOut>("/youtube/status");
+
+/** Google's consent page for the acting user; it redirects back to /library. */
+export const getYouTubeConnectUrl = () =>
+  request<{ auth_url: string }>("/youtube/connect").then((r) => r.auth_url);
+
+export const disconnectYouTube = () => request<void>("/youtube/connection", { method: "DELETE" });
+
+/** Past and in-flight uploads of a clip, newest first. */
+export const getYouTubeUploads = (clipId: string) =>
+  request<YouTubeUploadOut[]>(`/clips/${clipId}/youtube`);
+
+/** Title, description and tags default to the clip's AI creator pack. */
+export const postToYouTube = (
+  clipId: string,
+  body: { privacy: YouTubePrivacy; title?: string | null; description?: string | null; tags?: string[] | null }
+) =>
+  request<YouTubeUploadOut>(`/clips/${clipId}/youtube`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
 
 /** Wakes the GPU embedder so the first search isn't a cold start. Fire and forget. */
 export function warmup(): void {

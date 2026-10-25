@@ -21,6 +21,16 @@ class Settings(BaseSettings):
     # Absolute base URL used in links the API returns (playlist URLs). Defaults to the request's own base URL.
     public_api_base_url: str | None = None
 
+    # --- accounts ---
+    # Signs login tokens. Required for /auth; generate with: python -c "import secrets; print(secrets.token_urlsafe(32))"
+    auth_secret: str | None = None
+    auth_token_ttl_days: int = Field(default=30, ge=1)
+    # Accounts with these emails are dev users: they can act as anyone by sending X-User-Id.
+    dev_emails: Annotated[list[str], NoDecode] = Field(default_factory=list)
+    # false: X-User-Id alone still works (demo clients like the Android app). true: identity comes
+    # only from a login token, and X-User-Id is honoured for dev users only.
+    require_login: bool = False
+
     # --- database ---
     database_url: str = "postgresql+asyncpg://minedtv:minedtv@localhost:5432/minedtv"
     # Supabase's pooler (port 6543) runs pgbouncer in transaction mode, which breaks
@@ -101,6 +111,10 @@ class Settings(BaseSettings):
     # publishes; "published" puts them straight in the feed (useful until the app has a publish button).
     new_clip_publish_state: Literal["draft", "ready", "published"] = "draft"
     upload_concurrency: int = 8
+    # Uploads over these limits are refused (size) or fail at the probe step (length), so one huge
+    # file can't run the worker into its job timeout.
+    max_upload_mb: int = Field(default=4096, gt=0)
+    max_video_minutes: int = Field(default=90, gt=0)
 
     # --- search ---
     search_cache_ttl_s: int = 300
@@ -126,18 +140,24 @@ class Settings(BaseSettings):
     @field_validator(
         "s3_endpoint_url", "s3_public_endpoint_url", "storage_public_base_url", "public_api_base_url",
         "youtube_client_id", "youtube_client_secret", "youtube_redirect_uri", "youtube_token_key", "frontend_url",
+        "auth_secret",
         mode="before",
     )
     @classmethod
     def _empty_is_none(cls, v):
         return v or None
 
-    @field_validator("cors_origins", "api_keys", "gemini_fallback_models", mode="before")
+    @field_validator("cors_origins", "api_keys", "gemini_fallback_models", "dev_emails", mode="before")
     @classmethod
     def _split_origins(cls, v):
         if isinstance(v, str) and not v.strip().startswith("["):
             return [o.strip() for o in v.split(",") if o.strip()]
         return v
+
+    @field_validator("dev_emails")
+    @classmethod
+    def _lower_emails(cls, v: list[str]) -> list[str]:
+        return [e.lower() for e in v]
 
     @property
     def signing_endpoint_url(self) -> str | None:

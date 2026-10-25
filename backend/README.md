@@ -96,7 +96,7 @@ Limits:
 
 For TikTok and Reels, use the MP4 export plus the phone's share sheet instead: their posting APIs need an app review first.
 
-**Identity:** there are no user accounts with passwords yet. Create a user with `POST /users` and send `X-User-Id: <uuid>` on requests that act as someone (upload, like, create/edit clips). Reads work without it; when it's sent, `liked_by_me` is filled in.
+**Identity:** `POST /auth/signup {username, email, password}` or `POST /auth/login {login, password}` (login = username or email) returns a token; send it as `Authorization: Bearer <token>` (it lasts `AUTH_TOKEN_TTL_DAYS`, and `GET /auth/me` returns the account). Accounts whose email is in `DEV_EMAILS` are dev accounts and may act as any user by also sending `X-User-Id`; a normal account sending someone else's `X-User-Id` gets 403. While `REQUIRE_LOGIN=false` (the default), `X-User-Id` alone still works without a token, so demo clients built on it keep working; `POST /users` still makes password-less demo users. Reads work without either; when one is sent, `liked_by_me` is filled in.
 
 | Method | Path | Example |
 |---|---|---|

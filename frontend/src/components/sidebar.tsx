@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart2, Compass, Home, Library, Upload, Settings, Video } from "lucide-react";
+import { Compass, Home, Library, Upload, Settings, Video } from "lucide-react";
 import { UserSwitcher } from "@/components/current-user";
 import { cn } from "@/lib/utils";
 
@@ -12,7 +12,6 @@ const navItems = [
   { icon: Library,   label: "Library", href: "/library" },
   { icon: Upload,    label: "Upload",  href: "/upload" },
   { icon: Compass,   label: "Explore", href: "/explore" },
-  { icon: BarChart2, label: "Eval",    href: "/eval" },
 ];
 
 export function Sidebar() {

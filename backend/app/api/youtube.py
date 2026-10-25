@@ -5,6 +5,7 @@ import html
 import json
 import logging
 import uuid
+from urllib.parse import quote
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -79,7 +80,8 @@ async def youtube_connect(me: CurrentUser, request: Request) -> YouTubeConnectOu
 def _finish_page(ok: bool, message: str) -> HTMLResponse | RedirectResponse:
     frontend = get_settings().frontend_url
     if frontend:
-        return RedirectResponse(f"{frontend.rstrip('/')}/library?youtube={'connected' if ok else 'error'}", status_code=303)
+        query = "youtube=connected" if ok else f"youtube=error&message={quote(message[:300])}"
+        return RedirectResponse(f"{frontend.rstrip('/')}/library?{query}", status_code=303)
     title = "YouTube connected" if ok else "Couldn't connect YouTube"
     return HTMLResponse(
         f"<!doctype html><meta charset=utf-8><title>{title}</title>"

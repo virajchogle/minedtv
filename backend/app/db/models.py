@@ -79,6 +79,11 @@ class User(Base):
     id: Mapped[uuid.UUID] = _pk()
     username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     avatar_url: Mapped[str | None] = mapped_column(Text)
+    # Set for accounts that sign up with a password; demo users made via POST /users have neither.
+    email: Mapped[str | None] = mapped_column(String(254), unique=True)
+    password_hash: Mapped[str | None] = mapped_column(Text)
+    # Dev accounts (emails in DEV_EMAILS) may act as any user via X-User-Id.
+    is_dev: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     created_at: Mapped[datetime] = _created()
 
 

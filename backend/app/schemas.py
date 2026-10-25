@@ -30,6 +30,28 @@ class UserOut(_Out):
     avatar_url: str | None = None
 
 
+class SignupIn(BaseModel):
+    username: str = Field(min_length=2, max_length=64, pattern=r"^[A-Za-z0-9_.-]+$")
+    email: str = Field(max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    password: str = Field(min_length=8, max_length=200)
+
+
+class LoginIn(BaseModel):
+    login: str = Field(min_length=1, max_length=254, description="Username or email")
+    password: str = Field(min_length=1, max_length=200)
+
+
+class MeOut(UserOut):
+    email: str | None
+    is_dev: bool
+
+
+class AuthOut(BaseModel):
+    token: str = Field(description="Send as Authorization: Bearer <token>")
+    expires_at: datetime
+    user: MeOut
+
+
 # --- uploads / sessions ---
 
 
@@ -167,6 +189,7 @@ class TranscriptOut(_Out):
 
 class ClipDetailOut(ClipOut):
     session_duration_ms: int | None
+    frame_count: int = Field(description="Sampled, embedded frames inside the clip's range")
     events: list[EventOut]
     transcript: list[TranscriptOut]
 
