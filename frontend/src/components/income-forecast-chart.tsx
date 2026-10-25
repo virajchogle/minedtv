@@ -66,7 +66,8 @@ export function IncomeForecastChart({
 
   const projected = useMemo(() => {
     const totals = new Array(PROJECTION_DAYS).fill(0);
-    for (const clip of clips) {
+    // Only published clips have an audience; private drafts earn nothing until published.
+    for (const clip of clips.filter((c) => c.clip.publish_state === "published")) {
       const result = forecast({
         existingViews: clip.clip.view_count,
         viralityScore: clipViralityScore(clip),

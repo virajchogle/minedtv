@@ -89,7 +89,7 @@ export default function DashboardPage() {
   }, [open]);
 
   return (
-    <div className="flex h-[100dvh] flex-col overflow-hidden bg-[var(--mtv-bg)] px-3 pb-3 pt-20 text-[var(--mtv-text)] sm:px-5 [--neon-accent:203_255_61]">
+    <div className="flex h-[100dvh] flex-col overflow-hidden bg-[var(--mtv-bg)] px-3 pb-3 pt-24 text-[var(--mtv-text)] sm:px-5 [--neon-accent:203_255_61]">
       <SiteNav />
       <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col gap-3">
         <header className="flex shrink-0 flex-wrap items-center justify-between gap-3">
@@ -131,7 +131,7 @@ export default function DashboardPage() {
             {data && (
               <div className={cn("flex min-h-0 flex-1 flex-col", loading && "opacity-60")}>
                 {open === null ? (
-                  <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-auto md:grid-cols-2 md:grid-rows-2 md:overflow-hidden">
+                  <div className="grid min-h-0 flex-1 auto-rows-[22rem] grid-cols-1 gap-3 overflow-auto md:grid-cols-2 md:grid-rows-2 md:overflow-hidden">
                     <HoverBeam as="button" onClick={() => setOpen("income")}>
                       <IncomeForecastChart clips={data.clips} daily={data.daily} compact />
                     </HoverBeam>

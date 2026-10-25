@@ -120,8 +120,11 @@ export function forecast(input: ForecastInput): ForecastResult {
   let cumulativeViews = 0;
   let cumulativeEarnings = 0;
   for (let day = 1; day <= MAX_HORIZON_DAYS; day++) {
-    const spike = peakViews * Math.exp(-((day - peakDay) ** 2) / (2 * spread ** 2));
-    const tail = tailFloor * Math.exp(-day / tailDecay);
+    // The curve is anchored to publish day, not today: a clip that already had
+    // its spike is on its tail now, instead of being modeled as launching again.
+    const age = input.daysSincePublish + day;
+    const spike = peakViews * Math.exp(-((age - peakDay) ** 2) / (2 * spread ** 2));
+    const tail = tailFloor * Math.exp(-age / tailDecay);
     const views = Math.max(0, spike + tail);
     const earnings = (views / 1000) * input.rpm;
     cumulativeViews += views;
