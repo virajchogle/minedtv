@@ -346,6 +346,25 @@ def test_audience_simulator_blends_frame_evidence_without_extra_model_calls(monk
     assert request_data["frame_evidence"]["frames_analyzed"] == 5
 
 
+def test_persona_score_does_not_double_penalize_stopped_cascade():
+    analysis = CreatorPackOut.model_validate(_content_pack())
+    result = build_audience_simulation(
+        AudiencePanelDraft.model_validate(_audience_panel()),
+        analysis,
+        "general",
+        None,
+    )
+
+    expected = round(
+        0.55 * result.layers[0].score
+        + 0.30 * result.layers[1].score
+        + 0.15 * result.layers[2].score,
+        1,
+    )
+    assert result.persona_score == expected
+    assert result.scoring_version == "persona-cascade-v3"
+
+
 def test_audience_simulation_endpoint(monkeypatch):
     analysis = CreatorPackOut.model_validate(_content_pack())
     simulation = build_audience_simulation(

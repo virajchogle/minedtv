@@ -14,6 +14,7 @@ from pathlib import Path
 from app.db.models import PIPELINE_STEPS
 from app.main import create_app
 from app.ml.audience_simulator import AudiencePanelDraft, build_audience_simulation
+from app.services.video_persona_virality import ALGORITHM_VERSION as PERSONA_FRAME_ALGORITHM_VERSION
 from app.schemas import (
     ClipDetailOut,
     ClipHighlightMomentOut,
@@ -401,7 +402,7 @@ def examples() -> dict[str, object]:
             "instagram",
             "FPS highlight viewers",
             VideoViralityEvidenceOut(
-                algorithm_version="persona-frame-virality-v1",
+                algorithm_version=PERSONA_FRAME_ALGORITHM_VERSION,
                 duration_ms=91_000,
                 frames_analyzed=46,
                 frame_score=76.8,

@@ -3,7 +3,11 @@ from pathlib import Path
 from app.config import get_settings
 from app.schemas import CreatorPackOut
 from app.services.frame_virality import clear_prompt_cache
-from app.services.video_persona_virality import VideoPersonaViralityEngine
+from app.services.video_persona_virality import (
+    FRAME_SCORE_REFERENCE_CEILING,
+    VideoPersonaViralityEngine,
+    _calibrate_frame_score,
+)
 from app.worker.media import ProbeResult
 
 
@@ -85,6 +89,17 @@ def test_video_persona_evidence_samples_once_and_explains_peaks(tmp_path, monkey
     assert any(moment.t_ms in (4000, 6000) for moment in evidence.moments)
     assert all(moment.context_start_ms < moment.context_end_ms for moment in evidence.moments)
     assert not any(Path(tmp_path).glob("minedtv-persona-frames-*"))
+
+
+def test_frame_score_normalizes_the_scorers_practical_ceiling():
+    assert FRAME_SCORE_REFERENCE_CEILING == 0.70
+    # A 0.70 aggregate is a practically maxed visual-only result because the
+    # base scorer reserves weight for optional event and speech signals.
+    assert _calibrate_frame_score(0.70) == 100.0
+    assert _calibrate_frame_score(0.90) == 100.0
+    # Weak evidence stays weak rather than receiving a flat score boost.
+    assert _calibrate_frame_score(0.10) < 15
+    assert _calibrate_frame_score(-1) == 0
 
 
 def test_timestamp_parser_supports_minute_and_hour_formats():

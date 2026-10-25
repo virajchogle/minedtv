@@ -30,7 +30,12 @@ from app.services.frame_virality import (
 from app.worker import media
 
 
-ALGORITHM_VERSION = "persona-frame-virality-v1"
+ALGORITHM_VERSION = "persona-frame-virality-v2-calibrated"
+# The underlying frame scorer reserves 28% for detector events and 12% for
+# excited speech. A visually excellent silent clip therefore tops out around
+# 0.60-0.70 instead of 1.0. Normalize that practical ceiling before blending
+# the frame evidence with the persona score.
+FRAME_SCORE_REFERENCE_CEILING = 0.70
 
 
 @dataclass(frozen=True)
@@ -73,6 +78,11 @@ def _moment_weight(label: str) -> float:
         "kill", "reveal", "save", "scare", "twist", "win", "victory",
     )
     return 0.95 if any(word in normalized for word in high_signal) else 0.78
+
+
+def _calibrate_frame_score(raw_score: float) -> float:
+    """Map the scorer's practical 0..0.70 range onto the public 0..100 index."""
+    return 100 * min(1.0, max(0.0, raw_score) / FRAME_SCORE_REFERENCE_CEILING)
 
 
 def _analysis_events(analysis: CreatorPackOut, duration_ms: int) -> list[EventInput]:
@@ -182,7 +192,7 @@ class VideoPersonaViralityEngine:
         strong_floor = max(0.42, peak * 0.68)
         coverage = sum(frame.score >= strong_floor for frame in scores) / len(scores)
         coverage_strength = min(1.0, coverage / 0.25)
-        frame_score = 100 * (
+        raw_frame_score = (
             0.32 * peak
             + 0.20 * sustained
             + 0.18 * hook
@@ -190,6 +200,7 @@ class VideoPersonaViralityEngine:
             + 0.10 * novelty
             + 0.08 * coverage_strength
         )
+        frame_score = _calibrate_frame_score(raw_frame_score)
 
         moments = [
             VideoViralityMomentOut(

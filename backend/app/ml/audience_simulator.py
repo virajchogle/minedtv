@@ -265,26 +265,27 @@ def build_audience_simulation(
     if not target_advances:
         depth = "target_only"
         cascade_summary = "The target audience did not clear the first sharing threshold."
-        cascade_factor = 0.72
     elif not adjacent_advances:
         depth = "adjacent"
         cascade_summary = "The target audience advanced the video, but adjacent viewers stopped the cascade."
-        cascade_factor = 0.84
     elif not outsider_advances:
         depth = "outsider"
         cascade_summary = "The video reached outsiders but did not show broad-breakout strength."
-        cascade_factor = 0.94
     else:
         depth = "broad_breakout"
         cascade_summary = "All three simulated audience waves cleared their propagation thresholds."
-        cascade_factor = 1.0
 
+    # The individual layer scores already capture how sharply appeal falls outside
+    # the core audience. Applying another depth multiplier double-penalized niche
+    # hits and compressed nearly every realistic panel into the 30-45 range.
+    # Target viewers remain the strongest signal, while adjacent and outsider
+    # reactions still determine the reported cascade depth and contribute 45%.
     base_score = (
-        0.50 * layer_scores["target"]
+        0.55 * layer_scores["target"]
         + 0.30 * layer_scores["adjacent"]
-        + 0.20 * layer_scores["outsider"]
+        + 0.15 * layer_scores["outsider"]
     )
-    persona_score = round(min(100.0, base_score * cascade_factor), 1)
+    persona_score = round(min(100.0, base_score), 1)
     effective_frame_weight = min(0.5, max(0.0, frame_weight)) if video_evidence is not None else 0.0
     virality_score = round(
         persona_score * (1.0 - effective_frame_weight)
@@ -319,9 +320,9 @@ def build_audience_simulation(
         virality_score=virality_score,
         persona_score=persona_score,
         scoring_version=(
-            f"persona-cascade-v2+{video_evidence.algorithm_version}"
+            f"persona-cascade-v3+{video_evidence.algorithm_version}"
             if video_evidence is not None
-            else "persona-cascade-v2"
+            else "persona-cascade-v3"
         ),
         video_evidence=video_evidence,
         verdict=verdict,
