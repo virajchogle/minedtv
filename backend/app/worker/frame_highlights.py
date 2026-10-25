@@ -81,8 +81,12 @@ async def run_frame_highlights(
     deps: Deps,
     requested_count: int | None = None,
     clip_duration_ms: int | None = None,
+    make_clips: bool = True,
 ) -> str:
-    """Score existing frames, replace prior frame-generated clips, and return the session id."""
+    """Score existing frames, replace prior frame-generated clips, and return the session id.
+
+    make_clips=False only (re)writes the frame scores, leaving every clip alone: that's how
+    older uploads get virality scores without their (possibly published) clips being replaced."""
     session_id = uuid.UUID(str(session_id))
     count = requested_count or deps.settings.frame_highlight_count
     clip_duration = clip_duration_ms or deps.settings.frame_highlight_duration_ms
@@ -146,6 +150,8 @@ async def run_frame_highlights(
             user_id = session.user_id
             base_title = session.title or session.game or "Session"
             poster_key = session.poster_key
+            age_restricted = session.age_restricted
+            violations = session.moderation_violations
 
         if not frame_rows:
             raise RuntimeError("session has no extracted frames to score")
@@ -165,18 +171,19 @@ async def run_frame_highlights(
             clip_duration,
             deps.settings.frame_virality_min_score,
         )
-        if not windows:
+        if make_clips and not windows:
             raise RuntimeError("video is too short to create a highlight clip")
 
         async with deps.sessionmaker() as db:
             await db.execute(delete(FrameViralityScore).where(FrameViralityScore.session_id == session_id))
-            await db.execute(delete(Event).where(Event.session_id == session_id, Event.source == EVENT_SOURCE))
-            await db.execute(
-                delete(Clip).where(
-                    Clip.session_id == session_id,
-                    Clip.generation_source == "frame_virality",
+            if make_clips:
+                await db.execute(delete(Event).where(Event.session_id == session_id, Event.source == EVENT_SOURCE))
+                await db.execute(
+                    delete(Clip).where(
+                        Clip.session_id == session_id,
+                        Clip.generation_source == "frame_virality",
+                    )
                 )
-            )
             await db.execute(
                 insert(FrameViralityScore),
                 [
@@ -196,7 +203,7 @@ async def run_frame_highlights(
                     for frame in scores
                 ],
             )
-            for rank, window in enumerate(sorted(windows, key=lambda item: -item.frame.score), 1):
+            for rank, window in enumerate(sorted(windows, key=lambda item: -item.frame.score) if make_clips else [], 1):
                 frame = window.frame
                 db.add(
                     Event(
@@ -230,6 +237,8 @@ async def run_frame_highlights(
                         generation_source="frame_virality",
                         publish_state=deps.settings.new_clip_publish_state,
                         published_at=func.now() if deps.settings.new_clip_publish_state == "published" else None,
+                        age_restricted=age_restricted,
+                        moderation_violations=violations,
                     )
                 )
 
@@ -249,3 +258,41 @@ async def run_frame_highlights(
     except Exception as error:
         await _mark_failed(session_id, deps, error)
         raise
+
+
+async def auto_highlights_after_upload(session_id: uuid.UUID, deps: Deps) -> bool:
+    """Run on every processed upload: cut highlight clips with the frame scorer and drop the
+    pipeline's event-based clips, which stay only when the scorer can't cut anything (e.g. a very
+    short video). Never raises: the upload is already usable either way. Returns whether the
+    frame clips replaced the pipeline ones."""
+    from app.db.models import Notification
+
+    try:
+        await run_frame_highlights(session_id, deps)
+    except Exception:  # noqa: BLE001 - keep the pipeline's clips
+        log.warning("auto frame highlights failed; keeping pipeline clips", exc_info=True,
+                    extra={"session_id": str(session_id)})
+        return False
+    async with deps.sessionmaker() as db:
+        new_ids = (
+            await db.scalars(
+                select(Clip.id)
+                .where(Clip.session_id == session_id, Clip.generation_source == "frame_virality")
+                .order_by(Clip.start_ms)
+            )
+        ).all()
+        old_ids = (
+            await db.scalars(
+                select(Clip.id).where(Clip.session_id == session_id, Clip.generation_source == "pipeline")
+            )
+        ).all()
+        if not new_ids or not old_ids:
+            return bool(new_ids)
+        # Notifications cascade with their clip, so point "upload ready" at a new clip first.
+        await db.execute(
+            update(Notification).where(Notification.clip_id.in_(old_ids)).values(clip_id=new_ids[0])
+        )
+        await db.execute(delete(Clip).where(Clip.id.in_(old_ids)))
+        await db.commit()
+    log.info("frame highlights replaced pipeline clips", extra={"session_id": str(session_id), "clips": len(new_ids)})
+    return True

@@ -229,64 +229,24 @@ export interface ClipCreatorPackOut {
 
 export type CreatorPlatform = "general" | "youtube" | "reddit" | "instagram" | "tiktok";
 
-export interface AudiencePersonaReview {
-  name: string;
-  layer: string;
-  profile: string;
-  interests: string[];
-  hook_score: number;
-  completion_probability: number;
-  like_probability: number;
-  share_probability: number;
-  skip_probability: number;
-  primary_action: string;
-  reaction?: string;
-  what_worked?: string;
-  friction?: string;
-  recommended_change?: string;
-  [key: string]: unknown;
-}
-
-/** The persona simulator's output (backend AudienceSimulationOut). */
-export interface AudienceSimulation {
-  platform: CreatorPlatform;
-  requested_target_audience: string | null;
-  inferred_niche: string;
-  inferred_target_audience: string;
-  virality_score: number;
-  verdict: "weak" | "mixed" | "promising" | "strong";
-  cascade_depth: "target_only" | "adjacent" | "outsider" | "broad_breakout";
-  cascade_summary: string;
-  metrics: {
-    simulated_watch_rate: number;
-    simulated_completion_rate: number;
-    simulated_like_rate: number;
-    simulated_comment_rate: number;
-    simulated_save_rate: number;
-    simulated_share_rate: number;
-  };
-  layers: {
-    layer: string;
-    persona_count: number;
-    score: number;
-    threshold: number;
-    exposed_in_cascade?: boolean;
-    cleared_threshold: boolean;
-  }[];
-  persona_reviews: AudiencePersonaReview[];
-  consensus_strengths: string[];
-  consensus_risks: string[];
-  recommended_changes: string[];
-  disclaimer: string;
-  /** Every persona panel's score (the first is this report's). Empty for older one-panel results. */
-  score_samples?: number[];
-}
-
+/** A clip's virality from the frame scorer (backend ClipViralityOut). Scores are 0–100. */
 export interface ClipViralityOut {
   clip_id: string;
   status: JobStatus;
-  platform: CreatorPlatform;
-  result: AudienceSimulation | null;
+  score: number | null;
+  verdict: "weak" | "mixed" | "promising" | "strong" | null;
+  /** The clip's strongest moment, from its start. */
+  peak_offset_ms: number | null;
+  components: {
+    visual: number;
+    novelty: number;
+    event: number;
+    speech: number;
+    visibility: number;
+    scene: number;
+  } | null;
+  curve: { offset_ms: number; score: number }[];
+  algorithm_version: string | null;
   error: string | null;
   start_ms: number;
   end_ms: number;
@@ -351,7 +311,6 @@ export interface ViralitySummary {
   status: JobStatus;
   score: number | null;
   verdict: "weak" | "mixed" | "promising" | "strong" | null;
-  score_samples: number[];
 }
 
 export interface ClipAnalytics {

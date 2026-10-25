@@ -507,11 +507,6 @@ class AudienceSimulationOut(_Out):
     recommended_changes: list[str]
     analysis: CreatorPackOut
     disclaimer: str
-    score_samples: list[float] = Field(
-        default_factory=list,
-        description="virality_score of every persona panel run (the first is this report's); show the median "
-        "and the spread. Empty for one-panel results and /creator/simulate.",
-    )
 
 
 class ClipCreatorPackOut(_Out):
@@ -526,17 +521,37 @@ class ClipCreatorPackOut(_Out):
     end_ms: int
 
 
-class ClipViralityIn(BaseModel):
-    platform: CreatorPlatform = "general"
-    target_audience: str | None = Field(default=None, max_length=500)
-    persona_count: int | None = Field(default=None, ge=3, le=15)
+class ViralityComponentsOut(BaseModel):
+    """Average 0–100 of each signal over the clip's strongest frames."""
+
+    visual: float = Field(description="Looks like a highlight (action, skill, payoff), ranked within the upload")
+    novelty: float = Field(description="Visual change between neighbouring frames")
+    event: float = Field(description="Detected highlight events nearby")
+    speech: float = Field(description="Excited or reaction speech nearby")
+    visibility: float = Field(description="Readable frame: brightness, contrast, visible area")
+    scene: float = Field(description="Sustained strength across the surrounding scene")
 
 
-class ClipViralityOut(_Out):
+class ViralityPointOut(BaseModel):
+    offset_ms: int = Field(description="Time from the start of the clip")
+    score: float = Field(ge=0, le=100)
+
+
+class ClipViralityOut(BaseModel):
+    """The clip's virality from the frame scorer: every sampled frame is scored 0–1 from the
+    upload's own data (CLIP embeddings, events, transcript), and the clip gets the average of
+    its strongest frames. Scores are relative to the rest of the same upload."""
+
     clip_id: uuid.UUID
-    status: Literal["none", "processing", "ready", "failed"]
-    platform: CreatorPlatform
-    result: AudienceSimulationOut | None = None
+    status: Literal["none", "processing", "ready", "failed"] = Field(
+        description="'none' = this upload hasn't been scored yet; POST to score it"
+    )
+    score: float | None = Field(default=None, ge=0, le=100)
+    verdict: Literal["weak", "mixed", "promising", "strong"] | None = None
+    peak_offset_ms: int | None = Field(default=None, description="The clip's strongest moment, from its start")
+    components: ViralityComponentsOut | None = None
+    curve: list[ViralityPointOut] = Field(default_factory=list, description="Score of every sampled frame in the clip")
+    algorithm_version: str | None = None
     error: str | None = None
     start_ms: int
     end_ms: int
@@ -561,12 +576,11 @@ class AnalyticsTotalsOut(BaseModel):
 
 
 class ViralitySummaryOut(BaseModel):
-    """The clip's YouTube virality check (the one publishing starts), without the full report."""
+    """The clip's frame virality, without the curve."""
 
     status: Literal["none", "processing", "ready", "failed"]
     score: float | None = None
     verdict: Literal["weak", "mixed", "promising", "strong"] | None = None
-    score_samples: list[float] = Field(default_factory=list)
 
 
 class ClipAnalyticsOut(BaseModel):

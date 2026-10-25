@@ -509,6 +509,10 @@ async def run_pipeline(session_id: uuid.UUID | str, *, resume: bool = False, dep
             async with deps.sessionmaker() as db:
                 (await ctx.session(db)).status = SessionStatus.READY
                 await db.commit()
+            if deps.settings.auto_frame_highlights:
+                from app.worker.frame_highlights import auto_highlights_after_upload
+
+                await auto_highlights_after_upload(session_id, deps)
             log.info("pipeline ready", extra={"secs": round(time.monotonic() - t_all, 2)})
             return SessionStatus.READY
         except ContentPolicyViolation as e:

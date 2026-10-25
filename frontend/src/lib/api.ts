@@ -21,7 +21,6 @@ import type {
   ClipOut,
   ClipViralityOut,
   CountsOut,
-  CreatorPlatform,
   ExportOut,
   FeedOut,
   MeOut,
@@ -912,32 +911,12 @@ export const startCreatorPack = (clipId: string) =>
 export const getCreatorPack = (clipId: string) =>
   request<ClipCreatorPackOut>(`/clips/${clipId}/creator-pack`);
 
-export interface ViralityOptions {
-  platform: CreatorPlatform;
-  target_audience?: string | null;
-  persona_count?: number | null;
-}
+/** The clip's virality from the frame scorer (owner only). */
+export const getVirality = (clipId: string) => request<ClipViralityOut>(`/clips/${clipId}/virality`);
 
-function viralityQuery(o: ViralityOptions): string {
-  const params = new URLSearchParams({ platform: o.platform });
-  if (o.target_audience) params.set("target_audience", o.target_audience);
-  if (o.persona_count) params.set("persona_count", String(o.persona_count));
-  return params.toString();
-}
-
-/** Synthetic audience panel, for clips you own. Publishing starts one for YouTube automatically. */
-export const startVirality = (clipId: string, o: ViralityOptions) =>
-  request<ClipViralityOut>(`/clips/${clipId}/virality`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      platform: o.platform,
-      target_audience: o.target_audience || null,
-      persona_count: o.persona_count || null,
-    }),
-  });
-export const getVirality = (clipId: string, o: ViralityOptions) =>
-  request<ClipViralityOut>(`/clips/${clipId}/virality?${viralityQuery(o)}`);
+/** Scores the clip's upload if it predates the frame scorer; leaves its clips alone. */
+export const scoreVirality = (clipId: string) =>
+  request<ClipViralityOut>(`/clips/${clipId}/virality`, { method: "POST" });
 
 // ── YouTube posting ──────────────────────────────────────────────────────────
 
@@ -973,14 +952,7 @@ export async function fetchAnalytics(days: number): Promise<AnalyticsOut> {
   return request<AnalyticsOut>(`/users/${me.id}/analytics?days=${days}`);
 }
 
-/** Middle value of a list of scores (the virality headline when there are several panels). */
-export function median(values: number[]): number {
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-}
-
-/** The engine's verdict cut-offs on the 0–100 virality score. */
+/** Verdict cut-offs on the 0–100 virality score (same as the backend). */
 export const VERDICT_CUTOFFS = { mixed: 35, promising: 55, strong: 75 } as const;
 
 export function verdictFor(score: number): "weak" | "mixed" | "promising" | "strong" {
