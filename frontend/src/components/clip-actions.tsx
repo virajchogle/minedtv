@@ -13,7 +13,7 @@
  * poll GET until `ready`. Existing results are loaded on mount.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   Check,
@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 
 import { ChooseUserNotice, useCurrentUser } from "@/components/current-user";
+import { ViralityReport } from "@/components/virality-report";
 import {
   disconnectYouTube,
   getCreatorPack,
@@ -424,12 +425,6 @@ function CreatorPackSection({ video }: { video: Video }) {
 
 const PLATFORMS: CreatorPlatform[] = ["youtube", "tiktok", "instagram", "reddit", "general"];
 
-const VERDICT_TONE: Record<string, string> = {
-  strong: "text-[var(--mtv-green)]",
-  promising: "text-[var(--mtv-gold)]",
-  mixed: "text-white/80",
-  weak: "text-[var(--mtv-red)]",
-};
 
 function ViralitySection({ video }: { video: Video }) {
   const [options, setOptions] = useState<ViralityOptions>({ platform: "youtube", target_audience: "", persona_count: 9 });
@@ -506,69 +501,7 @@ function ViralitySection({ video }: { video: Video }) {
         </ActionButton>
       </div>
 
-      {result && (
-        <div className="space-y-3 pt-1">
-          <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-            <span className="text-3xl font-bold">{Math.round(result.virality_score)}</span>
-            <span className={cn("text-sm font-semibold capitalize", VERDICT_TONE[result.verdict])}>{result.verdict}</span>
-            <span className="text-xs text-[var(--mtv-text-2)]">
-              {result.inferred_niche} · reaches {result.cascade_depth.replace("_", " ")}
-            </span>
-          </div>
-          <p className="text-[13px]">{result.cascade_summary}</p>
-          <div className="grid grid-cols-3 gap-2 text-center text-[11px] text-[var(--mtv-text-2)] sm:grid-cols-6">
-            {(
-              [
-                ["Watch", result.metrics.simulated_watch_rate],
-                ["Complete", result.metrics.simulated_completion_rate],
-                ["Like", result.metrics.simulated_like_rate],
-                ["Comment", result.metrics.simulated_comment_rate],
-                ["Save", result.metrics.simulated_save_rate],
-                ["Share", result.metrics.simulated_share_rate],
-              ] as const
-            ).map(([label, value]) => (
-              <div key={label} className="rounded-lg bg-[var(--mtv-surface-high)] py-1.5">
-                <p className="text-sm font-semibold text-[var(--mtv-text)]">{Math.round(value)}%</p>
-                {label}
-              </div>
-            ))}
-          </div>
-          {(
-            [
-              ["What works", result.consensus_strengths],
-              ["Risks", result.consensus_risks],
-              ["Try changing", result.recommended_changes],
-            ] as const
-          ).map(([label, items]) =>
-            items.length > 0 ? (
-              <div key={label} className="space-y-0.5">
-                <p className="text-[11px] uppercase tracking-wider text-[var(--mtv-text-2)]">{label}</p>
-                <ul className="list-disc space-y-0.5 pl-5 text-[13px]">
-                  {items.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : null
-          )}
-          <details className="text-[13px]">
-            <summary className="cursor-pointer text-xs text-[var(--mtv-text-2)]">
-              {result.persona_reviews.length} persona reactions
-            </summary>
-            <div className="mt-2 space-y-2">
-              {result.persona_reviews.map((p) => (
-                <div key={p.name} className="rounded-lg bg-[var(--mtv-surface-high)] p-2">
-                  <p className="font-semibold">
-                    {p.name} <span className="font-normal text-[var(--mtv-text-2)]">· {p.layer} · hook {p.hook_score}</span>
-                  </p>
-                  <p className="text-xs text-[var(--mtv-text-2)]">{p.profile}</p>
-                </div>
-              ))}
-            </div>
-          </details>
-          <p className="text-[11px] text-[var(--mtv-text-2)]">{result.disclaimer}</p>
-        </div>
-      )}
+      {result && <ViralityReport result={result} />}
       <ErrorLine message={job.error} />
     </Panel>
   );

@@ -229,6 +229,10 @@ export interface AudiencePersonaReview {
   share_probability: number;
   skip_probability: number;
   primary_action: string;
+  reaction?: string;
+  what_worked?: string;
+  friction?: string;
+  recommended_change?: string;
   [key: string]: unknown;
 }
 
@@ -250,12 +254,21 @@ export interface AudienceSimulation {
     simulated_save_rate: number;
     simulated_share_rate: number;
   };
-  layers: { layer: string; persona_count: number; score: number; threshold: number; cleared_threshold: boolean }[];
+  layers: {
+    layer: string;
+    persona_count: number;
+    score: number;
+    threshold: number;
+    exposed_in_cascade?: boolean;
+    cleared_threshold: boolean;
+  }[];
   persona_reviews: AudiencePersonaReview[];
   consensus_strengths: string[];
   consensus_risks: string[];
   recommended_changes: string[];
   disclaimer: string;
+  /** Every persona panel's score (the first is this report's). Empty for older one-panel results. */
+  score_samples?: number[];
 }
 
 export interface ClipViralityOut {
@@ -308,4 +321,45 @@ export interface YouTubeUploadOut {
   error: string | null;
   created_at: string;
   updated_at: string;
+}
+
+// ── creator analytics (GET /users/{id}/analytics) ────────────────────────────
+
+export interface AnalyticsTotals {
+  views: number;
+  likes: number;
+  comments: number;
+  new_followers: number;
+}
+
+export interface AnalyticsDay extends AnalyticsTotals {
+  day: string;
+}
+
+export interface ViralitySummary {
+  status: JobStatus;
+  score: number | null;
+  verdict: "weak" | "mixed" | "promising" | "strong" | null;
+  score_samples: number[];
+}
+
+export interface ClipAnalytics {
+  clip: ClipOut;
+  period_views: number;
+  period_likes: number;
+  period_comments: number;
+  virality: ViralitySummary;
+}
+
+export interface AnalyticsOut {
+  days: number;
+  start: string;
+  end: string;
+  tracking_since: string | null;
+  lifetime: AnalyticsTotals;
+  period: AnalyticsTotals;
+  previous_period: AnalyticsTotals;
+  follower_count: number;
+  daily: AnalyticsDay[];
+  clips: ClipAnalytics[];
 }

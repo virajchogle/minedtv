@@ -397,7 +397,13 @@ The flow is **upload → My videos (private) → Publish → Post to YouTube**. 
   with `{"platform": "tiktok", "target_audience": "...", "persona_count": 9}`, then poll
   `GET /clips/{id}/virality?platform=tiktok&...` with the same options until `status == "ready"`.
   `result` has `virality_score` (0–100), `verdict` and the persona panel. It takes a few minutes
-  (export + Gemini + persona panel).
+  (export + Gemini + persona panel). Each check now runs 3 panels and keeps every score in
+  `result.score_samples`: show the median and the range, so the dashboard's extra
+  `/creator/simulate-analysis` calls aren't needed any more.
+- **Analytics:** `GET /users/{me}/analytics?days=30` (owner only) returns real per-day `views`, `likes`,
+  `comments`, `new_followers` (UTC days, zero-filled), `period` vs `previous_period` totals, and each clip's
+  period stats plus `virality {status, score, verdict, score_samples}`. Use it for the dashboard's charts
+  instead of the demo data.
 - **AI creator pack:** `POST /clips/{id}/creator-pack` returns titles, caption, hashtags and YouTube
   metadata for the clip. Poll `GET` the same way.
 

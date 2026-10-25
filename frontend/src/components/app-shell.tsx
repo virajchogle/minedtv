@@ -5,7 +5,7 @@
  *
  * Legacy app routes (settings, the single-video page) keep the old
  * fixed Sidebar and scroll inside <main>. The redesigned routes — home,
- * explore, library, upload, profile, login — render their own SiteNav and must NOT
+ * explore, library, upload, profile, login, dashboard — render their own SiteNav and must NOT
  * also get the Sidebar: the Sidebar is `fixed` with `pl-16` compensation on
  * <main>, so stacking it under a page that already has its own full-bleed
  * nav produced the layout clash ("switches back to the old UI") these pages
@@ -18,7 +18,7 @@ import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/sidebar";
 import { refreshAccount, warmup } from "@/lib/api";
 
-const BARE_ROUTES = new Set(["/", "/explore", "/library", "/upload", "/profile", "/login"]);
+const BARE_ROUTES = new Set(["/", "/explore", "/library", "/upload", "/profile", "/login", "/dashboard"]);
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

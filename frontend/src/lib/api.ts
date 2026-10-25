@@ -15,6 +15,7 @@
  */
 
 import type {
+  AnalyticsOut,
   ClipCreatorPackOut,
   ClipDetailOut,
   ClipOut,
@@ -938,6 +939,32 @@ export const postToYouTube = (
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+
+// ── creator analytics ────────────────────────────────────────────────────────
+
+/** The acting user's own analytics for the last `days` days. */
+export async function fetchAnalytics(days: number): Promise<AnalyticsOut> {
+  const me = getCurrentUser();
+  if (!me) throw new Error("Pick a user first.");
+  return request<AnalyticsOut>(`/users/${me.id}/analytics?days=${days}`);
+}
+
+/** Middle value of a list of scores (the virality headline when there are several panels). */
+export function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+/** The engine's verdict cut-offs on the 0–100 virality score. */
+export const VERDICT_CUTOFFS = { mixed: 35, promising: 55, strong: 75 } as const;
+
+export function verdictFor(score: number): "weak" | "mixed" | "promising" | "strong" {
+  if (score >= VERDICT_CUTOFFS.strong) return "strong";
+  if (score >= VERDICT_CUTOFFS.promising) return "promising";
+  if (score >= VERDICT_CUTOFFS.mixed) return "mixed";
+  return "weak";
+}
 
 /** Wakes the GPU embedder so the first search isn't a cold start. Fire and forget. */
 export function warmup(): void {

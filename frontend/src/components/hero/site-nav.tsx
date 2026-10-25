@@ -18,6 +18,7 @@ const LINKS = [
   { label: "Explore", href: "/explore" },
   { label: "My Library", href: "/library" },
   { label: "Upload", href: "/upload" },
+  { label: "Dashboard", href: "/dashboard" },
   { label: "Profile", href: "/profile" },
 ] as const;
 
