@@ -35,6 +35,12 @@ jobs:
         run: npm install --global vercel@48.10.2
       - name: Pull production settings and env vars
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+      # The CLI sends the commit's author along with the deploy, and Hobby blocks deploys of
+      # commits by anyone but the owner (the deploy sits at BLOCKED and the CLI waits forever).
+      # Without .git there's no author to check; the deploy is still made with the owner's token.
+      - name: Drop git metadata
+        run: rm -rf .git
       # Vercel builds it on its own servers (local `vercel build` rejects the project's Node 24).
       - name: Deploy
+        timeout-minutes: 10
         run: vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }}
