@@ -79,7 +79,12 @@ async def test_clip_virality_from_frame_scores(sessionmaker, monkeypatch):  # no
             assert e.value.status_code == 403
 
 
-async def test_creator_tools_are_owner_only(sessionmaker):  # noqa: F811
+async def test_creator_tools_are_owner_only(sessionmaker, monkeypatch, tmp_path):  # noqa: F811
+    from app.services.storage import LocalStorage
+
+    # Use throwaway local storage, not whatever S3 the environment points at (none in CI).
+    storage = LocalStorage(tmp_path / "storage")
+    monkeypatch.setattr(clips_api, "get_storage", lambda: storage)
     owner, clip = await _draft_clip(sessionmaker)
     async with sessionmaker() as db:
         stranger = User(username=f"x_{uuid.uuid4().hex[:6]}")
