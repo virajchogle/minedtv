@@ -18,14 +18,23 @@
  */
 
 import type {
+  ClipCreatorPackOut,
   ClipDetailOut,
   ClipOut,
+  ClipViralityOut,
+  CountsOut,
+  CreatorPlatform,
+  ExportOut,
   FeedOut,
+  PublishState,
   SearchOut,
   SessionOut,
   UploadOut,
   UpstreamSearchResult,
+  UserOut,
 } from "@/lib/minedtv-types";
+
+export type { PublishState } from "@/lib/minedtv-types";
 
 /** Same-origin proxy. The upstream host is only ever known to the server. */
 export const API_BASE_URL = "/api/minedtv";
@@ -66,8 +75,15 @@ export interface Video {
   game: string | null;
   view_count: number;
   like_count: number;
-  publish_state: "draft" | "ready" | "published" | null;
+  /** "clip" for real clips; "session" when only the raw recording is known (e.g. mid-processing). */
+  kind: "clip" | "session";
+  /** null for sessions, which have no publish state of their own. */
+  publish_state: PublishState | null;
   published_at: string | null;
+  owner_id: string | null;
+  liked_by_me: boolean;
+  start_ms: number;
+  end_ms: number;
 }
 
 export interface SignalBreakdown {
@@ -105,6 +121,22 @@ export interface SearchResult {
   session_id: string;
   /** Additional matching offsets in the same clip, in seconds. */
   other_moments: number[];
+  /** Backend confidence, 0..1, comparable across queries. */
+  confidence: number;
+  /** Every matching moment in this clip, best first, with its own evidence. */
+  moments: MomentView[];
+  game: string | null;
+  uploader: string | null;
+}
+
+export interface MomentView {
+  /** Seconds into the clip's playlist (what the player seeks to). */
+  offset_seconds: number;
+  confidence: number;
+  signals: string[];
+  label: string | null;
+  snippet: string | null;
+  thumbnail_url: string | null;
 }
 
 export interface SearchResponse {
@@ -161,9 +193,13 @@ export interface UploadResponse {
 // ── transport ────────────────────────────────────────────────────────────────
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  // The backend identifies the acting user by X-User-Id (demo identity, no passwords yet).
+  const headers = new Headers(init?.headers);
+  const me = getCurrentUser();
+  if (me && !headers.has("X-User-Id")) headers.set("X-User-Id", me.id);
   let response: Response;
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, { ...init, cache: "no-store" });
+    response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers, cache: "no-store" });
   } catch {
     throw new Error("Could not reach the MinedTV API.");
   }
@@ -205,6 +241,12 @@ const STATUS_MAP: Record<string, ProcessingStatus> = {
   transcribing: "analyzing",
   analyzing: "analyzing",
   segmenting: "extracting_frames",
+  probing: "extracting_frames",
+  thumbnails: "extracting_frames",
+  frames: "indexing",
+  audio: "analyzing",
+  highlights: "analyzing",
+  finalizing: "indexing",
   uploading: "pending",
   queued: "pending",
   pending: "pending",
@@ -241,6 +283,7 @@ const BUCKET_LABELS: Record<MatchBucket, string> = {
 const SIGNAL_LABELS: Record<string, string> = {
   visual: "Visual similarity",
   speech: "Spoken content",
+  keyword: "Exact words in voice chat",
   text: "Text and metadata",
   event: "Detected event",
   title: "Title match",
@@ -317,8 +360,13 @@ function clipToVideo(clip: ClipOut): Video {
     game: clip.game,
     view_count: clip.view_count,
     like_count: clip.like_count,
+    kind: "clip",
     publish_state: clip.publish_state ?? "published",
     published_at: clip.published_at ?? null,
+    owner_id: clip.user?.id ?? null,
+    liked_by_me: Boolean(clip.liked_by_me),
+    start_ms: clip.start_ms,
+    end_ms: clip.end_ms,
   };
 }
 
@@ -345,8 +393,13 @@ function sessionToVideo(session: SessionOut): Video {
     game: session.game,
     view_count: 0,
     like_count: 0,
+    kind: "session",
     publish_state: null,
     published_at: null,
+    owner_id: session.user?.id ?? null,
+    liked_by_me: false,
+    start_ms: 0,
+    end_ms: session.duration_ms ?? 0,
   };
 }
 
@@ -448,6 +501,14 @@ export async function fetchSearchConfig(): Promise<SearchConfig> {
 export const videoStreamUrl = (clipId: string): string =>
   `${API_BASE_URL}/clips/${clipId}/playlist.m3u8`;
 
+/** Whole-session HLS (for session-kind ids that have no clip yet). */
+export const sessionStreamUrl = (sessionId: string): string =>
+  `${API_BASE_URL}/sessions/${sessionId}/playlist.m3u8`;
+
+/** The right playlist for whatever the Video wraps. */
+export const streamUrlFor = (video: Video): string =>
+  video.kind === "session" ? sessionStreamUrl(video.video_id) : videoStreamUrl(video.video_id);
+
 // ── search ───────────────────────────────────────────────────────────────────
 
 function toResult(hit: UpstreamSearchResult, index: number): SearchResult {
@@ -458,7 +519,12 @@ function toResult(hit: UpstreamSearchResult, index: number): SearchResult {
     rank: index + 1,
     start_seconds: ms(hit.start_ms),
     end_seconds: ms(hit.end_ms),
-    seek_seconds: ms(hit.match_t_ms),
+    // Playlists start at start_ms, so the player seeks to the offset within the clip.
+    // Clip playlists start at the clip's start, so seek to the offset inside the clip. Session
+    // hits (no clip contains the moment; owner-only) open the whole session, so seek absolutely.
+    seek_seconds: hit.clip_id
+      ? ms(hit.moments?.[0]?.offset_ms ?? hit.match_t_ms - hit.start_ms)
+      : ms(hit.match_t_ms),
     frame_id: null,
     thumbnail_url: hit.thumbnail_url,
     transcript: hit.transcript_snippet,
@@ -469,6 +535,17 @@ function toResult(hit: UpstreamSearchResult, index: number): SearchResult {
     playlist_url: hit.playlist_url,
     session_id: hit.session_id,
     other_moments: (hit.other_moments_ms ?? []).map(ms),
+    confidence: hit.confidence,
+    moments: (hit.moments ?? []).map((m) => ({
+      offset_seconds: ms(m.offset_ms),
+      confidence: m.confidence,
+      signals: m.signals,
+      label: m.label,
+      snippet: m.snippet,
+      thumbnail_url: m.thumbnail_url,
+    })),
+    game: hit.game,
+    uploader: hit.user?.username ?? null,
   };
 }
 
@@ -486,15 +563,22 @@ export async function searchVideos(options: {
   videoId?: string;
   limit?: number;
   signal?: AbortSignal;
+  /** Only the current user's clips, including their drafts and "ready" clips. */
+  mine?: boolean;
+  game?: string | null;
 }): Promise<SearchResponse> {
-  const { query, scope, videoId, limit = 12, signal } = options;
+  const { query, scope, videoId, limit = 12, signal, mine = false, game } = options;
   const scoped = scope === "video" && Boolean(videoId);
 
   const params = new URLSearchParams({
     q: query,
     // Over-fetch when narrowing locally, or the filter has little to work with.
-    limit: String(scoped ? Math.max(limit * 5, 50) : limit),
+    limit: String(scoped ? Math.max(limit * 5, 50) : Math.min(limit, 50)),
   });
+  const me = getCurrentUser();
+  // Single-video search on your own draft needs the owner scope, or the draft is invisible.
+  if ((mine || scoped) && me) params.set("user_id", me.id);
+  if (game) params.set("game", game);
 
   const started = performance.now();
   const raw = await request<SearchOut>(`/search?${params}`, { signal });
@@ -558,7 +642,8 @@ export const recordView = (clipId: string) =>
  */
 export async function uploadVideo(
   file: File,
-  onProgress: (percent: number) => void
+  onProgress: (percent: number) => void,
+  meta: { title?: string; game?: string } = {}
 ): Promise<UploadResponse> {
   const ticket = await request<UploadOut>("/uploads", {
     method: "POST",
@@ -566,7 +651,8 @@ export async function uploadVideo(
     body: JSON.stringify({
       filename: file.name,
       content_type: file.type || "video/mp4",
-      title: file.name.replace(/\.[^.]+$/, ""),
+      title: meta.title?.trim() || file.name.replace(/\.[^.]+$/, ""),
+      game: meta.game?.trim() || null,
       size_bytes: file.size,
     }),
   });
@@ -617,6 +703,151 @@ function putWithProgress(
     xhr.addEventListener("abort", () => reject(new Error("Upload cancelled.")));
     xhr.send(file);
   });
+}
+
+// ── identity ─────────────────────────────────────────────────────────────────
+
+/**
+ * The backend has no login yet: requests act as a user by sending X-User-Id.
+ * The chosen user lives in localStorage and is attached by `request()`.
+ */
+const USER_KEY = "minedtv-user";
+export const USER_CHANGED_EVENT = "minedtv-user-changed";
+
+export function getCurrentUser(): UserOut | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(USER_KEY);
+    return raw ? (JSON.parse(raw) as UserOut) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setCurrentUser(user: UserOut | null): void {
+  try {
+    if (user) window.localStorage.setItem(USER_KEY, JSON.stringify(user));
+    else window.localStorage.removeItem(USER_KEY);
+  } catch {
+    /* storage may be unavailable (private mode); the session just won't persist */
+  }
+  window.dispatchEvent(new Event(USER_CHANGED_EVENT));
+}
+
+export const fetchUsers = () => request<UserOut[]>("/users?limit=200");
+
+export const createUser = (username: string) =>
+  request<UserOut>("/users", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username }),
+  });
+
+// ── my clips and publishing ──────────────────────────────────────────────────
+
+export type ClipBucket = "all" | "draft" | "ready" | "published" | "unpublished";
+
+/** The current user's clips. Owners see every bucket; nobody else sees unpublished ones. */
+export async function fetchMyVideos(bucket: ClipBucket = "all", limit = 60): Promise<Video[]> {
+  const me = getCurrentUser();
+  if (!me) return [];
+  const feed = await request<FeedOut>(`/users/${me.id}/clips?state=${bucket}&limit=${limit}`);
+  return Array.isArray(feed?.items) ? feed.items.map(clipToVideo) : [];
+}
+
+/** Clips the pipeline made for a session, found via the owner's clip list. */
+export async function fetchClipsForSession(sessionId: string): Promise<Video[]> {
+  return (await fetchMyVideos("all", 100)).filter((v) => v.session_id === sessionId);
+}
+
+export const publishClip = (clipId: string) =>
+  request<ClipOut>(`/clips/${clipId}/publish`, { method: "POST" }).then(clipToVideo);
+export const unpublishClip = (clipId: string) =>
+  request<ClipOut>(`/clips/${clipId}/unpublish`, { method: "POST" }).then(clipToVideo);
+export const markClipReady = (clipId: string) =>
+  request<ClipOut>(`/clips/${clipId}/mark-ready`, { method: "POST" }).then(clipToVideo);
+
+export const setLiked = (clipId: string, liked: boolean) =>
+  request<CountsOut>(`/clips/${clipId}/like`, { method: liked ? "POST" : "DELETE" });
+
+// ── background jobs: MP4 export, AI creator pack, virality ───────────────────
+
+export const startExport = (clipId: string) =>
+  request<ExportOut>(`/clips/${clipId}/export`, { method: "POST" });
+export const getExport = (clipId: string) => request<ExportOut>(`/clips/${clipId}/export`);
+
+export const startCreatorPack = (clipId: string) =>
+  request<ClipCreatorPackOut>(`/clips/${clipId}/creator-pack`, { method: "POST" });
+export const getCreatorPack = (clipId: string) =>
+  request<ClipCreatorPackOut>(`/clips/${clipId}/creator-pack`);
+
+export interface ViralityOptions {
+  platform: CreatorPlatform;
+  target_audience?: string | null;
+  persona_count?: number | null;
+}
+
+function viralityQuery(o: ViralityOptions): string {
+  const params = new URLSearchParams({ platform: o.platform });
+  if (o.target_audience) params.set("target_audience", o.target_audience);
+  if (o.persona_count) params.set("persona_count", String(o.persona_count));
+  return params.toString();
+}
+
+/** Synthetic audience panel. The backend only runs it on unpublished (draft/ready) clips. */
+export const startVirality = (clipId: string, o: ViralityOptions) =>
+  request<ClipViralityOut>(`/clips/${clipId}/virality`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      platform: o.platform,
+      target_audience: o.target_audience || null,
+      persona_count: o.persona_count || null,
+    }),
+  });
+export const getVirality = (clipId: string, o: ViralityOptions) =>
+  request<ClipViralityOut>(`/clips/${clipId}/virality?${viralityQuery(o)}`);
+
+/** Wakes the GPU embedder so the first search isn't a cold start. Fire and forget. */
+export function warmup(): void {
+  void request<unknown>("/warmup", { method: "POST" }).catch(() => {
+    /* best effort */
+  });
+}
+
+// ── screenshot search ────────────────────────────────────────────────────────
+
+export async function searchByImage(
+  image: File,
+  options: { mine?: boolean; game?: string | null; limit?: number } = {}
+): Promise<SearchResponse> {
+  const form = new FormData();
+  form.set("image", image);
+  form.set("limit", String(options.limit ?? 12));
+  const me = getCurrentUser();
+  if (options.mine && me) form.set("user_id", me.id);
+  if (options.game) form.set("game", options.game);
+  const started = performance.now();
+  const raw = await request<SearchOut>("/search/image", { method: "POST", body: form });
+  const hits = Array.isArray(raw?.results) ? raw.results : [];
+  const results = hits.map(toResult);
+  const bucket_counts: Record<MatchBucket, number> = { strong: 0, moderate: 0, weak: 0, no_reliable_match: 0 };
+  for (const result of results) bucket_counts[result.match.bucket] += 1;
+  return {
+    query: raw?.query ?? `image:${image.name}`,
+    scope: "gallery",
+    video_id: null,
+    results,
+    total_results: results.length,
+    bucket_counts,
+    signals_used: [...new Set(hits.flatMap((hit) => hit.signals))],
+    degraded: [],
+    pipeline: "deployed screenshot search",
+    latency_ms: raw?.took_ms ?? Math.round(performance.now() - started),
+    searchable_videos: new Set(hits.map((hit) => hit.session_id)).size,
+    scope_enforced: "server",
+    cached: false,
+  };
 }
 
 // ── formatting ───────────────────────────────────────────────────────────────

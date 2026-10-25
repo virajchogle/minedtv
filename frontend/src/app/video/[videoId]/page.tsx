@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { AlertTriangle, ArrowLeft, Film, Loader2 } from "lucide-react";
 
+import { ClipActions, PublishBadge } from "@/components/clip-actions";
+import { ChooseUserNotice, useCurrentUser } from "@/components/current-user";
 import { HlsPlayer, type HlsPlayerHandle } from "@/components/hls-player";
 import { SearchPanel } from "@/components/search-panel";
 import {
@@ -13,7 +15,7 @@ import {
   fetchVideo,
   formatTimestamp,
   recordView,
-  videoStreamUrl,
+  streamUrlFor,
   type SearchResult,
   type Segment,
   type Video,
@@ -34,6 +36,9 @@ export default function VideoPage() {
   const [activeMoment, setActiveMoment] = useState<SearchResult | null>(null);
   const [playbackError, setPlaybackError] = useState<string | null>(null);
   const startAt = Number.isFinite(initialSeek) && initialSeek > 0 ? initialSeek : 0;
+  // Unpublished clips are only visible to their owner, so reload when the acting user changes.
+  const me = useCurrentUser();
+  const meId = me?.id ?? null;
 
   useEffect(() => {
     let cancelled = false;
@@ -54,7 +59,7 @@ export default function VideoPage() {
     return () => {
       cancelled = true;
     };
-  }, [videoId]);
+  }, [videoId, meId]);
 
   // Counted once per page view; failures are swallowed inside recordView.
   useEffect(() => {
@@ -81,9 +86,14 @@ export default function VideoPage() {
     return (
       <div className="mx-auto max-w-3xl space-y-4 p-8">
         <BackToGallery />
+        {error && /not found/i.test(error) && <ChooseUserNotice action="open your own drafts" />}
         <div className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          <p>{error ?? "This video could not be loaded."}</p>
+          <p>
+            {error && /not found/i.test(error)
+              ? "This clip doesn't exist, or it's an unpublished draft that only its owner can see."
+              : (error ?? "This video could not be loaded.")}
+          </p>
         </div>
       </div>
     );
@@ -98,7 +108,17 @@ export default function VideoPage() {
       <BackToGallery />
 
       <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">{video.title}</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="text-2xl font-semibold tracking-tight">{video.title}</h1>
+          {video.publish_state && <PublishBadge state={video.publish_state} />}
+        </div>
+        {(video.uploader || video.game) && (
+          <p className="text-sm text-muted-foreground">
+            {video.uploader && <>@{video.uploader}</>}
+            {video.uploader && video.game && " · "}
+            {video.game}
+          </p>
+        )}
         <p className="text-xs text-muted-foreground">
           {formatTimestamp(video.duration_seconds)} · {status.label} · {video.frame_count} frames ·{" "}
           {transcriptSegments} transcript and {sceneSegments} scene segments indexed
@@ -123,7 +143,7 @@ export default function VideoPage() {
       <div className="overflow-hidden rounded-xl border bg-black">
         <HlsPlayer
           ref={playerRef}
-          src={videoStreamUrl(video.video_id)}
+          src={streamUrlFor(video)}
           poster={video.thumbnail_url}
           initialSeek={startAt}
           onError={setPlaybackError}
@@ -136,6 +156,8 @@ export default function VideoPage() {
           {playbackError}
         </p>
       )}
+
+      <ClipActions video={video} onChange={setVideo} />
 
       {activeMoment && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border bg-muted/30 px-3 py-2 text-xs">

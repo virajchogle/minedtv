@@ -96,12 +96,24 @@ export function ResultCard({
               {showVideoTitle && (
                 <p className="truncate text-sm font-semibold">{result.video_title}</p>
               )}
+              {showVideoTitle && (result.uploader || result.game) && (
+                <p className="truncate text-xs text-muted-foreground">
+                  {result.uploader && <>@{result.uploader}</>}
+                  {result.uploader && result.game && " · "}
+                  {result.game}
+                </p>
+              )}
               <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Clock className="h-3 w-3" />
                 {formatTimestamp(result.start_seconds)} – {formatTimestamp(result.end_seconds)}
               </p>
             </div>
-            <MatchBadge bucket={result.match.bucket} />
+            <div className="flex shrink-0 flex-col items-end gap-1">
+              <MatchBadge bucket={result.match.bucket} />
+              <span className="font-mono text-[11px] text-muted-foreground">
+                {Math.round(result.confidence * 100)}% sure
+              </span>
+            </div>
           </div>
 
           {evidence ? (
@@ -112,6 +124,26 @@ export function ResultCard({
             <p className="text-sm italic text-muted-foreground">
               Matched on the sampled frame; no transcript or scene description is indexed here.
             </p>
+          )}
+
+          {result.moments.length > 1 && (
+            <div className="flex flex-wrap gap-1.5 pt-0.5">
+              {result.moments.slice(1).map((moment) => (
+                <button
+                  key={moment.offset_seconds}
+                  type="button"
+                  onClick={() => onOpen({ ...result, seek_seconds: moment.offset_seconds })}
+                  title={moment.snippet ?? moment.signals.join(", ")}
+                  className="inline-flex max-w-[16rem] items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
+                >
+                  <span className="font-mono">{formatTimestamp(moment.offset_seconds)}</span>
+                  <span className="truncate">
+                    {moment.label ?? (moment.snippet ? `“${moment.snippet}”` : moment.signals.join(" + "))}
+                  </span>
+                  <span className="opacity-70">{Math.round(moment.confidence * 100)}%</span>
+                </button>
+              ))}
+            </div>
           )}
 
           <button
@@ -171,9 +203,9 @@ export function ResultCard({
           )}
 
           <p className="border-t border-border/50 pt-2 text-[11px] leading-relaxed text-muted-foreground/70">
-            Calibrated values rescale each raw model score onto a comparable 0–1 range using
-            configured anchors. They are a ranking aid, not a probability that this moment is
-            what you wanted.
+            Confidence comes from the backend: each signal is scored against a generic baseline
+            (so &ldquo;it&rsquo;s a gameplay frame&rdquo; doesn&rsquo;t count as a match), and agreeing
+            signals raise it. It&rsquo;s a ranking aid, not a probability.
           </p>
         </div>
       )}

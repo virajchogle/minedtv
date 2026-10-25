@@ -3,13 +3,15 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart2, Home, Library, Upload, Settings, Video, LogOut } from "lucide-react";
+import { BarChart2, Compass, Home, Library, Upload, Settings, Video } from "lucide-react";
+import { UserSwitcher } from "@/components/current-user";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { icon: Home,      label: "Home",    href: "/" },
   { icon: Library,   label: "Library", href: "/library" },
   { icon: Upload,    label: "Upload",  href: "/upload" },
+  { icon: Compass,   label: "Explore", href: "/explore" },
   { icon: BarChart2, label: "Eval",    href: "/eval" },
 ];
 
@@ -81,9 +83,9 @@ export function Sidebar() {
 
       {/* ── Bottom: greeting + settings + logout ─────────────────────── */}
       <div className="flex flex-col gap-1 px-2">
-        <p className="text-xs text-white/50 px-3 pb-1" style={textStyle}>
-          
-        </p>
+        <div className="px-1 pb-1" style={textStyle}>
+          <UserSwitcher />
+        </div>
 
         <Link
           href="/settings"
@@ -100,12 +102,6 @@ export function Sidebar() {
           </span>
         </Link>
 
-        <button className="flex items-center h-10 px-3 rounded-lg transition-colors duration-200 text-white hover:bg-white/10 w-full">
-          <LogOut className="w-5 h-5 shrink-0" />
-          <span className="ml-3 text-sm font-medium" style={textStyle}>
-            Logout
-          </span>
-        </button>
       </div>
 
     </div>

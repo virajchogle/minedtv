@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Menu, Video, X } from "lucide-react";
 
+import { UserSwitcher } from "@/components/current-user";
 import { cn } from "@/lib/utils";
 
 const LINKS = [
@@ -17,6 +18,7 @@ const LINKS = [
   { label: "Explore", href: "/explore" },
   { label: "My Library", href: "/library" },
   { label: "Upload", href: "/upload" },
+  { label: "Profile", href: "/profile" },
 ] as const;
 
 export function SiteNav() {
@@ -71,14 +73,11 @@ export function SiteNav() {
               {link.label}
             </Link>
           ))}
-          <Link
-            href="/library"
-            className="ml-2 rounded-lg bg-white px-3.5 py-1.5 text-sm font-medium text-black transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
-          >
-            Open app
-          </Link>
+          <UserSwitcher className="ml-2" />
         </div>
 
+        <div className="flex items-center gap-2 sm:hidden">
+        <UserSwitcher compact />
         <button
           type="button"
           onClick={() => setOpen((value) => !value)}
@@ -88,6 +87,7 @@ export function SiteNav() {
         >
           {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </button>
+        </div>
       </nav>
 
       {open && (

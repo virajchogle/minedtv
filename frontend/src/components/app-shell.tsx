@@ -12,14 +12,27 @@
  * were built to replace.
  */
 
+import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 
 import { Sidebar } from "@/components/sidebar";
+import { warmup } from "@/lib/api";
 
 const BARE_ROUTES = new Set(["/", "/explore", "/library", "/upload", "/profile"]);
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+
+  // Wake the GPU embedder once per tab, so the first search isn't a 15-30 s cold start.
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem("minedtv-warm")) return;
+      sessionStorage.setItem("minedtv-warm", "1");
+    } catch {
+      /* storage unavailable: warm anyway */
+    }
+    warmup();
+  }, []);
 
   if (BARE_ROUTES.has(pathname)) {
     return <>{children}</>;

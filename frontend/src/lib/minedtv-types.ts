@@ -34,8 +34,9 @@ export interface ClipOut {
   playlist_url: string;
   status: UpstreamStatus;
   kind: string;
-  publish_state?: PublishState;
-  published_at?: string | null;
+  /** draft (owner only) -> ready (queued to post to YouTube, owner only) -> published (public). */
+  publish_state: PublishState;
+  published_at: string | null;
   view_count: number;
   like_count: number;
   liked_by_me: boolean | null;
@@ -143,4 +144,102 @@ export interface UploadOut {
   headers: Record<string, string>;
   expires_in_s: number;
   storage_key: string;
+}
+
+export interface CountsOut {
+  clip_id: string;
+  view_count: number;
+  like_count: number;
+  liked_by_me: boolean | null;
+}
+
+export type JobStatus = "none" | "processing" | "ready" | "failed";
+
+export interface ExportOut {
+  clip_id: string;
+  status: JobStatus;
+  url: string | null;
+  error: string | null;
+  start_ms: number;
+  end_ms: number;
+}
+
+export interface CreatorPack {
+  title_options: string[];
+  description: string;
+  summary: string;
+  caption: string;
+  youtube: {
+    title: string;
+    description: string;
+    tags: string[];
+    chapters: { timestamp: string; label: string }[];
+  };
+  reddit: { title: string; body: string; suggested_subreddits: string[] };
+  transcript: { timestamp: string; text: string }[];
+  key_moments: { timestamp: string; label: string }[];
+  hashtags: string[];
+  content_warnings: string[];
+}
+
+export interface ClipCreatorPackOut {
+  clip_id: string;
+  status: JobStatus;
+  model: string | null;
+  pack: CreatorPack | null;
+  error: string | null;
+  start_ms: number;
+  end_ms: number;
+}
+
+export type CreatorPlatform = "general" | "youtube" | "reddit" | "instagram" | "tiktok";
+
+export interface AudiencePersonaReview {
+  name: string;
+  layer: string;
+  profile: string;
+  interests: string[];
+  hook_score: number;
+  completion_probability: number;
+  like_probability: number;
+  share_probability: number;
+  skip_probability: number;
+  primary_action: string;
+  [key: string]: unknown;
+}
+
+/** The persona simulator's output (backend AudienceSimulationOut). */
+export interface AudienceSimulation {
+  platform: CreatorPlatform;
+  requested_target_audience: string | null;
+  inferred_niche: string;
+  inferred_target_audience: string;
+  virality_score: number;
+  verdict: "weak" | "mixed" | "promising" | "strong";
+  cascade_depth: "target_only" | "adjacent" | "outsider" | "broad_breakout";
+  cascade_summary: string;
+  metrics: {
+    simulated_watch_rate: number;
+    simulated_completion_rate: number;
+    simulated_like_rate: number;
+    simulated_comment_rate: number;
+    simulated_save_rate: number;
+    simulated_share_rate: number;
+  };
+  layers: { layer: string; persona_count: number; score: number; threshold: number; cleared_threshold: boolean }[];
+  persona_reviews: AudiencePersonaReview[];
+  consensus_strengths: string[];
+  consensus_risks: string[];
+  recommended_changes: string[];
+  disclaimer: string;
+}
+
+export interface ClipViralityOut {
+  clip_id: string;
+  status: JobStatus;
+  platform: CreatorPlatform;
+  result: AudienceSimulation | null;
+  error: string | null;
+  start_ms: number;
+  end_ms: number;
 }

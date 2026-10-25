@@ -3,21 +3,32 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Loader2, XCircle } from "lucide-react";
+import { CheckCircle2, Eye, Loader2, XCircle, Youtube } from "lucide-react";
 
+import { PublishBadge } from "@/components/clip-actions";
+import { ChooseUserNotice, useCurrentUser } from "@/components/current-user";
 import { FileUpload } from "@/components/file-upload";
 import { SiteNav } from "@/components/hero/site-nav";
 import { ScreenTitle } from "@/components/ui/screen-header";
-import { STATUS_COPY, fetchVideo, uploadVideo, type ProcessingStatus } from "@/lib/api";
+import {
+  STATUS_COPY,
+  fetchClipsForSession,
+  fetchVideo,
+  markClipReady,
+  publishClip,
+  uploadVideo,
+  type ProcessingStatus,
+  type Video,
+} from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 type Phase = "idle" | "uploading" | "processing" | "complete" | "failed";
 
 const STAGE_DETAIL: Partial<Record<ProcessingStatus, string>> = {
-  pending: "Queued for processing.",
-  extracting_frames: "Sampling frames with ffmpeg — scene changes plus one frame per second.",
-  analyzing: "Gemini is transcribing the audio and describing each scene.",
-  indexing: "Embedding the segments and writing them to the search index.",
+  pending: "Queued — the worker picks uploads up within about a minute.",
+  extracting_frames: "Transcoding to 720p and cutting 2-second streaming segments.",
+  analyzing: "Whisper is transcribing voice chat; highlights are being detected.",
+  indexing: "Embedding one frame per second with CLIP and writing the search index.",
 };
 
 const DOT_TONE: Record<Phase, string> = {
@@ -95,6 +106,11 @@ export default function UploadPage() {
   const [status, setStatus] = useState<ProcessingStatus>("pending");
   const [error, setError] = useState<string | null>(null);
   const [resetKey, setResetKey] = useState(0);
+  const [title, setTitle] = useState("");
+  const [game, setGame] = useState("");
+  const [clips, setClips] = useState<Video[]>([]);
+  const [acting, setActing] = useState<string | null>(null);
+  const me = useCurrentUser();
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const stopPolling = () => {
@@ -114,6 +130,8 @@ export default function UploadPage() {
         if (video.searchable) {
           setPhase("complete");
           stopPolling();
+          // The pipeline made one or more draft clips for this upload.
+          fetchClipsForSession(id).then(setClips).catch(() => setClips([]));
         } else if (video.processing_status === "failed") {
           setPhase("failed");
           setError(
@@ -134,7 +152,7 @@ export default function UploadPage() {
     setProgress(0);
     setError(null);
     try {
-      const result = await uploadVideo(selectedFile, setProgress);
+      const result = await uploadVideo(selectedFile, setProgress, { title, game });
       setVideoId(result.video_id);
       setPhase("processing");
       startPolling(result.video_id);
@@ -152,7 +170,22 @@ export default function UploadPage() {
     setVideoId(null);
     setStatus("pending");
     setError(null);
+    setClips([]);
+    setTitle("");
+    setGame("");
     setResetKey((key) => key + 1);
+  };
+
+  const updateClip = async (clip: Video, action: "publish" | "ready") => {
+    setActing(`${clip.video_id}:${action}`);
+    try {
+      const updated = await (action === "publish" ? publishClip : markClipReady)(clip.video_id);
+      setClips((list) => list.map((c) => (c.video_id === updated.video_id ? updated : c)));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not update the clip");
+    } finally {
+      setActing(null);
+    }
   };
 
   return (
@@ -179,9 +212,41 @@ export default function UploadPage() {
           </div>
         </MtvCard>
 
-        {phase === "idle" && (
+        {phase === "idle" && !me && <ChooseUserNotice action="upload clips" />}
+
+        {phase === "idle" && me && (
           <div className="space-y-4">
             <FileUpload key={resetKey} onFileSelect={setSelectedFile} />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="space-y-1 text-[13px] text-[var(--mtv-text-2)]">
+                Title
+                <input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder={selectedFile?.name.replace(/\.[^.]+$/, "") ?? "Ranked on Bind"}
+                  className="block w-full rounded-xl border border-[var(--mtv-divider)] bg-[var(--mtv-surface)] px-3 py-2.5 text-[15px] text-[var(--mtv-text)]"
+                />
+              </label>
+              <label className="space-y-1 text-[13px] text-[var(--mtv-text-2)]">
+                Game
+                <input
+                  value={game}
+                  onChange={(e) => setGame(e.target.value)}
+                  placeholder="Valorant, CS2, Fortnite…"
+                  list="minedtv-games"
+                  className="block w-full rounded-xl border border-[var(--mtv-divider)] bg-[var(--mtv-surface)] px-3 py-2.5 text-[15px] text-[var(--mtv-text)]"
+                />
+                <datalist id="minedtv-games">
+                  {["Valorant", "CS2", "Fortnite", "Apex Legends", "Minecraft", "Rocket League", "Overwatch 2", "Call of Duty", "GTA V", "Rainbow Six Siege", "Marvel Rivals", "Roblox"].map((g) => (
+                    <option key={g} value={g} />
+                  ))}
+                </datalist>
+              </label>
+            </div>
+            <p className="text-xs text-[var(--mtv-text-2)]">
+              Uploading as <span className="font-semibold text-[var(--mtv-text)]">@{me.username}</span>. New clips
+              start as private drafts, so you can check them (and run a virality test) before publishing.
+            </p>
             <div className="flex justify-end gap-3">
               <OutlineButton href="/library">Cancel</OutlineButton>
               <PrimaryButton onClick={handleUpload} disabled={!selectedFile}>
@@ -232,8 +297,55 @@ export default function UploadPage() {
                 Transcript search will work after a re-index.
               </p>
             )}
+            {clips.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-sm text-[var(--mtv-text-2)]">
+                  {clips.length === 1 ? "Your clip is" : `${clips.length} clips are`} ready. Drafts are only visible to
+                  you until you publish them.
+                </p>
+                {clips.map((clip) => (
+                  <div
+                    key={clip.video_id}
+                    className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--mtv-divider)] p-3"
+                  >
+                    <span className="min-w-0 flex-1 truncate text-sm font-semibold">{clip.title}</span>
+                    {clip.publish_state && <PublishBadge state={clip.publish_state} />}
+                    {clip.publish_state !== "published" && (
+                      <button
+                        type="button"
+                        onClick={() => void updateClip(clip, "publish")}
+                        disabled={acting !== null}
+                        className="inline-flex items-center gap-1 rounded-lg bg-[var(--mtv-gold)] px-2.5 py-1 text-xs font-bold text-[var(--mtv-on-gold)] disabled:opacity-40"
+                      >
+                        {acting === `${clip.video_id}:publish` ? <Loader2 className="h-3 w-3 animate-spin" /> : <Eye className="h-3 w-3" />}
+                        Publish
+                      </button>
+                    )}
+                    {clip.publish_state === "draft" && (
+                      <button
+                        type="button"
+                        onClick={() => void updateClip(clip, "ready")}
+                        disabled={acting !== null}
+                        className="inline-flex items-center gap-1 rounded-lg border border-[var(--mtv-divider)] px-2.5 py-1 text-xs font-semibold disabled:opacity-40"
+                      >
+                        {acting === `${clip.video_id}:ready` ? <Loader2 className="h-3 w-3 animate-spin" /> : <Youtube className="h-3 w-3" />}
+                        Ready to post
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => router.push(`/video/${clip.video_id}`)}
+                      className="rounded-lg border border-[var(--mtv-divider)] px-2.5 py-1 text-xs font-semibold"
+                    >
+                      Open
+                    </button>
+                  </div>
+                ))}
+                {error && <p className="text-xs text-[var(--mtv-red)]">{error}</p>}
+              </div>
+            )}
             <div className="flex gap-3 pt-1">
-              <PrimaryButton onClick={() => router.push(`/video/${videoId}`)}>
+              <PrimaryButton onClick={() => router.push(`/video/${clips[0]?.video_id ?? videoId}`)}>
                 Open and search it
               </PrimaryButton>
               <OutlineButton onClick={reset}>Upload another</OutlineButton>

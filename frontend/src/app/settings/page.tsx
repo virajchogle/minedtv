@@ -15,7 +15,7 @@ import {
   STATUS_COPY,
   deleteVideo,
   fetchSearchConfig,
-  fetchVideos,
+  fetchMyVideos,
   reindexVideo,
   type SearchConfig,
   type Video,
@@ -34,7 +34,8 @@ export default function SettingsPage() {
   }, []);
 
   useEffect(() => {
-    fetchVideos()
+    // Only your own clips: delete and re-index are owner actions.
+    fetchMyVideos("all", 100)
       .then(setVideos)
       .catch((caught: Error) => setError(caught.message))
       .finally(() => setLoading(false));
@@ -72,8 +73,9 @@ export default function SettingsPage() {
     setBusyId(video.video_id);
     setError(null);
     try {
-      await reindexVideo(video.video_id);
-      setVideos(await fetchVideos());
+      // Reprocessing works on the whole upload (session), not a single clip.
+      await reindexVideo(video.session_id ?? video.video_id);
+      setVideos(await fetchMyVideos("all", 100));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Re-index failed");
     } finally {

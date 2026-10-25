@@ -1,29 +1,17 @@
 "use client";
 
 /**
- * Explore — dark/gold screen per the MinedTv UI spec.
+ * Explore — every published clip on the platform.
  *
- * Two data sources, deliberately kept apart:
- *  - The search bar is always real: it calls the same `searchVideos`/
- *    `fetchVideos` pipeline as every other page, so results, counts and
- *    errors reflect whatever is actually in the connected backend (or a
- *    clear "can't reach it" message if there isn't one right now).
- *  - Everything below it — topic pills, the grid, the clip marquee — uses
- *    SAMPLE_CLIPS, hardcoded placeholder data, so the page's layout and the
- *    scroll-marquee animation are visible without a backend connection.
- *    Every one of those sections is labelled "Sample preview" so nothing
- *    here is mistaken for real uploaded content.
- *
- * The spec's "Popular Games" row assumes clips are tagged with a game, which
- * this backend's Video model doesn't have (no `game` field — only free-form
- * `topics`), so that row is replaced with "Browse by topic" instead of
- * fabricating game tiles with invented clip counts.
+ * The search bar searches all published clips (game filter + screenshot
+ * search). Below it: browse by game, the clip grid and the marquee, all from
+ * the live feed. Drafts never appear here; they live in My Library.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Search as SearchIcon, Upload } from "lucide-react";
+import { AlertTriangle, Search as SearchIcon, Upload } from "lucide-react";
 
 import { ClipMarquee } from "@/components/explore/clip-marquee";
 import { SiteNav } from "@/components/hero/site-nav";
@@ -32,32 +20,24 @@ import { ClipThumbnail } from "@/components/ui/clip-thumbnail";
 import { Pill, PillRow } from "@/components/ui/pill";
 import { ScreenTitle, SectionHeader } from "@/components/ui/screen-header";
 import { ScrollExpandMedia } from "@/components/ui/scroll-expansion-hero";
-import { fetchVideos, formatDuration, type SearchResult } from "@/lib/api";
-import { SAMPLE_CLIPS } from "@/lib/sample-clips";
+import { absoluteUrl, fetchVideos, formatDuration, type SearchResult, type Video } from "@/lib/api";
 
 const EXPLORE_HERO_VIDEO = "/videos/explore-hero.mp4";
 const EXPLORE_HERO_POSTER = "/images/minecraft-hero.webp";
 
-const SAMPLE_TOPICS = (() => {
-  const counts = new Map<string, number>();
-  for (const clip of SAMPLE_CLIPS) {
-    for (const t of clip.topics) counts.set(t, (counts.get(t) ?? 0) + 1);
-  }
-  return [...counts.entries()].sort((a, b) => b[1] - a[1]);
-})();
-
 export default function ExplorePage() {
   const router = useRouter();
-  // Only used to tell the search bar whether the backend has anything
-  // indexed — never used to render the grid/marquee below.
-  const [searchableCount, setSearchableCount] = useState<number | null>(null);
+  const [videos, setVideos] = useState<Video[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [game, setGame] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const videos = await fetchVideos();
-      setSearchableCount(videos.filter((v) => v.searchable).length);
-    } catch {
-      setSearchableCount(0);
+      setVideos(await fetchVideos(100));
+      setError(null);
+    } catch (caught) {
+      setVideos([]);
+      setError(caught instanceof Error ? caught.message : "Could not load clips");
     }
   }, []);
 
@@ -65,8 +45,13 @@ export default function ExplorePage() {
     void load();
   }, [load]);
 
-  const [topic, setTopic] = useState<string | null>(null);
-  const filtered = topic ? SAMPLE_CLIPS.filter((v) => v.topics.includes(topic)) : SAMPLE_CLIPS;
+  const searchable = useMemo(() => (videos ?? []).filter((v) => v.searchable), [videos]);
+  const games = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const v of searchable) if (v.game) counts.set(v.game, (counts.get(v.game) ?? 0) + 1);
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  }, [searchable]);
+  const filtered = game ? searchable.filter((v) => v.game === game) : searchable;
 
   const openResult = (result: SearchResult) => {
     router.push(`/video/${result.video_id}?t=${Math.floor(result.seek_seconds)}`);
@@ -85,89 +70,102 @@ export default function ExplorePage() {
         date="Every moment, searchable"
         scrollToExpand="Scroll to expand"
       >
-      <div className="mx-auto max-w-6xl space-y-10 px-4 pb-16 sm:px-8">
-        <ScreenTitle
-          action={
-            <Link
-              href="/upload"
-              className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--mtv-gold)] px-3.5 py-2 text-[13px] font-bold text-[var(--mtv-on-gold)]"
-            >
-              <Upload className="h-3.5 w-3.5" />
-              Upload
-            </Link>
-          }
-        >
-          Explore
-        </ScreenTitle>
-
-        {/* ── real backend search — not sample data ── */}
-        <div className="rounded-2xl border border-[var(--mtv-divider)] bg-[var(--mtv-surface)] p-4 sm:p-6">
-          <div className="mb-4 flex items-center gap-2 text-[13px] font-semibold text-[var(--mtv-gold)]">
-            <SearchIcon className="h-4 w-4" />
-            Search every clip, every moment
-          </div>
-          <SearchPanel
-            scope="gallery"
-            placeholder="Search clips, moments, topics…"
-            scopeLabel={
-              <span>
-                {searchableCount === null
-                  ? "Checking your library…"
-                  : searchableCount > 0
-                    ? `${searchableCount} clip${searchableCount === 1 ? "" : "s"} indexed`
-                    : "Connect the backend to search your real clips"}
-              </span>
+        <div className="mx-auto max-w-6xl space-y-10 px-4 pb-16 sm:px-8">
+          <ScreenTitle
+            action={
+              <Link
+                href="/upload"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--mtv-gold)] px-3.5 py-2 text-[13px] font-bold text-[var(--mtv-on-gold)]"
+              >
+                <Upload className="h-3.5 w-3.5" />
+                Upload
+              </Link>
             }
-            onOpenResult={openResult}
-            disabled={!searchableCount}
-            disabledMessage="Connect the MineDTV backend and index a clip to search for real."
-          />
-        </div>
+          >
+            Explore
+          </ScreenTitle>
 
-        {/* ── everything from here down is placeholder layout, not real data ── */}
-        <div className="rounded-xl border border-dashed border-[var(--mtv-divider)] px-4 py-2 text-center text-[11px] uppercase tracking-[0.2em] text-[var(--mtv-text-2)]">
-          Sample preview — layout &amp; animation only, not your real library
-        </div>
-
-        <section className="space-y-3">
-          <SectionHeader title="Browse by topic" />
-          <PillRow>
-            <Pill selected={topic === null} onClick={() => setTopic(null)}>
-              All
-            </Pill>
-            {SAMPLE_TOPICS.map(([t, count]) => (
-              <Pill key={t} selected={topic === t} onClick={() => setTopic(t)}>
-                {t} · {count}
-              </Pill>
-            ))}
-          </PillRow>
-        </section>
-
-        <section className="space-y-3">
-          <SectionHeader title={topic ? `"${topic}" clips` : "Library"} />
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-            {filtered.map((video) => (
-              <div key={video.video_id}>
-                <ClipThumbnail
-                  compact
-                  src={null}
-                  alt={video.title}
-                  duration={formatDuration(video.duration_seconds)}
-                />
-                <p className="mt-1.5 line-clamp-2 text-[13px] font-semibold">{video.title}</p>
-                <p className="text-[11px] text-[var(--mtv-text-2)]">
-                  {video.segment_count} moments indexed
-                </p>
-              </div>
-            ))}
+          <div className="rounded-2xl border border-[var(--mtv-divider)] bg-[var(--mtv-surface)] p-4 sm:p-6">
+            <div className="mb-4 flex items-center gap-2 text-[13px] font-semibold text-[var(--mtv-gold)]">
+              <SearchIcon className="h-4 w-4" />
+              Search every clip, every moment
+            </div>
+            <SearchPanel
+              scope="gallery"
+              games={games.map(([g]) => g)}
+              allowImage
+              placeholder="Search clips, moments, what was said…"
+              scopeLabel={
+                <span>
+                  {videos === null
+                    ? "Loading clips…"
+                    : `${searchable.length} published clip${searchable.length === 1 ? "" : "s"}`}
+                </span>
+              }
+              onOpenResult={openResult}
+              disabled={searchable.length === 0}
+              disabledMessage={videos === null ? "Loading clips…" : "No published clips yet."}
+            />
           </div>
-        </section>
 
-        <section className="space-y-3">
-          <SectionHeader title="Every clip on the platform" />
-          <ClipMarquee videos={SAMPLE_CLIPS} linkable={false} />
-        </section>
-      </div>
+          {error && (
+            <div className="flex items-start gap-2 rounded-lg border border-[var(--mtv-red)]/40 bg-[var(--mtv-red)]/10 p-3 text-sm text-[var(--mtv-red)]">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <p>{error}</p>
+            </div>
+          )}
+
+          {games.length > 0 && (
+            <section className="space-y-3">
+              <SectionHeader title="Browse by game" />
+              <PillRow>
+                <Pill selected={game === null} onClick={() => setGame(null)}>
+                  All · {searchable.length}
+                </Pill>
+                {games.map(([g, count]) => (
+                  <Pill key={g} selected={game === g} onClick={() => setGame(g)}>
+                    {g} · {count}
+                  </Pill>
+                ))}
+              </PillRow>
+            </section>
+          )}
+
+          <section className="space-y-3">
+            <SectionHeader title={game ? `${game} clips` : "Latest clips"} />
+            {filtered.length === 0 && videos !== null ? (
+              <p className="text-sm text-[var(--mtv-text-2)]">No published clips yet.</p>
+            ) : (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                {filtered.map((video) => (
+                  <Link key={video.video_id} href={`/video/${video.video_id}`} className="group">
+                    <ClipThumbnail
+                      compact
+                      src={absoluteUrl(video.thumbnail_url)}
+                      alt={video.title}
+                      duration={formatDuration(video.duration_seconds)}
+                    />
+                    <p className="mt-1.5 line-clamp-2 text-[13px] font-semibold group-hover:text-[var(--mtv-gold)]">
+                      {video.title}
+                    </p>
+                    <p className="text-[11px] text-[var(--mtv-text-2)]">
+                      {[video.uploader && `@${video.uploader}`, video.game].filter(Boolean).join(" · ")}
+                      {" · "}
+                      {video.view_count.toLocaleString()} views
+                    </p>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {searchable.length > 0 && (
+            <section className="space-y-3">
+              <SectionHeader title="Every clip on the platform" />
+              <ClipMarquee videos={searchable} />
+            </section>
+          )}
+        </div>
       </ScrollExpandMedia>
     </div>
   );

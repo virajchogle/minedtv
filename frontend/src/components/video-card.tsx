@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { AlertTriangle, Eye, Loader2, Play } from "lucide-react";
+import { AlertTriangle, Eye, Heart, Loader2, Play } from "lucide-react";
+
+import { PublishBadge } from "@/components/clip-actions";
 
 import {
   STATUS_COPY,
@@ -59,14 +61,20 @@ export function VideoCard({ video }: { video: Video }) {
           {formatDuration(video.duration_seconds)}
         </span>
 
-        <span
-          className={cn(
-            "absolute left-2 top-2 rounded-full border px-2 py-0.5 text-[11px] font-medium",
-            TONE_CLASSES[status.tone]
-          )}
-        >
-          {status.label}
-        </span>
+        {video.searchable && video.publish_state ? (
+          video.publish_state !== "published" && (
+            <PublishBadge state={video.publish_state} className="absolute left-2 top-2" />
+          )
+        ) : (
+          <span
+            className={cn(
+              "absolute left-2 top-2 rounded-full border px-2 py-0.5 text-[11px] font-medium",
+              TONE_CLASSES[status.tone]
+            )}
+          >
+            {status.label}
+          </span>
+        )}
       </div>
 
       <div className="space-y-1 p-4">
@@ -74,12 +82,21 @@ export function VideoCard({ video }: { video: Video }) {
           {video.title}
         </h3>
         <p className="text-xs text-[var(--mtv-text-2)]">
-          {video.searchable
-            ? `${video.frame_count} frames · ${video.segment_count} segments indexed`
-            : status.label}
-          {" · "}
-          {formatUploadDate(video.upload_date)}
+          {[video.uploader && `@${video.uploader}`, video.game, formatUploadDate(video.upload_date)]
+            .filter(Boolean)
+            .join(" · ")}
         </p>
+        {video.searchable && (
+          <p className="flex items-center gap-3 text-xs text-[var(--mtv-text-2)]">
+            <span className="inline-flex items-center gap-1">
+              <Eye className="h-3 w-3" /> {video.view_count.toLocaleString()}
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <Heart className={cn("h-3 w-3", video.liked_by_me && "fill-current text-[var(--mtv-red)]")} />{" "}
+              {video.like_count.toLocaleString()}
+            </span>
+          </p>
+        )}
         {video.summary && (
           <p className="line-clamp-2 pt-1 text-xs text-[var(--mtv-text-2)]/80">{video.summary}</p>
         )}

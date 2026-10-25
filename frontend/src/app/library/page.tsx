@@ -1,62 +1,83 @@
 "use client";
 
+/**
+ * My Library — the acting user's own clips, in their publish buckets:
+ * draft (only you), ready (queued to post to YouTube) and published (public).
+ * Search here is scoped to your clips and includes drafts.
+ */
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AlertTriangle, Loader2, RefreshCw, Upload } from "lucide-react";
 
+import { ChooseUserNotice, useCurrentUser } from "@/components/current-user";
 import { SiteNav } from "@/components/hero/site-nav";
 import { SearchPanel } from "@/components/search-panel";
+import { Pill, PillRow } from "@/components/ui/pill";
 import { ScreenTitle } from "@/components/ui/screen-header";
 import { VideoCard } from "@/components/video-card";
-import { fetchVideos, type SearchResult, type Video } from "@/lib/api";
+import { fetchMyVideos, type ClipBucket, type SearchResult, type Video } from "@/lib/api";
 
-// Videos being processed change state server-side, so the gallery re-polls
-// while any of them is still working.
+// Clips being processed change state server-side, so the list re-polls while any are working.
 const POLL_INTERVAL_MS = 5000;
 
-export default function GalleryPage() {
+const BUCKETS: { id: ClipBucket; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "draft", label: "Drafts" },
+  { id: "ready", label: "Ready to post" },
+  { id: "published", label: "Published" },
+];
+
+export default function LibraryPage() {
   const router = useRouter();
-  const [videos, setVideos] = useState<Video[]>([]);
+  const me = useCurrentUser();
+  const [bucket, setBucket] = useState<ClipBucket>("all");
+  const [allClips, setAllClips] = useState<Video[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    if (!me) {
+      setAllClips([]);
+      setLoading(false);
+      return;
+    }
     try {
-      setVideos(await fetchVideos());
+      setAllClips(await fetchMyVideos("all", 100));
       setError(null);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not load the library");
+      setError(caught instanceof Error ? caught.message : "Could not load your clips");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [me]);
 
   useEffect(() => {
+    setLoading(true);
     void load();
   }, [load]);
 
-  const processing = videos.filter(
-    (video) => !video.searchable && video.processing_status !== "failed"
-  );
+  const videos = bucket === "all" ? allClips : allClips.filter((v) => v.publish_state === bucket);
+  const counts: Record<string, number> = {
+    all: allClips.length,
+    draft: allClips.filter((v) => v.publish_state === "draft").length,
+    ready: allClips.filter((v) => v.publish_state === "ready").length,
+    published: allClips.filter((v) => v.publish_state === "published").length,
+  };
 
+  const processing = allClips.filter((v) => !v.searchable && v.processing_status !== "failed");
   useEffect(() => {
     if (processing.length === 0) return;
     const timer = setInterval(() => void load(), POLL_INTERVAL_MS);
     return () => clearInterval(timer);
   }, [processing.length, load]);
 
-  const stats = useMemo(() => {
-    const searchable = videos.filter((v) => v.searchable);
-    return {
-      searchable: searchable.length,
-      segments: searchable.reduce((total, v) => total + v.segment_count, 0),
-      failed: videos.filter((v) => v.processing_status === "failed").length,
-    };
-  }, [videos]);
+  const games = useMemo(
+    () => [...new Set(allClips.map((v) => v.game).filter((g): g is string => Boolean(g)))].sort(),
+    [allClips]
+  );
 
-  // A gallery result belongs to some other page: send the user to that video,
-  // already seeked, so the single-video context is correct on arrival.
   const openResult = (result: SearchResult) => {
     router.push(`/video/${result.video_id}?t=${Math.floor(result.seek_seconds)}`);
   };
@@ -80,87 +101,91 @@ export default function GalleryPage() {
           My Library
         </ScreenTitle>
 
-        <SearchPanel
-          scope="gallery"
-          placeholder="Search your clips…"
-          large
-          scopeLabel={
-            <span>
-              Searching all videos
-              {stats.searchable > 0 && ` · ${stats.searchable} indexed`}
-            </span>
-          }
-          onOpenResult={openResult}
-          disabled={stats.searchable === 0}
-          disabledMessage={
-            loading ? "Loading your library…" : "Upload and index a video to start searching."
-          }
-        />
+        {!me ? (
+          <ChooseUserNotice action="see your clips, drafts and what's ready to post" />
+        ) : (
+          <>
+            <SearchPanel
+              scope="gallery"
+              mine
+              games={games}
+              allowImage
+              placeholder={`Search ${me.username}'s clips, including drafts…`}
+              large
+              scopeLabel={<span>Searching your clips · {counts.all} total</span>}
+              onOpenResult={openResult}
+              disabled={counts.all === 0}
+              disabledMessage={loading ? "Loading your clips…" : "Upload a video to start searching."}
+            />
 
-        <section className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-bold">Library</h2>
-              <p className="text-xs text-[var(--mtv-text-2)]">
-                {stats.searchable} searchable · {stats.segments} indexed segments
-                {processing.length > 0 && ` · ${processing.length} processing`}
-                {stats.failed > 0 && ` · ${stats.failed} failed`}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => void load()}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--mtv-divider)] px-3 py-1.5 text-xs transition-colors hover:bg-[var(--mtv-surface-high)]"
-            >
-              <RefreshCw className="h-3.5 w-3.5" />
-              Refresh
-            </button>
-          </div>
-
-          {loading && (
-            <div className="flex items-center gap-2 text-sm text-[var(--mtv-text-2)]">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Loading your library…
-            </div>
-          )}
-
-          {error && (
-            <div className="flex items-start gap-2 rounded-lg border border-[var(--mtv-red)]/40 bg-[var(--mtv-red)]/10 p-3 text-sm text-[var(--mtv-red)]">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-              <div>
-                <p>{error}</p>
+            <section className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <PillRow>
+                  {BUCKETS.map((b) => (
+                    <Pill key={b.id} selected={bucket === b.id} onClick={() => setBucket(b.id)}>
+                      {b.label} · {counts[b.id] ?? 0}
+                    </Pill>
+                  ))}
+                </PillRow>
                 <button
                   type="button"
                   onClick={() => void load()}
-                  className="mt-1 underline underline-offset-2"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--mtv-divider)] px-3 py-1.5 text-xs transition-colors hover:bg-[var(--mtv-surface-high)]"
                 >
-                  Try again
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Refresh
                 </button>
               </div>
-            </div>
-          )}
 
-          {!loading && !error && videos.length === 0 && (
-            <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-[var(--mtv-divider)] py-16 text-center">
-              <Upload className="h-10 w-10 text-[var(--mtv-text-2)]/40" />
-              <p className="text-sm">Your library is empty.</p>
-              <Link
-                href="/upload"
-                className="text-sm text-[var(--mtv-gold)] underline underline-offset-2"
-              >
-                Upload your first video
-              </Link>
-            </div>
-          )}
+              {bucket === "ready" && (
+                <p className="text-xs text-[var(--mtv-text-2)]">
+                  Clips queued to post to YouTube. They stay private until you publish them.
+                </p>
+              )}
 
-          {videos.length > 0 && (
-            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              {videos.map((video) => (
-                <VideoCard key={video.video_id} video={video} />
-              ))}
-            </div>
-          )}
-        </section>
+              {loading && (
+                <div className="flex items-center gap-2 text-sm text-[var(--mtv-text-2)]">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading your clips…
+                </div>
+              )}
+
+              {error && (
+                <div className="flex items-start gap-2 rounded-lg border border-[var(--mtv-red)]/40 bg-[var(--mtv-red)]/10 p-3 text-sm text-[var(--mtv-red)]">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <div>
+                    <p>{error}</p>
+                    <button type="button" onClick={() => void load()} className="mt-1 underline underline-offset-2">
+                      Try again
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {!loading && !error && videos.length === 0 && (
+                <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-[var(--mtv-divider)] py-16 text-center">
+                  <Upload className="h-10 w-10 text-[var(--mtv-text-2)]/40" />
+                  <p className="text-sm">
+                    {bucket === "all" ? "You haven't uploaded anything yet." : "Nothing in this bucket."}
+                  </p>
+                  {bucket === "all" && (
+                    <Link href="/upload" className="text-sm text-[var(--mtv-gold)] underline underline-offset-2">
+                      Upload your first video
+                    </Link>
+                  )}
+                </div>
+              )}
+
+              {videos.length > 0 && (
+                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                  {videos.map((video) => (
+                    <VideoCard key={video.video_id} video={video} />
+                  ))}
+                </div>
+              )}
+            </section>
+          </>
+        )}
       </div>
     </div>
   );
