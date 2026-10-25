@@ -51,6 +51,9 @@ class SessionStatus:
     FAILED = "failed"
 
 
+PUBLISH_STATES = ("draft", "ready", "published")
+UNPUBLISHED_STATES = ("draft", "ready")
+
 # Pipeline steps in order, and the session status shown while each one runs.
 PIPELINE_STEPS = ["probe", "segment", "thumbnails", "frames", "audio", "highlights", "finalize"]
 STEP_STATUS = {
@@ -126,6 +129,8 @@ class Clip(Base):
     __table_args__ = (
         Index("ix_clips_created_id", "created_at", "id"),
         Index("ix_clips_session_range", "session_id", "start_ms", "end_ms"),
+        Index("ix_clips_state_created", "publish_state", "created_at", "id"),
+        CheckConstraint("publish_state IN ('draft', 'ready', 'published')", name="ck_clips_publish_state"),
         CheckConstraint("start_ms >= 0 AND end_ms > start_ms", name="ck_clips_range"),
     )
 
@@ -142,6 +147,10 @@ class Clip(Base):
     created_at: Mapped[datetime] = _created()
     # "auto" clips are (re)created by the pipeline's finalize step; "user" clips are never touched by it.
     kind: Mapped[str] = mapped_column(String(16), nullable=False, default="user", server_default="user")
+    # draft -> ready (queued to post to YouTube) -> published (visible in feed/search). Unpublished
+    # clips are owner-only; virality simulation only runs on them.
+    publish_state: Mapped[str] = mapped_column(String(16), nullable=False, default="draft", server_default="draft")
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Frame(Base):

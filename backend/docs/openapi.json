@@ -362,7 +362,7 @@
           "clips"
         ],
         "summary": "Get Clip",
-        "description": "Clip detail, with the highlight events and transcript lines inside its time range.",
+        "description": "Clip detail, with the highlight events and transcript lines inside its time range.\nUnpublished clips are only visible to their owner (send X-User-Id).",
         "operationId": "get_clip_clips__clip_id__get",
         "parameters": [
           {
@@ -593,7 +593,7 @@
           "clips"
         ],
         "summary": "Create Clip",
-        "description": "Create a clip from any time range of a ready session. No video is copied.",
+        "description": "Create a clip from any time range of a ready session. No video is copied. New clips start\nas drafts (owner-only); publish them with POST /clips/{id}/publish.",
         "operationId": "create_clip_clips_post",
         "parameters": [
           {
@@ -920,13 +920,464 @@
         }
       }
     },
+    "/clips/{clip_id}/creator-pack": {
+      "get": {
+        "tags": [
+          "clips"
+        ],
+        "summary": "Get Creator Pack",
+        "description": "Status of the AI creator pack (titles, caption, hashtags, YouTube/Reddit metadata) for this clip.",
+        "operationId": "get_creator_pack_clips__clip_id__creator_pack_get",
+        "parameters": [
+          {
+            "name": "clip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Clip Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClipCreatorPackOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "clips"
+        ],
+        "summary": "Start Creator Pack",
+        "description": "Generate the creator pack for an already-uploaded clip (no re-upload). Gemini watches the\nclip's MP4; takes ~1-2 min. Idempotent; poll GET until status is 'ready'.",
+        "operationId": "start_creator_pack_clips__clip_id__creator_pack_post",
+        "parameters": [
+          {
+            "name": "clip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Clip Id"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClipCreatorPackOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clips/{clip_id}/publish": {
+      "post": {
+        "tags": [
+          "clips"
+        ],
+        "summary": "Publish Clip",
+        "description": "Make the clip public: it appears in the feed, search and the owner's profile.",
+        "operationId": "publish_clip_clips__clip_id__publish_post",
+        "parameters": [
+          {
+            "name": "clip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Clip Id"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Acting user's ID (demo identity, no auth yet)",
+              "title": "X-User-Id"
+            },
+            "description": "Acting user's ID (demo identity, no auth yet)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClipOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clips/{clip_id}/unpublish": {
+      "post": {
+        "tags": [
+          "clips"
+        ],
+        "summary": "Unpublish Clip",
+        "description": "Back to draft: hidden from everyone but the owner.",
+        "operationId": "unpublish_clip_clips__clip_id__unpublish_post",
+        "parameters": [
+          {
+            "name": "clip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Clip Id"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Acting user's ID (demo identity, no auth yet)",
+              "title": "X-User-Id"
+            },
+            "description": "Acting user's ID (demo identity, no auth yet)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClipOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clips/{clip_id}/mark-ready": {
+      "post": {
+        "tags": [
+          "clips"
+        ],
+        "summary": "Mark Ready",
+        "description": "Queue the clip as \"ready to post to YouTube\". Still private (owner only) until published.",
+        "operationId": "mark_ready_clips__clip_id__mark_ready_post",
+        "parameters": [
+          {
+            "name": "clip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Clip Id"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Acting user's ID (demo identity, no auth yet)",
+              "title": "X-User-Id"
+            },
+            "description": "Acting user's ID (demo identity, no auth yet)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClipOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clips/{clip_id}/virality": {
+      "post": {
+        "tags": [
+          "clips"
+        ],
+        "summary": "Start Virality",
+        "description": "Run the synthetic audience panel on an unpublished (draft or ready) clip you own. Builds the\nclip's creator pack first if needed; takes a few minutes. Poll GET with the same options.",
+        "operationId": "start_virality_clips__clip_id__virality_post",
+        "parameters": [
+          {
+            "name": "clip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Clip Id"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Acting user's ID (demo identity, no auth yet)",
+              "title": "X-User-Id"
+            },
+            "description": "Acting user's ID (demo identity, no auth yet)"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClipViralityIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClipViralityOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "clips"
+        ],
+        "summary": "Get Virality",
+        "description": "Status/result of the virality check for these options (same values you POSTed).",
+        "operationId": "get_virality_clips__clip_id__virality_get",
+        "parameters": [
+          {
+            "name": "clip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Clip Id"
+            }
+          },
+          {
+            "name": "platform",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "general",
+              "title": "Platform"
+            }
+          },
+          {
+            "name": "target_audience",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Target Audience"
+            }
+          },
+          {
+            "name": "persona_count",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Persona Count"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Acting user's ID (demo identity, no auth yet)",
+              "title": "X-User-Id"
+            },
+            "description": "Acting user's ID (demo identity, no auth yet)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClipViralityOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/feed": {
       "get": {
         "tags": [
           "feed"
         ],
         "summary": "Feed",
-        "description": "Clip feed, newest first.",
+        "description": "Published clips, newest first.",
         "operationId": "feed_feed_get",
         "parameters": [
           {
@@ -1025,7 +1476,7 @@
           "search"
         ],
         "summary": "Search",
-        "description": "Hybrid semantic search: visual frames + speech (semantic and keyword) + highlight events, fused with RRF.\n\nOne result per session, resolved to the clip containing the best moment, or a suggested\n\u00b115 s window when no clip contains it.",
+        "description": "Hybrid semantic search: visual frames + speech (semantic and keyword) + highlight events, fused with RRF.\n\nOne result per session, resolved to the clip containing the best moment. Only published clips\nare searched, except when user_id is your own X-User-Id: then your drafts and \"ready\" clips\nare included too, plus suggested \u00b115 s windows for matches outside any clip.",
         "operationId": "search_search_get",
         "parameters": [
           {
@@ -1132,6 +1583,25 @@
               "title": "Nocache"
             },
             "description": "Skip the 5-minute result cache (for load testing)"
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Acting user's ID (demo identity, no auth yet)",
+              "title": "X-User-Id"
+            },
+            "description": "Acting user's ID (demo identity, no auth yet)"
           }
         ],
         "responses": {
@@ -1166,15 +1636,36 @@
         "summary": "Search Image",
         "description": "Find the moments that look most like an uploaded screenshot.",
         "operationId": "search_image_search_image_post",
+        "parameters": [
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Acting user's ID (demo identity, no auth yet)",
+              "title": "X-User-Id"
+            },
+            "description": "Acting user's ID (demo identity, no auth yet)"
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "multipart/form-data": {
               "schema": {
                 "$ref": "#/components/schemas/Body_search_image_search_image_post"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -1338,7 +1829,7 @@
           "users"
         ],
         "summary": "User Clips",
-        "description": "A user's clips, newest first (same pagination as /feed).",
+        "description": "A user's clips, newest first (same pagination as /feed). Owners can filter by publish state:\ndraft, ready (queued to post to YouTube), published, unpublished (draft + ready) or all.",
         "operationId": "user_clips_users__user_id__clips_get",
         "parameters": [
           {
@@ -1378,6 +1869,25 @@
               "default": 20,
               "title": "Limit"
             }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "all",
+                "draft",
+                "ready",
+                "published",
+                "unpublished"
+              ],
+              "type": "string",
+              "description": "Owner only (X-User-Id = user_id); everyone else always gets published clips",
+              "default": "all",
+              "title": "State"
+            },
+            "description": "Owner only (X-User-Id = user_id); everyone else always gets published clips"
           },
           {
             "name": "x-user-id",
@@ -2169,6 +2679,75 @@
         ],
         "title": "ClipCreate"
       },
+      "ClipCreatorPackOut": {
+        "properties": {
+          "clip_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Clip Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "none",
+              "processing",
+              "ready",
+              "failed"
+            ],
+            "title": "Status",
+            "description": "'none' = never requested for this clip range; POST to start"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model",
+            "description": "Gemini model that produced the pack"
+          },
+          "pack": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CreatorPackOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "start_ms": {
+            "type": "integer",
+            "title": "Start Ms"
+          },
+          "end_ms": {
+            "type": "integer",
+            "title": "End Ms"
+          }
+        },
+        "type": "object",
+        "required": [
+          "clip_id",
+          "status",
+          "start_ms",
+          "end_ms"
+        ],
+        "title": "ClipCreatorPackOut"
+      },
       "ClipDetailOut": {
         "properties": {
           "id": {
@@ -2244,6 +2823,29 @@
               "user"
             ],
             "title": "Kind"
+          },
+          "publish_state": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "ready",
+              "published"
+            ],
+            "title": "Publish State",
+            "description": "draft (owner only) -> ready (queued to post to YouTube, owner only) -> published (public)",
+            "default": "published"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
           },
           "view_count": {
             "type": "integer",
@@ -2395,6 +2997,29 @@
             ],
             "title": "Kind"
           },
+          "publish_state": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "ready",
+              "published"
+            ],
+            "title": "Publish State",
+            "description": "draft (owner only) -> ready (queued to post to YouTube, owner only) -> published (public)",
+            "default": "published"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
           "view_count": {
             "type": "integer",
             "title": "View Count"
@@ -2482,6 +3107,117 @@
         },
         "type": "object",
         "title": "ClipPatch"
+      },
+      "ClipViralityIn": {
+        "properties": {
+          "platform": {
+            "type": "string",
+            "enum": [
+              "general",
+              "youtube",
+              "reddit",
+              "instagram",
+              "tiktok"
+            ],
+            "title": "Platform",
+            "default": "general"
+          },
+          "target_audience": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Audience"
+          },
+          "persona_count": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 15.0,
+                "minimum": 3.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persona Count"
+          }
+        },
+        "type": "object",
+        "title": "ClipViralityIn"
+      },
+      "ClipViralityOut": {
+        "properties": {
+          "clip_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Clip Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "none",
+              "processing",
+              "ready",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "platform": {
+            "type": "string",
+            "enum": [
+              "general",
+              "youtube",
+              "reddit",
+              "instagram",
+              "tiktok"
+            ],
+            "title": "Platform"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AudienceSimulationOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "start_ms": {
+            "type": "integer",
+            "title": "Start Ms"
+          },
+          "end_ms": {
+            "type": "integer",
+            "title": "End Ms"
+          }
+        },
+        "type": "object",
+        "required": [
+          "clip_id",
+          "status",
+          "platform",
+          "start_ms",
+          "end_ms"
+        ],
+        "title": "ClipViralityOut"
       },
       "CountsOut": {
         "properties": {

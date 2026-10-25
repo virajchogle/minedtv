@@ -17,7 +17,7 @@ from collections.abc import Hashable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from sqlalchemy import Select, func, literal, select
+from sqlalchemy import Select, exists, func, literal, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import Settings
@@ -79,6 +79,8 @@ class Filters:
     user_id: uuid.UUID | None = None
     date_from: datetime | None = None
     date_to: datetime | None = None
+    # Only set when the caller searches their own clips: drafts and "ready" clips are included.
+    include_unpublished: bool = False
 
 
 @dataclass
@@ -246,9 +248,10 @@ def group_by_session(moments: list[Moment], max_others: int = 3) -> list[Session
 
 def cache_key(q: str, f: Filters, limit: int) -> str:
     payload = json.dumps(
-        [normalize_query(q), (f.game or "").lower(), str(f.user_id or ""), str(f.date_from or ""), str(f.date_to or ""), limit]
+        [normalize_query(q), (f.game or "").lower(), str(f.user_id or ""), str(f.date_from or ""), str(f.date_to or ""),
+         limit, f.include_unpublished]
     )
-    return "search:v2:" + hashlib.sha1(payload.encode()).hexdigest()
+    return "search:v3:" + hashlib.sha1(payload.encode()).hexdigest()
 
 
 # ---------------------------------------------------------------- signal queries
@@ -256,6 +259,11 @@ def cache_key(q: str, f: Filters, limit: int) -> str:
 
 def _filtered(stmt: Select, f: Filters) -> Select:
     stmt = stmt.where(Session.status == SessionStatus.READY)
+    if not f.include_unpublished:
+        # Public search only looks at sessions that have something published.
+        stmt = stmt.where(
+            exists().where(Clip.session_id == Session.id, Clip.publish_state == "published", Clip.status == "ready")
+        )
     if f.game:
         stmt = stmt.where(func.lower(Session.game) == f.game.lower())
     if f.user_id:
@@ -386,7 +394,11 @@ async def _nearest_thumb(db: AsyncSession, session_id: uuid.UUID, t: int) -> str
     )
 
 
-async def resolve(db: AsyncSession, hits: list[SessionHit], window_ms: int) -> list[Resolved]:
+async def resolve(
+    db: AsyncSession, hits: list[SessionHit], window_ms: int, include_unpublished: bool = False
+) -> list[Resolved]:
+    """Turn each session's moments into a result. Public search only resolves to published clips,
+    so unpublished footage never leaks; owners also get drafts and suggested windows."""
     if not hits:
         return []
     session_ids = [h.best.session_id for h in hits]
@@ -400,16 +412,33 @@ async def resolve(db: AsyncSession, hits: list[SessionHit], window_ms: int) -> l
         if row is None:
             continue
         s, u = row.Session, row.User
-        t = h.best.t_ms
-        # Most specific clip containing the moment.
-        clip = await db.scalar(
-            select(Clip)
-            .where(Clip.session_id == s.id, Clip.status == "ready", Clip.start_ms <= t, Clip.end_ms >= t)
-            .order_by((Clip.end_ms - Clip.start_ms).asc(), (Clip.kind == literal("auto")).asc())
-            .limit(1)
-        )
+        candidates = [h.best, *h.others]
+        clip, anchor = None, None
+        for m in candidates:
+            # Most specific visible clip containing the moment.
+            stmt = (
+                select(Clip)
+                .where(Clip.session_id == s.id, Clip.status == "ready", Clip.start_ms <= m.t_ms, Clip.end_ms >= m.t_ms)
+                .order_by((Clip.end_ms - Clip.start_ms).asc(), (Clip.kind == literal("auto")).asc())
+                .limit(1)
+            )
+            if not include_unpublished:
+                stmt = stmt.where(Clip.publish_state == "published")
+            clip = await db.scalar(stmt)
+            if clip is not None:
+                anchor = m
+                break
+        if clip is None:
+            if not include_unpublished:
+                continue  # every match is in unpublished footage
+            anchor = h.best
+        ordered = [anchor, *[m for m in candidates if m is not anchor]]
+        if clip is not None:
+            # Other moments are only shown if they fall inside the same clip.
+            ordered = [anchor, *[m for m in ordered[1:] if clip.start_ms <= m.t_ms <= clip.end_ms]]
+        t = anchor.t_ms
         moments = []
-        for m in [h.best, *h.others]:
+        for m in ordered:
             moments.append(
                 {
                     "t_ms": m.t_ms,
@@ -434,15 +463,15 @@ async def resolve(db: AsyncSession, hits: list[SessionHit], window_ms: int) -> l
                 match_t_ms=t,
                 start_ms=start,
                 end_ms=end,
-                score=round(h.best.score, 6),
-                confidence=h.best.confidence,
+                score=round(anchor.score, 6),
+                confidence=anchor.confidence,
                 signals=moments[0]["signals"],
                 thumbnail_key=thumb or (clip.thumbnail_key if clip else None) or s.poster_key,
-                transcript_snippet=h.best.snippet,
+                transcript_snippet=anchor.snippet,
                 game=s.game,
                 title=title,
                 user={"id": str(u.id), "username": u.username, "avatar_url": u.avatar_url},
-                other_moments_ms=[m.t_ms for m in h.others],
+                other_moments_ms=[m.t_ms for m in ordered[1:]],
                 moments=moments,
             )
         )
@@ -477,15 +506,16 @@ class SearchService:
             visual_relative=st.visual_relative_cutoff,
         )
 
-    async def _finish(self, hit_lists: dict[str, list[Hit]], limit: int, th: Thresholds) -> list[Resolved]:
+    async def _finish(self, hit_lists: dict[str, list[Hit]], limit: int, th: Thresholds, f: Filters) -> list[Resolved]:
         st = self.settings
         moments = fuse(drop_weak(hit_lists, th), st.rrf_k, st.moment_window_ms)
         for m in moments:
             m.confidence = confidence(m.strength, th)
         moments = rank_moments(drop_lone_weak_speech(moments, th))
-        grouped = group_by_session(moments)[:limit]
+        # Over-fetch: public search may skip sessions whose matches are all in unpublished footage.
+        grouped = group_by_session(moments)[: limit * 2]
         async with self.sessionmaker() as db:
-            return await resolve(db, grouped, st.clip_window_ms)
+            return (await resolve(db, grouped, st.clip_window_ms, f.include_unpublished))[:limit]
 
     async def search_text(self, q: str, f: Filters, limit: int) -> tuple[list[Resolved], bool]:
         """Returns (results, served_from_cache)."""
@@ -519,7 +549,7 @@ class SearchService:
             self._run(event_hits, event_types_for(q), f, n),
         )
         hit_lists = dict(zip(SIGNALS, results, strict=True))
-        resolved = await self._finish(hit_lists, limit, self._thresholds())
+        resolved = await self._finish(hit_lists, limit, self._thresholds(), f)
         log.info(
             "search",
             extra={"q": q, "hits": {k: len(v) for k, v in hit_lists.items()}, "results": len(resolved), "ms": round((time.monotonic() - t0) * 1000)},
@@ -534,4 +564,4 @@ class SearchService:
     async def search_image(self, image: bytes, f: Filters, limit: int) -> list[Resolved]:
         vec = (await asyncio.to_thread(self.embedder.embed_images, [image]))[0]
         hits = await self._run(visual_hits, vec, f, self.settings.search_signal_limit)
-        return await self._finish({"visual": hits}, limit, self._thresholds(image=True))
+        return await self._finish({"visual": hits}, limit, self._thresholds(image=True), f)

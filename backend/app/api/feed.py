@@ -45,12 +45,12 @@ async def clip_page(db, stmt: Select, limit: int, cursor: str | None, urls: UrlB
     return FeedOut(items=items, next_cursor=next_cursor)
 
 
-def base_clip_query() -> Select:
+def base_clip_query(states: tuple[str, ...] = ("published",)) -> Select:
     return (
         select(Clip, Session, User)
         .join(Session, Session.id == Clip.session_id)
         .join(User, User.id == Clip.user_id)
-        .where(Clip.status == "ready")
+        .where(Clip.status == "ready", Clip.publish_state.in_(states))
     )
 
 
@@ -63,7 +63,7 @@ async def feed(
     limit: int = Query(default=20, ge=1, le=100),
     game: str | None = Query(default=None, description="Only clips from this game"),
 ) -> FeedOut:
-    """Clip feed, newest first."""
+    """Published clips, newest first."""
     stmt = base_clip_query()
     if game:
         stmt = stmt.where(Session.game.ilike(game))

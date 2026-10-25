@@ -73,6 +73,8 @@ Full spec: [`docs/openapi.json`](docs/openapi.json), or `/docs` on a running ser
 
 **API key:** when `API_KEYS` is set (it is in production), send `X-API-Key: <key>` on every request. Browser `EventSource` can't set headers, so `?api_key=<key>` also works. `/health`, `/docs` and `*.m3u8` playlists don't need it, so video players can fetch playlists directly. Get the key from whoever holds `.env.prod`. Don't commit it into a public repo; it's a speed bump against random traffic, not real auth.
 
+**Publish states:** every clip is `draft` → `ready` (queued to post to YouTube) → `published`. Only `published` clips appear in the feed, search and other people's view of a profile. Drafts and `ready` clips are visible only to their owner: `GET /clips/{id}` returns 404 to anyone else, and `GET /users/{id}/clips?state=draft|ready|published|unpublished|all` is for the owner. Searching with `user_id` set to your own `X-User-Id` includes your unpublished clips. Virality checks only run on unpublished clips (409 otherwise). Clips the pipeline creates start as `NEW_CLIP_PUBLISH_STATE` (default `draft`), and clips that existed before this change were migrated as `published`. HLS playlists stay reachable by clip ID (players can't send headers), so treat an unpublished clip's ID as private.
+
 **Identity:** there are no user accounts with passwords yet. Create a user with `POST /users` and send `X-User-Id: <uuid>` on requests that act as someone (upload, like, create/edit clips). Reads work without it; when it's sent, `liked_by_me` is filled in.
 
 | Method | Path | Example |
@@ -90,6 +92,9 @@ Full spec: [`docs/openapi.json`](docs/openapi.json), or `/docs` on a running ser
 | POST | `/clips` · PATCH `/clips/{id}` · DELETE `/clips/{id}` | `clips.create.json`, `clips.patch.json` |
 | POST/DELETE | `/clips/{id}/like` · POST `/clips/{id}/view` | `clips.like.json`, `clips.view.json` |
 | POST/GET | `/clips/{id}/export` (MP4 for TikTok/Reels; POST starts it, GET polls until `ready`) | `clips.export.*.json` |
+| POST | `/clips/{id}/publish` · `/unpublish` · `/mark-ready` (owner only) | `clips.publish.json` |
+| POST/GET | `/clips/{id}/creator-pack` (Gemini titles, captions, YouTube metadata for an uploaded clip) | |
+| POST/GET | `/clips/{id}/virality` (synthetic audience panel; **unpublished clips only**, owner only) | |
 | POST | `/warmup` (wake the GPU; call on app launch without awaiting) | |
 | GET | `/users/{id}/clips` | `users.clips.json` |
 | GET | `/search?q=&game=&user_id=&from=&to=&limit=` | `search.json` |

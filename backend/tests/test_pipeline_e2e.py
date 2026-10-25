@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.config import get_settings
@@ -159,6 +159,16 @@ async def test_pipeline_end_to_end(sessionmaker, video, tmp_path):
 
     # Stub vectors are random, so any visual "match" is noise; this checks speech/keyword/event fusion.
     search = SearchService(sessionmaker, StubEmbedder(), get_settings().model_copy(update={"visual_min_score": 1.0, "speech_min_score": 1.0}), redis=None)
+    # New auto clips are drafts: invisible to public search, visible when the owner searches their own clips.
+    assert all(c.publish_state == "draft" for c in clips)
+    hidden, _ = await search.search_text("the clutch", Filters(game="valorant"), 10)
+    assert hidden == []
+    own, _ = await search.search_text("the clutch", Filters(game="valorant", include_unpublished=True), 10)
+    assert len(own) == 1 and own[0].clip_id == clips[1].id
+
+    async with sessionmaker() as db:
+        await db.execute(update(Clip).where(Clip.id == clips[1].id).values(publish_state="published"))
+        await db.commit()
     results, cached = await search.search_text("the clutch", Filters(game="valorant"), 10)
     assert not cached and len(results) == 1
     r = results[0]
@@ -254,3 +264,40 @@ async def test_creator_pack_for_existing_clip(sessionmaker, video, tmp_path):
     # The MP4 export was produced on the way and is reused; a second call reuses the pack.
     assert await build_creator_pack(clip.id, deps, engine_factory=engine_factory({}, calls)) == key
     assert calls == ["busy-model", "ok-model"]
+
+
+async def test_virality_only_for_unpublished_clips(sessionmaker, video, tmp_path):
+    from app.worker.virality import ClipAlreadyPublished, run_virality
+    from tests.test_creator_pack import engine_factory
+
+    storage = LocalStorage(tmp_path / "storage")
+    sid = await _new_session(sessionmaker, storage, video)
+    assert await run_pipeline(sid, deps=_deps(sessionmaker, storage, FakeDetector())) == SessionStatus.READY
+    async with sessionmaker() as db:
+        clip = (await db.scalars(select(Clip).where(Clip.session_id == sid))).first()
+
+    seen = []
+
+    class FakeSimulator:
+        def __init__(self, settings):
+            pass
+
+        def simulate(self, analysis, platform, target_audience, count):
+            from app.schemas import AudienceSimulationOut
+
+            seen.append((analysis.youtube.title, platform, count))
+            return AudienceSimulationOut.model_validate_json(
+                (Path(__file__).parents[1] / "docs/api-examples/creator.simulate.json").read_text()
+            )
+
+    deps = _deps(sessionmaker, storage, FakeDetector())
+    key = await run_virality(clip.id, deps, "youtube", None, 5, simulator_factory=FakeSimulator,
+                             engine_factory=engine_factory({}, []))
+    assert storage.exists(key) and seen == [("t", "youtube", 5)]
+
+    async with sessionmaker() as db:
+        await db.execute(update(Clip).where(Clip.id == clip.id).values(publish_state="published"))
+        await db.commit()
+    with pytest.raises(ClipAlreadyPublished):
+        await run_virality(clip.id, deps, "youtube", None, 6, simulator_factory=FakeSimulator,
+                           engine_factory=engine_factory({}, []))

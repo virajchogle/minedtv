@@ -6,7 +6,8 @@ Who owns what, and where each open piece plugs into the backend. Update this as 
 
 - **Backend (Viraj):** live at `https://minedtv-api-818252181045.us-east1.run.app`. Uploads, processing, HLS clips, hybrid search with confidence and moments, likes/views, MP4 export and `/warmup` are done. Ask Viraj privately for the API key.
 - **Android app (Rishi):** connected to the live API using [`backend/docs/android-integration.md`](backend/docs/android-integration.md).
-- **Creator analysis (Nihal):** `/creator/analyze` (Gemini) is merged but not deployed yet; it needs `GEMINI_API_KEY` in `.env.prod`.
+- **Creator analysis + audience personas (Nihal):** `/creator/analyze`, `/creator/simulate` and `/creator/simulate-analysis` are live. Clip-based versions: `/clips/{id}/creator-pack` and `/clips/{id}/virality` (unpublished clips only).
+- **Publish states:** clips go `draft` → `ready` (to post to YouTube) → `published`; only published clips are public. The actual YouTube upload from the `ready` bucket is still to build (needs Google OAuth setup).
 
 ## Open work
 

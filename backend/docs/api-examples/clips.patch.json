@@ -15,6 +15,8 @@
   "playlist_url": "https://minedtv-api-xxxxx-ue.a.run.app/clips/00000000-0000-0000-0000-0000000003e8/playlist.m3u8",
   "status": "ready",
   "kind": "auto",
+  "publish_state": "published",
+  "published_at": null,
   "view_count": 48211,
   "like_count": 3904,
   "liked_by_me": null,

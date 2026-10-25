@@ -225,6 +225,7 @@ def examples() -> dict[str, object]:
         "clips.like.json": CountsOut(clip_id=c0.id, view_count=48_211, like_count=3_905, liked_by_me=True),
         "clips.unlike.json": CountsOut(clip_id=c0.id, view_count=48_211, like_count=3_904, liked_by_me=False),
         "clips.view.json": CountsOut(clip_id=c0.id, view_count=48_212, like_count=3_904, liked_by_me=None),
+        "clips.publish.json": clip(0).model_copy(update={"publish_state": "published", "published_at": NOW}),
         "clips.export.processing.json": ExportOut(clip_id=c0.id, status="processing", url=None, start_ms=c0.start_ms, end_ms=c0.end_ms),
         "clips.export.ready.json": ExportOut(clip_id=c0.id, status="ready", url=f"{CDN}/exports/{c0.id}/{c0.start_ms}-{c0.end_ms}.mp4",
                                              start_ms=c0.start_ms, end_ms=c0.end_ms),
