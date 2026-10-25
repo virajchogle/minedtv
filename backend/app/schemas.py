@@ -410,7 +410,7 @@ class CommentsPage(_Out):
     total: int = Field(description="All comments on the clip, replies included")
 
 
-NotificationTypeLiteral = Literal["like", "comment", "reply", "follow", "upload_ready", "virality_ready"]
+NotificationTypeLiteral = Literal["like", "comment", "reply", "follow", "upload_ready", "virality_ready", "youtube_posted"]
 
 
 class NotificationClip(_Out):
@@ -445,3 +445,44 @@ class UnreadCountOut(_Out):
 class MarkReadIn(BaseModel):
     ids: list[uuid.UUID] | None = Field(default=None, description="Notifications to mark read")
     all: bool = Field(default=False, description="Mark every notification read")
+
+
+# --- YouTube ---
+
+YouTubePrivacy = Literal["private", "unlisted", "public"]
+
+
+class YouTubeStatusOut(_Out):
+    configured: bool = Field(description="Whether the server has YouTube OAuth credentials")
+    connected: bool
+    channel_id: str | None = None
+    channel_title: str | None = None
+
+
+class YouTubeConnectOut(_Out):
+    auth_url: str = Field(description="Open in a browser; Google redirects back to /youtube/callback")
+
+
+class YouTubePostIn(BaseModel):
+    title: str | None = Field(default=None, max_length=100, description="Defaults to the creator pack's YouTube title, then the clip title")
+    description: str | None = Field(default=None, max_length=5000)
+    tags: list[str] | None = None
+    privacy: YouTubePrivacy = Field(
+        default="private",
+        description="Until the Google project passes YouTube's API audit, uploads may be forced to private",
+    )
+
+
+class YouTubeUploadOut(_Out):
+    id: uuid.UUID
+    clip_id: uuid.UUID
+    status: Literal["queued", "uploading", "published", "failed"]
+    privacy: YouTubePrivacy
+    title: str
+    description: str
+    tags: list[str]
+    video_id: str | None
+    url: str | None
+    error: str | None
+    created_at: datetime
+    updated_at: datetime

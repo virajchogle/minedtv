@@ -48,9 +48,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["*"],
     )
 
-    from app.api import clips, creator, feed, notifications, search, sessions, social, uploads, users
+    from app.api import clips, creator, feed, notifications, search, sessions, social, uploads, users, youtube
 
-    for module in (uploads, sessions, clips, feed, search, users, social, notifications, creator):
+    for module in (uploads, sessions, clips, feed, search, users, social, notifications, creator, youtube):
         app.include_router(module.router)
 
     @app.post("/warmup", tags=["health"])

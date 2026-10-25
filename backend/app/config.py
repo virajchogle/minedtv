@@ -73,6 +73,18 @@ class Settings(BaseSettings):
         default_factory=lambda: ["gemini-3.5-flash"]
     )
 
+    # --- YouTube posting (OAuth web client from Google Cloud console) ---
+    youtube_client_id: str | None = None
+    youtube_client_secret: str | None = None
+    # Must exactly match an "Authorized redirect URI" on the OAuth client. Defaults to
+    # {public_api_base_url or request base}/youtube/callback.
+    youtube_redirect_uri: str | None = None
+    # Fernet key that encrypts stored refresh tokens (and signs the OAuth state).
+    # Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    youtube_token_key: str | None = None
+    # Where the browser lands after connecting YouTube (e.g. the web app's library page).
+    frontend_url: str | None = None
+
     # --- processing ---
     segment_seconds: int = 2
     transcode_height: int = 720
@@ -108,7 +120,11 @@ class Settings(BaseSettings):
     # --- counters ---
     counter_flush_interval_s: int = 30
 
-    @field_validator("s3_endpoint_url", "s3_public_endpoint_url", "storage_public_base_url", "public_api_base_url", mode="before")
+    @field_validator(
+        "s3_endpoint_url", "s3_public_endpoint_url", "storage_public_base_url", "public_api_base_url",
+        "youtube_client_id", "youtube_client_secret", "youtube_redirect_uri", "youtube_token_key", "frontend_url",
+        mode="before",
+    )
     @classmethod
     def _empty_is_none(cls, v):
         return v or None

@@ -85,6 +85,17 @@ Full spec: [`docs/openapi.json`](docs/openapi.json), or `/docs` on a running ser
 
 Nobody is notified about their own actions. Each notification carries a ready-to-show `message`.
 
+**YouTube posting:** a user connects their channel once. `GET /youtube/connect` returns a Google sign-in URL; after they approve, Google redirects to `/youtube/callback`, which stores an encrypted refresh token. That callback route is exempt from the API key, and a signed, 15-minute `state` value ties it to the user who started.
+
+Clips in the **ready** bucket (or already published) can be posted with `POST /clips/{id}/youtube`. Title, description and tags default to the AI creator pack's YouTube metadata. The worker renders the MP4, uploads it with YouTube's resumable upload, records the video link, and sends a `youtube_posted` notification on success or failure.
+
+Limits:
+- Until the Google project passes YouTube's API audit, uploaded videos may be forced to private.
+- The default quota allows about 6 uploads a day.
+- In OAuth "testing" mode, only Google accounts listed as test users can connect.
+
+For TikTok and Reels, use the MP4 export plus the phone's share sheet instead: their posting APIs need an app review first.
+
 **Identity:** there are no user accounts with passwords yet. Create a user with `POST /users` and send `X-User-Id: <uuid>` on requests that act as someone (upload, like, create/edit clips). Reads work without it; when it's sent, `liked_by_me` is filled in.
 
 | Method | Path | Example |
@@ -108,6 +119,8 @@ Nobody is notified about their own actions. Each notification carries a ready-to
 | GET/POST | `/clips/{id}/comments` (top-level newest first, each with replies; POST `{body, parent_id?}`) · DELETE `/comments/{id}` (author or clip owner) | `comments.list.json` |
 | GET | `/users/{id}` (profile: follower/following counts, published clip count, `followed_by_me`, `follows_me`) | `users.profile.json` |
 | POST/DELETE | `/users/{id}/follow` · GET `/users/{id}/followers` · `/users/{id}/following` · GET `/feed/following` | `users.follow.json` |
+| GET | `/youtube/status` · `/youtube/connect` (returns `auth_url`) · DELETE `/youtube/connection` | |
+| POST/GET | `/clips/{id}/youtube` (post a **ready** clip to your channel; `{title?, description?, tags?, privacy}`) | |
 | GET | `/notifications?unread_only=` · `/notifications/unread-count` · POST `/notifications/read` `{ids}` or `{all: true}` | `notifications.json` |
 | POST | `/warmup` (wake the GPU; call on app launch without awaiting) | |
 | GET | `/users/{id}/clips` | `users.clips.json` |

@@ -38,6 +38,10 @@ def _message(n: Notification, actor: User | None, clip: Clip | None) -> str:
             verdict = data.get("verdict")
             detail = f": {round(score)} ({verdict})" if score is not None and verdict else ""
             return f"Virality check for{title or ' your clip'} is ready{detail}"
+        case NotificationType.YOUTUBE_POSTED:
+            if data.get("status") == "published":
+                return f"Your clip{title} is on YouTube ({data.get('privacy', 'private')}): {data.get('url', '')}".rstrip(": ")
+            return f"Posting{title or ' your clip'} to YouTube failed"
     return "New activity"
 
 

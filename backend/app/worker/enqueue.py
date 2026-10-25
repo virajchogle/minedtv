@@ -54,3 +54,15 @@ def enqueue_virality(clip_id: uuid.UUID, platform: str, target_audience: str | N
         failure_ttl=86400,
     )
     return job.id
+
+
+def enqueue_youtube_post(upload_id: uuid.UUID) -> str:
+    job = get_queue().enqueue(
+        "app.worker.jobs.youtube_post",
+        str(upload_id),
+        job_id=f"youtube-{upload_id}",
+        job_timeout=1800,  # export + upload
+        result_ttl=3600,
+        failure_ttl=86400,
+    )
+    return job.id

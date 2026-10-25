@@ -9,7 +9,7 @@ Who owns what, and where each open piece plugs into the backend. Update this as 
 - **Android app (Rishi):** connected to the live API using [`backend/docs/android-integration.md`](backend/docs/android-integration.md).
 - **Creator analysis + audience personas (Nihal):** `/creator/analyze`, `/creator/simulate` and `/creator/simulate-analysis` are live. Clip-based versions: `/clips/{id}/creator-pack` and `/clips/{id}/virality` (unpublished clips only).
 - **Social (Viraj):** comments with replies, follows plus a following feed, and notifications (like, comment, reply, follow, upload ready, virality ready) are live. The web frontend doesn't show them yet.
-- **Publish states:** clips go `draft` → `ready` (to post to YouTube) → `published`; only published clips are public. The actual YouTube upload from the `ready` bucket is still to build (needs Google OAuth setup).
+- **Publish states:** clips go `draft` → `ready` (to post to YouTube) → `published`; only published clips are public. Posting clips from the `ready` bucket to YouTube is built (`/youtube/*`, `/clips/{id}/youtube`); it needs the Google OAuth client set up in `.env.prod`.
 
 ## Open work
 

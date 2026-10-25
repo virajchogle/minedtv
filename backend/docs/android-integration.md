@@ -408,7 +408,15 @@ Clips have a `publish_state`: `draft` â†’ `ready` (queued to post to YouTube) â†
   `created_at`, plus `unread_count`. For the badge, poll `GET /notifications/unread-count`. When the
   Inbox opens, call `POST /notifications/read {"all": true}`, or send `{"ids": [...]}` for specific ones.
 
-## 10. Uploading from the phone (optional)
+## 10. Post to YouTube
+
+1. `GET /youtube/status` returns `{configured, connected, channel_title}`.
+2. If not connected: `GET /youtube/connect` returns `auth_url`. Open it in a Custom Tab or browser. The user approves on Google and lands on a "YouTube connected" page (or the web app). Then check status again.
+3. On a clip in the **ready** bucket: `POST /clips/{id}/youtube {"privacy": "unlisted"}`. Title, description and tags default to the AI creator pack; pass your own to override them. Then poll `GET /clips/{id}/youtube` until `status` is `published` and show the `url`. The owner also gets a `youtube_posted` notification.
+
+Uploads may be private-only until Google audits the app. For TikTok and Reels, share the MP4 from `/clips/{id}/export` through the Android share sheet (`IntentPlatformPublisher`), since their APIs need an app review.
+
+## 11. Uploading from the phone (optional)
 
 1. `POST /uploads` with `{"filename": "x.mp4", "content_type": "video/mp4", "game": "Valorant", "title": "..."}`
    returns `upload_url` and `session_id`.

@@ -260,8 +260,9 @@ class NotificationType:
     FOLLOW = "follow"  # someone followed you
     UPLOAD_READY = "upload_ready"  # your upload finished processing
     VIRALITY_READY = "virality_ready"  # your virality check finished
+    YOUTUBE_POSTED = "youtube_posted"  # your clip is on YouTube (or the post failed)
 
-    ALL = (LIKE, COMMENT, REPLY, FOLLOW, UPLOAD_READY, VIRALITY_READY)
+    ALL = (LIKE, COMMENT, REPLY, FOLLOW, UPLOAD_READY, VIRALITY_READY, YOUTUBE_POSTED)
 
 
 class Notification(Base):
@@ -283,3 +284,48 @@ class Notification(Base):
     data: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = _created()
+
+
+class YouTubeAccount(Base):
+    """A user's connected YouTube channel. The refresh token is stored encrypted."""
+
+    __tablename__ = "youtube_accounts"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    channel_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    channel_title: Mapped[str | None] = mapped_column(Text)
+    refresh_token_enc: Mapped[str] = mapped_column(Text, nullable=False)
+    scopes: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = _created()
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class YouTubeUploadStatus:
+    QUEUED = "queued"
+    UPLOADING = "uploading"
+    PUBLISHED = "published"
+    FAILED = "failed"
+
+
+class YouTubeUpload(Base):
+    """One attempt to post a clip to YouTube."""
+
+    __tablename__ = "youtube_uploads"
+    __table_args__ = (Index("ix_youtube_uploads_clip_created", "clip_id", "created_at"),)
+
+    id: Mapped[uuid.UUID] = _pk()
+    clip_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("clips.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default=YouTubeUploadStatus.QUEUED)
+    privacy: Mapped[str] = mapped_column(String(16), nullable=False, default="private")
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    tags: Mapped[list] = mapped_column(JSONB, nullable=False, default=list, server_default="[]")
+    video_id: Mapped[str | None] = mapped_column(String(32))
+    error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = _created()
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )

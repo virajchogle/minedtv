@@ -2852,6 +2852,302 @@
         }
       }
     },
+    "/youtube/status": {
+      "get": {
+        "tags": [
+          "youtube"
+        ],
+        "summary": "Youtube Status",
+        "operationId": "youtube_status_youtube_status_get",
+        "parameters": [
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Acting user's ID (demo identity, no auth yet)",
+              "title": "X-User-Id"
+            },
+            "description": "Acting user's ID (demo identity, no auth yet)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/YouTubeStatusOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/youtube/connect": {
+      "get": {
+        "tags": [
+          "youtube"
+        ],
+        "summary": "Youtube Connect",
+        "description": "Start connecting the acting user's YouTube channel: open `auth_url` in a browser.",
+        "operationId": "youtube_connect_youtube_connect_get",
+        "parameters": [
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Acting user's ID (demo identity, no auth yet)",
+              "title": "X-User-Id"
+            },
+            "description": "Acting user's ID (demo identity, no auth yet)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/YouTubeConnectOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/youtube/connection": {
+      "delete": {
+        "tags": [
+          "youtube"
+        ],
+        "summary": "Youtube Disconnect",
+        "description": "Disconnect: revokes the token with Google and forgets it.",
+        "operationId": "youtube_disconnect_youtube_connection_delete",
+        "parameters": [
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Acting user's ID (demo identity, no auth yet)",
+              "title": "X-User-Id"
+            },
+            "description": "Acting user's ID (demo identity, no auth yet)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/YouTubeStatusOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clips/{clip_id}/youtube": {
+      "post": {
+        "tags": [
+          "youtube"
+        ],
+        "summary": "Post Clip To Youtube",
+        "description": "Post a clip from the \"ready to post\" bucket (or an already published clip) to your YouTube\nchannel. Title/description/tags default to the AI creator pack's YouTube metadata. Runs in the\nworker (about 1-2 minutes); poll GET /clips/{id}/youtube.",
+        "operationId": "post_clip_to_youtube_clips__clip_id__youtube_post",
+        "parameters": [
+          {
+            "name": "clip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Clip Id"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Acting user's ID (demo identity, no auth yet)",
+              "title": "X-User-Id"
+            },
+            "description": "Acting user's ID (demo identity, no auth yet)"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/YouTubePostIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/YouTubeUploadOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "youtube"
+        ],
+        "summary": "Clip Youtube Uploads",
+        "description": "Your YouTube posts of this clip, newest first.",
+        "operationId": "clip_youtube_uploads_clips__clip_id__youtube_get",
+        "parameters": [
+          {
+            "name": "clip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Clip Id"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Acting user's ID (demo identity, no auth yet)",
+              "title": "X-User-Id"
+            },
+            "description": "Acting user's ID (demo identity, no auth yet)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/YouTubeUploadOut"
+                  },
+                  "title": "Response Clip Youtube Uploads Clips  Clip Id  Youtube Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/warmup": {
       "post": {
         "tags": [
@@ -4745,7 +5041,8 @@
               "reply",
               "follow",
               "upload_ready",
-              "virality_ready"
+              "virality_ready",
+              "youtube_posted"
             ],
             "title": "Type"
           },
@@ -5681,6 +5978,224 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "YouTubeConnectOut": {
+        "properties": {
+          "auth_url": {
+            "type": "string",
+            "title": "Auth Url",
+            "description": "Open in a browser; Google redirects back to /youtube/callback"
+          }
+        },
+        "type": "object",
+        "required": [
+          "auth_url"
+        ],
+        "title": "YouTubeConnectOut"
+      },
+      "YouTubePostIn": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title",
+            "description": "Defaults to the creator pack's YouTube title, then the clip title"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 5000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tags"
+          },
+          "privacy": {
+            "type": "string",
+            "enum": [
+              "private",
+              "unlisted",
+              "public"
+            ],
+            "title": "Privacy",
+            "description": "Until the Google project passes YouTube's API audit, uploads may be forced to private",
+            "default": "private"
+          }
+        },
+        "type": "object",
+        "title": "YouTubePostIn"
+      },
+      "YouTubeStatusOut": {
+        "properties": {
+          "configured": {
+            "type": "boolean",
+            "title": "Configured",
+            "description": "Whether the server has YouTube OAuth credentials"
+          },
+          "connected": {
+            "type": "boolean",
+            "title": "Connected"
+          },
+          "channel_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Id"
+          },
+          "channel_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Title"
+          }
+        },
+        "type": "object",
+        "required": [
+          "configured",
+          "connected"
+        ],
+        "title": "YouTubeStatusOut"
+      },
+      "YouTubeUploadOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "clip_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Clip Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "uploading",
+              "published",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "privacy": {
+            "type": "string",
+            "enum": [
+              "private",
+              "unlisted",
+              "public"
+            ],
+            "title": "Privacy"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags"
+          },
+          "video_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Video Id"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "clip_id",
+          "status",
+          "privacy",
+          "title",
+          "description",
+          "tags",
+          "video_id",
+          "url",
+          "error",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "YouTubeUploadOut"
       }
     }
   }
