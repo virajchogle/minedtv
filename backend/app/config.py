@@ -91,10 +91,11 @@ class Settings(BaseSettings):
     # Visual text search is contrastive: sim(templated query) - sim(generic gameplay baseline).
     visual_min_score: float = 0.035
     visual_full_score: float = 0.10
-    visual_relative_cutoff: float = 0.6  # drop frames below this fraction of the best visual score
+    visual_relative_cutoff: float = 0.75  # drop frames below this fraction of the best visual score
     # Speech is contrastive too: sim(query) - sim(generic talking baseline); lines < 3 words are skipped.
     speech_min_score: float = 0.03
     speech_full_score: float = 0.12
+    speech_only_min_score: float = 0.06  # stronger bar when speech is a moment's only signal
     image_min_sim: float = 0.55
     image_full_sim: float = 0.85
 

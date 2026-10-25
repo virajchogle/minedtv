@@ -118,7 +118,10 @@ class Thresholds:
     visual_full: float = 0.10  # score treated as full confidence
     speech_full: float = 0.12
     # Drop visual hits scoring below this fraction of the query's best visual hit.
-    visual_relative: float = 0.6
+    visual_relative: float = 0.75
+    # A moment matched by speech alone (no keyword/visual/event) needs this stronger speech score,
+    # so a query like "knife kills" doesn't surface a voice line that only says "one shot".
+    speech_only: float = 0.06
 
 
 def drop_weak(hit_lists: dict[str, list[Hit]], th: Thresholds) -> dict[str, list[Hit]]:
@@ -131,6 +134,15 @@ def drop_weak(hit_lists: dict[str, list[Hit]], th: Thresholds) -> dict[str, list
     out["visual"] = visual
     out["speech"] = [h for h in hit_lists.get("speech", []) if h.raw_score >= th.speech]
     return out
+
+
+def drop_lone_weak_speech(moments: list["Moment"], th: Thresholds) -> list["Moment"]:
+    return [m for m in moments if m.signals != {"speech"} or m.strength.get("speech", 0.0) >= th.speech_only]
+
+
+def rank_moments(moments: list["Moment"]) -> list["Moment"]:
+    """Most confident first; the fusion score breaks ties. Results take their session's best moment."""
+    return sorted(moments, key=lambda m: (-m.confidence, -m.score, m.t_ms))
 
 
 def _ramp(x: float, lo: float, hi: float) -> float:
@@ -461,7 +473,7 @@ class SearchService:
             return Thresholds(visual=st.image_min_sim, speech=1.0, visual_full=st.image_full_sim, visual_relative=0)
         return Thresholds(
             visual=st.visual_min_score, speech=st.speech_min_score, visual_full=st.visual_full_score,
-            speech_full=st.speech_full_score,
+            speech_full=st.speech_full_score, speech_only=st.speech_only_min_score,
             visual_relative=st.visual_relative_cutoff,
         )
 
@@ -470,6 +482,7 @@ class SearchService:
         moments = fuse(drop_weak(hit_lists, th), st.rrf_k, st.moment_window_ms)
         for m in moments:
             m.confidence = confidence(m.strength, th)
+        moments = rank_moments(drop_lone_weak_speech(moments, th))
         grouped = group_by_session(moments)[:limit]
         async with self.sessionmaker() as db:
             return await resolve(db, grouped, st.clip_window_ms)

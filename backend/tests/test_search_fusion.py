@@ -138,7 +138,7 @@ def test_relative_cutoff_drops_lookalikes():
     from app.services.search import Thresholds, drop_weak
 
     knife, gun, gun2 = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
-    # Contrastive scores measured on real clips for "knife".
+    # Contrastive scores measured on real clips for "knife" (default relative cutoff 0.75).
     lists = {"visual": [Hit(knife, 1000, "visual", 0.063), Hit(gun, 2000, "visual", 0.033), Hit(gun2, 3000, "visual", 0.032)]}
     kept = drop_weak(lists, Thresholds())
     assert [h.session_id for h in kept["visual"]] == [knife]
@@ -149,3 +149,25 @@ def test_mean_unit_is_normalized():
 
     v = mean_unit([[1.0, 0.0], [0.0, 1.0]])
     assert abs(sum(x * x for x in v) - 1) < 1e-9 and abs(v[0] - v[1]) < 1e-9
+
+
+
+def test_lone_weak_speech_dropped_but_backed_speech_kept():
+    from app.services.search import Moment, Thresholds, drop_lone_weak_speech
+
+    s = uuid.uuid4()
+    lone_weak = Moment(s, 0, 0.1, {"speech"}, strength={"speech": 0.04})
+    lone_strong = Moment(s, 10_000, 0.1, {"speech"}, strength={"speech": 0.08})
+    backed = Moment(s, 20_000, 0.1, {"speech", "keyword"}, strength={"speech": 0.04, "keyword": 0.1})
+    kept = drop_lone_weak_speech([lone_weak, lone_strong, backed], Thresholds())
+    assert kept == [lone_strong, backed]
+
+
+def test_rank_moments_by_confidence_then_fusion_score():
+    from app.services.search import Moment, rank_moments
+
+    s = uuid.uuid4()
+    a = Moment(s, 0, score=0.033, confidence=0.56)  # top by fusion score only
+    b = Moment(s, 1, score=0.016, confidence=0.59)
+    c = Moment(s, 2, score=0.020, confidence=0.59)
+    assert rank_moments([a, b, c]) == [c, b, a]
