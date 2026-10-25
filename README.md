@@ -5,3 +5,4 @@ Gaming clip app with plain-language search over your gameplay ("the clutch on Bi
 - [`backend/`](backend/): FastAPI + Postgres/pgvector + R2 + RQ worker + Modal GPU inference, plus a Gemini-powered video-to-content engine. See [backend/README.md](backend/README.md).
 - Android UI: https://github.com/rishikesh-web/MinedTv
 - Mock API responses for UI work: [`backend/docs/api-examples/`](backend/docs/api-examples/)
+- Who owns what and open work: [NOTES.md](NOTES.md)

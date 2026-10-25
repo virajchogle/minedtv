@@ -157,7 +157,8 @@ async def test_pipeline_end_to_end(sessionmaker, video, tmp_path):
     body = build_playlist(segs, clips[1].start_ms, clips[1].end_ms, storage.url_for)
     assert body.count("#EXTINF") == 3 and "#EXT-X-MEDIA-SEQUENCE:6" in body
 
-    search = SearchService(sessionmaker, StubEmbedder(), get_settings(), redis=None)
+    # Stub vectors are random, so any visual "match" is noise; this checks speech/keyword/event fusion.
+    search = SearchService(sessionmaker, StubEmbedder(), get_settings().model_copy(update={"visual_min_score": 1.0, "speech_min_score": 1.0}), redis=None)
     results, cached = await search.search_text("the clutch", Filters(game="valorant"), 10)
     assert not cached and len(results) == 1
     r = results[0]
@@ -228,3 +229,28 @@ async def test_export_renders_exact_clip_mp4(sessionmaker, video, tmp_path):
     assert {s["codec_name"] for s in info["streams"]} == {"h264", "aac"}
     # Second call reuses the finished file.
     assert await export_clip(clip.id, _deps(sessionmaker, storage, FakeDetector())) == key
+
+
+async def test_creator_pack_for_existing_clip(sessionmaker, video, tmp_path):
+    import json as _json
+
+    from app.worker.creator_pack import build_creator_pack, pack_key
+    from tests.test_creator_pack import engine_factory
+
+    storage = LocalStorage(tmp_path / "storage")
+    sid = await _new_session(sessionmaker, storage, video)
+    assert await run_pipeline(sid, deps=_deps(sessionmaker, storage, FakeDetector())) == SessionStatus.READY
+    async with sessionmaker() as db:
+        clip = (await db.scalars(select(Clip).where(Clip.session_id == sid).order_by(Clip.start_ms))).first()
+
+    calls: list[str] = []
+    deps = _deps(sessionmaker, storage, FakeDetector())
+    deps.settings = deps.settings.model_copy(update={"gemini_model": "busy-model", "gemini_fallback_models": ["ok-model"]})
+    key = await build_creator_pack(clip.id, deps, engine_factory=engine_factory({"busy-model": Exception("503 high demand")}, calls))
+    assert key == pack_key(clip.id, clip.start_ms, clip.end_ms)
+    body = _json.loads(storage.get_bytes(key))
+    assert body["model"] == "ok-model" and body["pack"]["youtube"]["title"] == "t"
+    assert calls == ["busy-model", "ok-model"]
+    # The MP4 export was produced on the way and is reused; a second call reuses the pack.
+    assert await build_creator_pack(clip.id, deps, engine_factory=engine_factory({}, calls)) == key
+    assert calls == ["busy-model", "ok-model"]

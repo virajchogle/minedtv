@@ -326,3 +326,15 @@ class AudienceSimulationOut(_Out):
     recommended_changes: list[str]
     analysis: CreatorPackOut
     disclaimer: str
+
+
+class ClipCreatorPackOut(_Out):
+    clip_id: uuid.UUID
+    status: Literal["none", "processing", "ready", "failed"] = Field(
+        description="'none' = never requested for this clip range; POST to start"
+    )
+    model: str | None = Field(default=None, description="Gemini model that produced the pack")
+    pack: CreatorPackOut | None = None
+    error: str | None = None
+    start_ms: int
+    end_ms: int

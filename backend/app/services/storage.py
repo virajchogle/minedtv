@@ -20,6 +20,7 @@ class Storage(Protocol):
     def put_bytes(self, key: str, data: bytes, content_type: str | None = None) -> None: ...
     def put_file(self, key: str, path: str | Path, content_type: str | None = None) -> None: ...
     def download_file(self, key: str, path: str | Path) -> None: ...
+    def get_bytes(self, key: str) -> bytes: ...
     def exists(self, key: str) -> bool: ...
     def delete_prefix(self, prefix: str) -> int: ...
     def presign_put(self, key: str, content_type: str | None = None, expires_s: int | None = None) -> str: ...
@@ -58,6 +59,9 @@ class S3Storage:
 
     def download_file(self, key, path):
         self._client.download_file(self.bucket, key, str(path))
+
+    def get_bytes(self, key):
+        return self._client.get_object(Bucket=self.bucket, Key=key)["Body"].read()
 
     def exists(self, key):
         from botocore.exceptions import ClientError
@@ -133,6 +137,9 @@ class LocalStorage:
 
     def download_file(self, key, path):
         shutil.copyfile(self._path(key), path)
+
+    def get_bytes(self, key):
+        return self._path(key).read_bytes()
 
     def exists(self, key):
         return self._path(key).is_file()
