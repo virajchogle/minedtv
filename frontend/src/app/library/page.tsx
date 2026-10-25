@@ -6,7 +6,7 @@
  * Search here is scoped to your clips and includes private ones.
  */
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { AlertTriangle, CheckCircle2, Loader2, RefreshCw, Upload, X } from "lucide-react";
@@ -113,11 +113,6 @@ function Library() {
     return () => clearInterval(timer);
   }, [processing.length, load]);
 
-  const games = useMemo(
-    () => [...new Set(allClips.map((v) => v.game).filter((g): g is string => Boolean(g)))].sort(),
-    [allClips]
-  );
-
   const openResult = (result: SearchResult) => {
     router.push(`/video/${result.video_id}?t=${Math.floor(result.seek_seconds)}`);
   };
@@ -150,8 +145,6 @@ function Library() {
             <SearchPanel
               scope="gallery"
               mine
-              games={games}
-              allowImage
               placeholder={`Search ${me.username}'s clips, including private ones…`}
               large
               scopeLabel={<span>Searching your clips · {counts.all} total</span>}
