@@ -191,6 +191,12 @@ async def test_pipeline_end_to_end(sessionmaker, video, tmp_path):
         assert await db.scalar(select(func.count()).select_from(Frame).where(Frame.session_id == sid)) == VIDEO_S
         kinds = (await db.scalars(select(Clip.kind).where(Clip.session_id == sid))).all()
         assert sorted(kinds) == ["auto", "auto", "user"]
+        # The uploader heard once that it's ready, even though it was processed twice.
+        from app.db.models import Notification
+
+        notes = (await db.scalars(select(Notification).where(Notification.session_id == sid))).all()
+        assert [n.type for n in notes] == ["upload_ready"]
+        assert len(notes[0].data["clip_ids"]) == 2 and notes[0].user_id == s.user_id
 
 
 async def test_failed_step_resumes(sessionmaker, video, tmp_path):
@@ -294,6 +300,11 @@ async def test_virality_only_for_unpublished_clips(sessionmaker, video, tmp_path
     key = await run_virality(clip.id, deps, "youtube", None, 5, simulator_factory=FakeSimulator,
                              engine_factory=engine_factory({}, []))
     assert storage.exists(key) and seen == [("t", "youtube", 5)]
+    from app.db.models import Notification
+
+    async with sessionmaker() as db:
+        types = (await db.scalars(select(Notification.type).where(Notification.clip_id == clip.id))).all()
+    assert "virality_ready" in types
 
     async with sessionmaker() as db:
         await db.execute(update(Clip).where(Clip.id == clip.id).values(publish_state="published"))

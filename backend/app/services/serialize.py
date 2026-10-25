@@ -23,6 +23,7 @@ def clip_out(
     urls: UrlBuilder,
     pending: tuple[int, int] = (0, 0),
     liked_ids: set[uuid.UUID] | None = None,
+    comment_count: int = 0,
 ) -> ClipOut:
     return ClipOut(
         id=clip.id,
@@ -42,6 +43,7 @@ def clip_out(
         view_count=clip.view_count + pending[0],
         like_count=clip.like_count + pending[1],
         liked_by_me=None if liked_ids is None else clip.id in liked_ids,
+        comment_count=comment_count,
         created_at=clip.created_at,
     )
 

@@ -221,3 +221,65 @@ class Like(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
     clip_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("clips.id", ondelete="CASCADE"), primary_key=True, index=True)
     created_at: Mapped[datetime] = _created()
+
+
+class Comment(Base):
+    """A comment on a clip. parent_id makes it a reply (one level of threading)."""
+
+    __tablename__ = "comments"
+    __table_args__ = (
+        Index("ix_comments_clip_created", "clip_id", "created_at"),
+        Index("ix_comments_parent", "parent_id"),
+        CheckConstraint("char_length(body) BETWEEN 1 AND 1000", name="ck_comments_body_length"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    clip_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("clips.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    parent_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("comments.id", ondelete="CASCADE"))
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = _created()
+
+
+class Follow(Base):
+    __tablename__ = "follows"
+    __table_args__ = (
+        Index("ix_follows_followee", "followee_id", "created_at"),
+        CheckConstraint("follower_id <> followee_id", name="ck_follows_not_self"),
+    )
+
+    follower_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    followee_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    created_at: Mapped[datetime] = _created()
+
+
+class NotificationType:
+    LIKE = "like"  # someone liked your clip
+    COMMENT = "comment"  # someone commented on your clip
+    REPLY = "reply"  # someone replied to your comment
+    FOLLOW = "follow"  # someone followed you
+    UPLOAD_READY = "upload_ready"  # your upload finished processing
+    VIRALITY_READY = "virality_ready"  # your virality check finished
+
+    ALL = (LIKE, COMMENT, REPLY, FOLLOW, UPLOAD_READY, VIRALITY_READY)
+
+
+class Notification(Base):
+    """Something that happened that a user should hear about. Written by the action itself."""
+
+    __tablename__ = "notifications"
+    __table_args__ = (
+        Index("ix_notifications_user_created", "user_id", "created_at"),
+        Index("ix_notifications_unread", "user_id", postgresql_where="read_at IS NULL"),
+    )
+
+    id: Mapped[uuid.UUID] = _pk()
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    actor_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    type: Mapped[str] = mapped_column(String(32), nullable=False)
+    clip_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("clips.id", ondelete="CASCADE"))
+    comment_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("comments.id", ondelete="CASCADE"))
+    session_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("sessions.id", ondelete="CASCADE"))
+    data: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = _created()

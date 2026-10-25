@@ -392,7 +392,23 @@ Clips have a `publish_state`: `draft` â†’ `ready` (queued to post to YouTube) â†
 - **AI creator pack:** `POST /clips/{id}/creator-pack` returns titles, caption, hashtags and YouTube
   metadata for the clip. Poll `GET` the same way.
 
-## 9. Uploading from the phone (optional)
+## 9. Comments, follows and the Inbox
+
+- **Comments** (clip detail): `GET /clips/{id}/comments` returns top-level comments newest first, each with
+  `replies` (oldest first), `reply_count` and `can_delete`, plus `total` and `next_cursor`. Post with
+  `POST /clips/{id}/comments {"body": "...", "parent_id": null}`; set `parent_id` to reply. Delete with
+  `DELETE /comments/{id}` (author or clip owner). Every clip response also has `comment_count`.
+- **Profile:** `GET /users/{id}` (with `X-User-Id`) adds `follower_count`, `following_count`,
+  `published_clip_count`, `followed_by_me` and `follows_me`.
+- **Follow button:** `POST`/`DELETE /users/{id}/follow` returns `{following, follower_count}`. Lists are at
+  `GET /users/{id}/followers` and `/following`.
+- **Home "Following" tab:** `GET /feed/following` (same shape and pagination as `/feed`).
+- **Inbox:** `GET /notifications` returns items with `type` (like, comment, reply, follow, upload_ready,
+  virality_ready), a ready-to-show `message`, `actor`, `clip {id, title, thumbnail_url}`, `read` and
+  `created_at`, plus `unread_count`. For the badge, poll `GET /notifications/unread-count`. When the
+  Inbox opens, call `POST /notifications/read {"all": true}`, or send `{"ids": [...]}` for specific ones.
+
+## 10. Uploading from the phone (optional)
 
 1. `POST /uploads` with `{"filename": "x.mp4", "content_type": "video/mp4", "game": "Valorant", "title": "..."}`
    returns `upload_url` and `session_id`.

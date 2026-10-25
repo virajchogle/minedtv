@@ -10,6 +10,7 @@ from app.db.models import Clip, Like, Session, User
 from app.schemas import FeedOut
 from app.services import counters
 from app.services.serialize import clip_out
+from app.services.social import comment_counts
 
 router = APIRouter(tags=["feed"])
 
@@ -40,7 +41,8 @@ async def clip_page(db, stmt: Select, limit: int, cursor: str | None, urls: UrlB
     liked = None
     if me is not None and ids:
         liked = set(await db.scalars(select(Like.clip_id).where(Like.user_id == me.id, Like.clip_id.in_(ids))))
-    items = [clip_out(r.Clip, r.Session, r.User, urls, pending[r.Clip.id], liked) for r in rows]
+    comments = await comment_counts(db, ids)
+    items = [clip_out(r.Clip, r.Session, r.User, urls, pending[r.Clip.id], liked, comments[r.Clip.id]) for r in rows]
     next_cursor = encode_cursor(rows[-1].Clip.created_at, rows[-1].Clip.id) if has_more and rows else None
     return FeedOut(items=items, next_cursor=next_cursor)
 

@@ -1,0 +1,85 @@
+{
+  "items": [
+    {
+      "id": "00000000-0000-0000-0000-000000001f41",
+      "type": "like",
+      "message": "NovaQueen liked your clip “1v5 clutch on Ascent”",
+      "actor": {
+        "id": "00000000-0000-0000-0000-000000000065",
+        "username": "NovaQueen",
+        "avatar_url": "https://pub-xxxxxxxx.r2.dev/avatars/novaqueen.png"
+      },
+      "clip": {
+        "id": "00000000-0000-0000-0000-0000000003e8",
+        "title": "1v5 clutch on Ascent",
+        "thumbnail_url": "https://pub-xxxxxxxx.r2.dev/sessions/00000000-0000-0000-0000-0000000001f4/frames/000327000.jpg"
+      },
+      "comment_id": null,
+      "session_id": null,
+      "data": {},
+      "read": false,
+      "created_at": "2026-10-24T18:28:00Z"
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000001f42",
+      "type": "comment",
+      "message": "xPixel commented on your clip “1v5 clutch on Ascent”: how did you hit that??",
+      "actor": {
+        "id": "00000000-0000-0000-0000-000000000066",
+        "username": "xPixel",
+        "avatar_url": "https://pub-xxxxxxxx.r2.dev/avatars/xpixel.png"
+      },
+      "clip": {
+        "id": "00000000-0000-0000-0000-0000000003e8",
+        "title": "1v5 clutch on Ascent",
+        "thumbnail_url": "https://pub-xxxxxxxx.r2.dev/sessions/00000000-0000-0000-0000-0000000001f4/frames/000327000.jpg"
+      },
+      "comment_id": "00000000-0000-0000-0000-000000001b5c",
+      "session_id": null,
+      "data": {
+        "preview": "how did you hit that??"
+      },
+      "read": false,
+      "created_at": "2026-10-24T17:58:00Z"
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000001f43",
+      "type": "follow",
+      "message": "Kairo started following you",
+      "actor": {
+        "id": "00000000-0000-0000-0000-000000000068",
+        "username": "Kairo",
+        "avatar_url": "https://pub-xxxxxxxx.r2.dev/avatars/kairo.png"
+      },
+      "clip": null,
+      "comment_id": null,
+      "session_id": null,
+      "data": {},
+      "read": true,
+      "created_at": "2026-10-24T13:30:00Z"
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000001f44",
+      "type": "upload_ready",
+      "message": "Your upload “Ranked on Ascent” is ready (3 clips, saved as drafts)",
+      "actor": null,
+      "clip": {
+        "id": "00000000-0000-0000-0000-0000000003e8",
+        "title": "1v5 clutch on Ascent",
+        "thumbnail_url": "https://pub-xxxxxxxx.r2.dev/sessions/00000000-0000-0000-0000-0000000001f4/frames/000327000.jpg"
+      },
+      "comment_id": null,
+      "session_id": "00000000-0000-0000-0000-0000000001f4",
+      "data": {
+        "title": "Ranked on Ascent",
+        "clip_ids": [
+          "00000000-0000-0000-0000-0000000003e8"
+        ]
+      },
+      "read": true,
+      "created_at": "2026-10-24T12:30:00Z"
+    }
+  ],
+  "next_cursor": null,
+  "unread_count": 2
+}

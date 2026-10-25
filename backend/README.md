@@ -75,6 +75,16 @@ Full spec: [`docs/openapi.json`](docs/openapi.json), or `/docs` on a running ser
 
 **Publish states:** every clip is `draft` → `ready` (queued to post to YouTube) → `published`. Only `published` clips appear in the feed, search and other people's view of a profile. Drafts and `ready` clips are visible only to their owner: `GET /clips/{id}` returns 404 to anyone else, and `GET /users/{id}/clips?state=draft|ready|published|unpublished|all` is for the owner. Searching with `user_id` set to your own `X-User-Id` includes your unpublished clips. Virality checks only run on unpublished clips (409 otherwise). Clips the pipeline creates start as `NEW_CLIP_PUBLISH_STATE` (default `draft`), and clips that existed before this change were migrated as `published`. HLS playlists stay reachable by clip ID (players can't send headers), so treat an unpublished clip's ID as private.
 
+**Social:** comments allow one level of replies (replying to a reply attaches to its top-level comment) and are limited to 1000 characters. Only clips you can see can be commented on, so drafts are owner-only. Deleting a comment deletes its replies. Counts (comments, followers, following) are computed from the rows on each read, so they can't drift. **Notifications** are written in the same transaction as the action that causes them:
+- a like on your clip, written once per person per clip
+- a comment on your clip
+- a reply to your comment
+- a new follower, written once per person
+- your upload finishing processing, once per upload
+- your virality check finishing
+
+Nobody is notified about their own actions. Each notification carries a ready-to-show `message`.
+
 **Identity:** there are no user accounts with passwords yet. Create a user with `POST /users` and send `X-User-Id: <uuid>` on requests that act as someone (upload, like, create/edit clips). Reads work without it; when it's sent, `liked_by_me` is filled in.
 
 | Method | Path | Example |
@@ -95,6 +105,10 @@ Full spec: [`docs/openapi.json`](docs/openapi.json), or `/docs` on a running ser
 | POST | `/clips/{id}/publish` · `/unpublish` · `/mark-ready` (owner only) | `clips.publish.json` |
 | POST/GET | `/clips/{id}/creator-pack` (Gemini titles, captions, YouTube metadata for an uploaded clip) | |
 | POST/GET | `/clips/{id}/virality` (synthetic audience panel; **unpublished clips only**, owner only) | |
+| GET/POST | `/clips/{id}/comments` (top-level newest first, each with replies; POST `{body, parent_id?}`) · DELETE `/comments/{id}` (author or clip owner) | `comments.list.json` |
+| GET | `/users/{id}` (profile: follower/following counts, published clip count, `followed_by_me`, `follows_me`) | `users.profile.json` |
+| POST/DELETE | `/users/{id}/follow` · GET `/users/{id}/followers` · `/users/{id}/following` · GET `/feed/following` | `users.follow.json` |
+| GET | `/notifications?unread_only=` · `/notifications/unread-count` · POST `/notifications/read` `{ids}` or `{all: true}` | `notifications.json` |
 | POST | `/warmup` (wake the GPU; call on app launch without awaiting) | |
 | GET | `/users/{id}/clips` | `users.clips.json` |
 | GET | `/search?q=&game=&user_id=&from=&to=&limit=` | `search.json` |

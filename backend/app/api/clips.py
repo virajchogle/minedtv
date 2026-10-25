@@ -10,7 +10,18 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.api.deps import CurrentUser, Db, OptionalUser, Urls
 from app.config import get_settings
-from app.db.models import UNPUBLISHED_STATES, Clip, Event, Like, Segment, Session, SessionStatus, Transcript, User
+from app.db.models import (
+    UNPUBLISHED_STATES,
+    Clip,
+    Event,
+    Like,
+    NotificationType,
+    Segment,
+    Session,
+    SessionStatus,
+    Transcript,
+    User,
+)
 from app.schemas import (
     ClipCreate,
     ClipCreatorPackOut,
@@ -30,6 +41,7 @@ from app.services.playlist import build_playlist, validate_clip_range
 from app.services.queries import nearest_frame_key
 from app.services.redis import get_redis
 from app.services.serialize import clip_out
+from app.services.social import comment_counts, notify
 from app.services.storage import get_storage
 from app.worker.creator_pack import pack_key, pack_status_key
 from app.worker.enqueue import enqueue_creator_pack, enqueue_export, enqueue_virality
@@ -70,7 +82,8 @@ async def _liked(db, user: User | None, clip_ids: list[uuid.UUID]) -> set[uuid.U
 
 async def _clip_out(db, clip, session, user, urls, me) -> ClipOut:
     pending = (await counters.pending([clip.id]))[clip.id]
-    return clip_out(clip, session, user, urls, pending, await _liked(db, me, [clip.id]))
+    comments = (await comment_counts(db, [clip.id]))[clip.id]
+    return clip_out(clip, session, user, urls, pending, await _liked(db, me, [clip.id]), comments)
 
 
 @router.get("/{clip_id}", response_model=ClipDetailOut)
@@ -200,6 +213,7 @@ async def like(clip_id: uuid.UUID, user: CurrentUser, db: Db) -> CountsOut:
         pg_insert(Like).values(user_id=user.id, clip_id=clip.id).on_conflict_do_nothing().returning(Like.clip_id)
     )
     if inserted.first() is not None:
+        await notify(db, user_id=clip.user_id, actor_id=user.id, type=NotificationType.LIKE, clip_id=clip.id, once=True)
         await db.commit()
         await counters.incr_like(clip.id, 1)
     return await _counts(db, clip, user)

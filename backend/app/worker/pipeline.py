@@ -20,11 +20,23 @@ from sqlalchemy import delete, func, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import Settings, get_settings
-from app.db.models import PIPELINE_STEPS, STEP_STATUS, Clip, Event, Frame, Segment, Session, SessionStatus, Transcript
+from app.db.models import (
+    PIPELINE_STEPS,
+    STEP_STATUS,
+    Clip,
+    Event,
+    Frame,
+    NotificationType,
+    Segment,
+    Session,
+    SessionStatus,
+    Transcript,
+)
 from app.db.session import get_sessionmaker
 from app.log import bind
 from app.ml.interfaces import DetectedEvent, Embedder, HighlightDetector, Transcriber, TranscriptChunk
 from app.services.queries import nearest_frame_key
+from app.services.social import notify
 from app.services.storage import Storage, get_storage
 from app.worker import media
 
@@ -334,6 +346,18 @@ async def step_finalize(ctx: Ctx) -> None:
                     published_at=func.now() if st.new_clip_publish_state == "published" else None,
                 )
             )
+        await db.flush()
+        clip_ids = (await db.scalars(select(Clip.id).where(Clip.session_id == s.id, Clip.kind == "auto"))).all()
+        # once=True: reprocessing the same upload doesn't notify again.
+        await notify(
+            db,
+            user_id=s.user_id,
+            type=NotificationType.UPLOAD_READY,
+            session_id=s.id,
+            clip_id=clip_ids[0] if clip_ids else None,
+            data={"title": base_title, "clip_ids": [str(c) for c in clip_ids]},
+            once=True,
+        )
         await db.commit()
     log.info("created default clips", extra={"clips": len(windows) or 1})
 

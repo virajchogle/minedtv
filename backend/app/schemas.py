@@ -114,6 +114,7 @@ class ClipOut(_Out):
     view_count: int
     like_count: int
     liked_by_me: bool | None = Field(default=None, description="Only set when X-User-Id is sent")
+    comment_count: int = 0
     created_at: datetime
 
 
@@ -362,3 +363,85 @@ class ClipViralityOut(_Out):
     error: str | None = None
     start_ms: int
     end_ms: int
+
+
+# --- social: profiles, follows, comments, notifications ---
+
+
+class ProfileOut(UserOut):
+    follower_count: int
+    following_count: int
+    published_clip_count: int
+    followed_by_me: bool | None = Field(default=None, description="Only set when X-User-Id is sent")
+    follows_me: bool | None = Field(default=None, description="Only set when X-User-Id is sent")
+
+
+class FollowOut(_Out):
+    user_id: uuid.UUID
+    following: bool
+    follower_count: int
+
+
+class UsersPage(_Out):
+    items: list[UserOut]
+    next_cursor: str | None
+
+
+class CommentCreate(BaseModel):
+    body: str = Field(min_length=1, max_length=1000)
+    parent_id: uuid.UUID | None = Field(default=None, description="Reply to this comment (one level of threading)")
+
+
+class CommentOut(_Out):
+    id: uuid.UUID
+    clip_id: uuid.UUID
+    user: UserOut
+    body: str
+    parent_id: uuid.UUID | None
+    created_at: datetime
+    reply_count: int = 0
+    replies: list["CommentOut"] = Field(default_factory=list, description="Oldest first; only on top-level comments")
+    can_delete: bool | None = Field(default=None, description="Author or clip owner; only set when X-User-Id is sent")
+
+
+class CommentsPage(_Out):
+    items: list[CommentOut] = Field(description="Top-level comments, newest first, each with its replies")
+    next_cursor: str | None
+    total: int = Field(description="All comments on the clip, replies included")
+
+
+NotificationTypeLiteral = Literal["like", "comment", "reply", "follow", "upload_ready", "virality_ready"]
+
+
+class NotificationClip(_Out):
+    id: uuid.UUID
+    title: str | None
+    thumbnail_url: str | None
+
+
+class NotificationOut(_Out):
+    id: uuid.UUID
+    type: NotificationTypeLiteral
+    message: str = Field(description="Ready-to-show text, e.g. 'NovaQueen liked your clip'")
+    actor: UserOut | None
+    clip: NotificationClip | None
+    comment_id: uuid.UUID | None
+    session_id: uuid.UUID | None
+    data: dict[str, Any] = Field(default_factory=dict)
+    read: bool
+    created_at: datetime
+
+
+class NotificationsPage(_Out):
+    items: list[NotificationOut]
+    next_cursor: str | None
+    unread_count: int
+
+
+class UnreadCountOut(_Out):
+    unread_count: int
+
+
+class MarkReadIn(BaseModel):
+    ids: list[uuid.UUID] | None = Field(default=None, description="Notifications to mark read")
+    all: bool = Field(default=False, description="Mark every notification read")

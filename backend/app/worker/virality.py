@@ -11,8 +11,9 @@ import uuid
 from collections.abc import Callable
 
 from app.config import Settings
-from app.db.models import UNPUBLISHED_STATES, Clip
+from app.db.models import UNPUBLISHED_STATES, Clip, NotificationType
 from app.schemas import CreatorPackOut
+from app.services.social import notify
 from app.worker.creator_pack import build_creator_pack
 from app.worker.export import STATUS_TTL_S
 from app.worker.pipeline import Deps
@@ -53,7 +54,7 @@ async def run_virality(
         clip = await db.get(Clip, clip_id)
         if clip is None:
             raise LookupError(f"clip {clip_id} not found")
-        start, end, state = clip.start_ms, clip.end_ms, clip.publish_state
+        start, end, state, owner_id = clip.start_ms, clip.end_ms, clip.publish_state, clip.user_id
     args = (clip_id, start, end, platform, target_audience, persona_count)
     key, skey = virality_key(*args), virality_status_key(*args)
 
@@ -84,6 +85,22 @@ async def run_virality(
             deps.storage.put_bytes, key, result.model_dump_json().encode(), "application/json"
         )
         await set_status("ready")
+        try:
+            async with deps.sessionmaker() as db:
+                await notify(
+                    db,
+                    user_id=owner_id,
+                    type=NotificationType.VIRALITY_READY,
+                    clip_id=clip_id,
+                    data={
+                        "platform": platform,
+                        "virality_score": getattr(result, "virality_score", None),
+                        "verdict": getattr(result, "verdict", None),
+                    },
+                )
+                await db.commit()
+        except Exception:  # noqa: BLE001 - the result is saved; a missed notification isn't a failure
+            log.warning("could not record virality notification", exc_info=True)
         log.info("virality ready", extra={"clip_id": str(clip_id), "score": getattr(result, "virality_score", None)})
         return key
     except Exception as e:
