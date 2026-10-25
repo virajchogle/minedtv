@@ -296,14 +296,3 @@ Deploys are automatic on every push to `main`:
 
 - **Web** (`frontend/**`): GitHub Actions builds and deploys to Vercel production.
 - **Backend** (`backend/**`): tests run against real Postgres and Redis while the API and worker images build in parallel with a layer cache; then the database is migrated, the API is rolled out, the worker is updated and `/health` is checked. Google Cloud access is keyless, through Workload Identity Federation.
-
-## Team
-
-| | |
-|---|---|
-| **Viraj** | Backend, infrastructure, search, web app |
-| **Jasper** | Web frontend, dashboard, search model quality |
-| **Rishi** | Android app |
-| **Nihal** | Creator AI, virality scoring, montages |
-
-Who owns what and what's open: [NOTES.md](NOTES.md).
