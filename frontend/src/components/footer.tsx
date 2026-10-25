@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Site footer. Not the DoodleCrewFooter component you referenced — only a
+ * Site footer. Not the DoodleCrewFooter component you referenced, only a
  * demo wrapper (`<DoodleCrewFooter />`, no props, no source) was supplied for
  * that one, so there's nothing to port faithfully. This reuses the type
  * system from the portfolio-site CSS you pasted instead: Archivo Black for
@@ -35,7 +35,7 @@ export function Footer() {
             ))}
           </nav>
           <p className="font-mono text-xs text-white/30">
-            © {new Date().getFullYear()} MinedIt — semantic video moment retrieval.
+            © {new Date().getFullYear()} MinedIt · semantic video moment retrieval.
           </p>
         </div>
       </div>

@@ -1,7 +1,7 @@
 """Content moderation: transcript plus a sample of the video's own frames.
 
 Runs once per session, in the pipeline, over the real Whisper transcript and
-a handful of frames `step_frames` already extracted — not a second video
+a handful of frames `step_frames` already extracted, not a second video
 upload to Gemini. Judges both together (spoken content AND on-screen
 text/imagery) into none / mild / severe, with itemized, timestamped
 violations so the UI can show exactly what was flagged and where:
@@ -40,27 +40,27 @@ Severity = Literal["none", "mild", "severe"]
 _POLICY = """You are a content moderator for short gameplay clips. You are given the
 spoken TRANSCRIPT (each line prefixed with its timestamp, e.g. "[12.3s] ...") and a
 handful of frames sampled across the video (each preceded by a text marker giving its
-timestamp). Judge both together — spoken words AND anything on screen (HUD text, chat
+timestamp). Judge both together: spoken words AND anything on screen (HUD text, chat
 overlays, imagery).
 
-SEVERE (always blocks publishing) — any of:
+SEVERE (always blocks publishing), any of:
 - Explicit sexual content: spoken, written on screen, or shown in a frame
 - Any sexual content involving a minor, in any form (zero tolerance)
 - A credible, specific threat of violence against a real, identifiable person
 - Promotion or encouragement of self-harm or suicide
-- Slurs, hate speech, or hate symbols — spoken, in on-screen text/chat, or shown in a frame — targeting a protected group (race, religion, gender, sexuality, disability, etc.)
+- Slurs, hate speech, or hate symbols (spoken, in on-screen text/chat, or shown in a frame) targeting a protected group (race, religion, gender, sexuality, disability, etc.)
 - Real-world gore or graphic violence that is not ordinary game combat (e.g. real footage, gratuitous realistic mutilation)
 
-MILD (warning + 18+ flag, upload still allowed) — any of:
-- Profanity / swearing (e.g. "fuck", "shit", "bitch", "ass") — spoken or in on-screen text/chat — that doesn't rise to the above
+MILD (warning + 18+ flag, upload still allowed), any of:
+- Profanity / swearing (e.g. "fuck", "shit", "bitch", "ass"), spoken or in on-screen text/chat, that doesn't rise to the above
 - Crude sexual humor or innuendo, spoken or on screen, that stops short of explicit description
-- Normal in-game violence/gore typical of an M-rated shooter or horror game (blood, combat, death animations) — this is expected gameplay content, not a real-world depiction
+- Normal in-game violence/gore typical of an M-rated shooter or horror game (blood, combat, death animations); this is expected gameplay content, not a real-world depiction
 
-NONE — everything else, including competitive trash talk, mild insults ("idiot", "noob",
+NONE: everything else, including competitive trash talk, mild insults ("idiot", "noob",
 "trash"), ordinary gaming language, and normal gameplay footage (shooting, explosions,
 HUD/chat text with no slurs or profanity). Default to NONE when in doubt; only escalate
 on clear evidence actually present in the transcript or a frame. Ordinary game violence is
-not severe or even mild just for being violent — games are violent by genre.
+not severe or even mild just for being violent; games are violent by genre.
 
 For every individual thing you flag (mild or severe), add one entry to "violations" with
 its timestamp in milliseconds, taken from the nearest preceding [Xs] marker in the
@@ -126,7 +126,7 @@ class ContentModerator:
 
         try:
             # Keep a strong local reference to the client for the duration of the
-            # call — see the same note in audience_simulator.py.
+            # call; see the same note in audience_simulator.py.
             client = genai.Client(api_key=self.api_key)
             content: list[dict] = []
             for t_ms, frame in frames:

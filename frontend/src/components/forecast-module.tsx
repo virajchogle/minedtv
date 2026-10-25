@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * MinedTV Forecast — the dashboard's featured module. Projects a selected
+ * MinedIt Forecast: the dashboard's featured module. Projects a selected
  * clip's future attention and earnings from its REAL view count and REAL
  * virality score (see lib/forecast.ts for the math and what's illustrative
  * vs. real). Every control actually recomputes the chart: video, RPM,
@@ -67,7 +67,7 @@ export function ForecastModule({ clips, compact = false }: { clips: ClipAnalytic
   if (!selected) return null;
 
   // Date.now() only runs in this lazy initializer (once, on mount) so the
-  // component body stays pure for the React Compiler — a mount-time
+  // component body stays pure for the React Compiler; a mount-time
   // snapshot is fine here, this doesn't need to tick live.
   const daysSincePublish = Math.max(
     0,
@@ -172,7 +172,7 @@ export function ForecastModule({ clips, compact = false }: { clips: ClipAnalytic
             </div>
           ) : (
             <p className="flex items-center gap-1 text-[11px] text-[var(--mtv-text-2)]">
-              <Info className="h-3 w-3" /> Not yet scored — using a neutral estimate for this forecast.
+              <Info className="h-3 w-3" /> Not yet scored, so using a neutral estimate for this forecast.
             </p>
           )}
         </div>
@@ -265,9 +265,9 @@ export function ForecastModule({ clips, compact = false }: { clips: ClipAnalytic
 
       <p className="text-[11px] leading-relaxed text-[var(--mtv-text-2)]">
         Illustrative projection, not a guarantee of income. Predicted views scale with this clip&apos;s real virality
-        score and recent view run-rate using one documented formula (see the forecast module source) — it has not
-        been fitted to real outcomes. Earnings use an assumed TikTok RPM ($0.04 / 1k views) unless you change it —
-        not a published Creativity Program rate, and not a Twitch or Medal figure.
+        score and recent view run-rate using one documented formula (see the forecast module source). It has not
+        been fitted to real outcomes. Earnings use an assumed TikTok RPM ($0.04 / 1k views) unless you change it.
+        That is not a published Creativity Program rate, and not a Twitch or Medal figure.
         Cumulative figures only ever increase; daily figures can rise and fall.
       </p>
     </section>
@@ -291,7 +291,7 @@ function valueOf(d: ForecastDay, mode: ChartMode): number {
 
 /**
  * Grouped bars per horizon: conservative / expected / breakout from the same
- * forecast() engine. Easier to read than a box plot — taller bar = more.
+ * forecast() engine. Easier to read than a box plot: taller bar = more.
  */
 function ForecastRangeChart({
   existingViews,

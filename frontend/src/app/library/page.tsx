@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * My Library — the acting user's own clips: My videos (private; uploads land
+ * My Library: the acting user's own clips: My videos (private; uploads land
  * here), Published (public on MinedIt) and On YouTube (posted from MinedIt).
  * Search here is scoped to your clips and includes private ones.
  */

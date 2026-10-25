@@ -310,10 +310,10 @@ def _fetch_frames(storage: Storage, items: list[tuple[int, str]]) -> list[tuple[
 
 
 async def step_moderate(ctx: Ctx) -> None:
-    """Classify the real transcript plus a sample of the real extracted frames —
+    """Classify the real transcript plus a sample of the real extracted frames,
     on-screen text and imagery, not just speech. Raises ContentPolicyViolation on
-    severe content, which stops the pipeline before finalize — see run_pipeline's
-    except clause."""
+    severe content, which stops the pipeline before finalize (see run_pipeline's
+    except clause)."""
     st = ctx.settings
     async with ctx.deps.sessionmaker() as db:
         rows = (

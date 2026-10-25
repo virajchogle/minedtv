@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Daily engagement — views, likes and comments on one GlowChart.
+ * Daily engagement: views, likes and comments on one GlowChart.
  * Built from the same AnalyticsDay rows the rest of the dashboard uses.
  */
 

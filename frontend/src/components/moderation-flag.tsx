@@ -6,7 +6,7 @@ import { formatTimestamp, type ModerationViolationOut } from "@/lib/api";
 
 /**
  * Red flag box: "this video violates our code of conduct," itemized by rule
- * and timestamp. Used wherever a clip/session has moderation_violations —
+ * and timestamp. Used wherever a clip/session has moderation_violations;
  * the upload flow, clip detail, My Library.
  */
 export function ModerationFlag({

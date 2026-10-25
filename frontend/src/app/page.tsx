@@ -4,7 +4,7 @@
  * MinedIt landing page.
  *
  * The sunrise hero, a grayscale games strip, a bold statement (no boxed
- * search-preview cards — those read as generic SaaS filler and were pulled
+ * search-preview cards; those read as generic SaaS filler and were pulled
  * out entirely; real search lives on /explore and /library), and a closing
  * call to action into the real application.
  */
@@ -67,7 +67,7 @@ export default function LandingPage() {
             Find yours.
           </h2>
           <p className="mt-6 max-w-xl text-base text-white/55 sm:text-xl">
-            Search your gaming moments with natural language — no filenames, no scrubbing.
+            Search your gaming moments with natural language. No filenames, no scrubbing.
           </p>
         </motion.div>
 

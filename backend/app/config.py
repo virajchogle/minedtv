@@ -85,12 +85,12 @@ class Settings(BaseSettings):
     creator_virality_max_frames: int = Field(default=240, ge=12, le=2000)
     creator_virality_frame_weight: float = Field(default=0.25, ge=0, le=0.5)
     # Content moderation (app/ml/moderation.py). Same cheap model tier as persona
-    # generation — this is a short classification call, not full video analysis.
+    # generation; this is a short classification call, not full video analysis.
     moderation_model: str = "gemini-3.1-flash-lite"
     # How many already-extracted frames (see step_frames) to sample evenly across the
     # video and send alongside the transcript, so on-screen text/imagery is judged too.
     # They're already small (frame_thumb_width) and already in storage, so this adds no
-    # new extraction work — just a handful of extra bytes on the one classification call.
+    # new extraction work, just a handful of extra bytes on the one classification call.
     moderation_max_frames: int = Field(default=8, ge=0, le=20)
     # Tried in order when the main model is overloaded or rate limited (creator packs for clips).
     gemini_fallback_models: Annotated[list[str], NoDecode] = Field(

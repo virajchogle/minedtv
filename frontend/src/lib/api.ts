@@ -1,5 +1,5 @@
 /**
- * MinedIt client — adapter over the deployed team API.
+ * MinedIt client: adapter over the deployed team API.
  *
  * The UI was built against a videos/moments/scope contract; the deployed
  * service speaks sessions, clips, HLS playlists and millisecond offsets. This
@@ -389,7 +389,7 @@ function clipToVideo(clip: ClipOut): Video {
 
 function sessionToVideo(session: SessionOut): Video {
   // `session.status` is already authoritative ("failed" vs "blocked" vs anything
-  // else) — don't override it from failed_step, which is set for both.
+  // else), so don't override it from failed_step, which is set for both.
   const status = toStatus(session.status);
   return {
     video_id: session.id,
@@ -549,8 +549,8 @@ function toResult(hit: UpstreamSearchResult, index: number): SearchResult {
  * One entry point for both modes.
  *
  * Gallery search maps straight onto `GET /search`. Single-video search has no
- * upstream equivalent — the service filters by game and user, not by clip or
- * session — so it over-fetches and filters here, and reports
+ * upstream equivalent (the service filters by game and user, not by clip or
+ * session), so it over-fetches and filters here, and reports
  * `scope_enforced: "client"` so the UI can say so plainly.
  */
 export async function searchVideos(options: {
@@ -724,7 +724,7 @@ function putWithProgress(
 /**
  * Two things are tracked here:
  *  - the signed-in account (`getAccount`), whose login token lives in an
- *    httpOnly cookie the proxy forwards — browser code never sees it;
+ *    httpOnly cookie the proxy forwards, so browser code never sees it;
  *  - the user requests act as (`getCurrentUser`), sent as X-User-Id. For a
  *    normal account that's always itself; dev accounts can switch to anyone.
  * Both are cached in localStorage so components can read them synchronously;
@@ -1016,7 +1016,7 @@ export async function fetchAnalytics(days: number): Promise<AnalyticsOut> {
 
 /**
  * A clip's virality score, or null if it's never been checked. Defensively
- * guards `virality` itself in case it's missing from a response — the
+ * guards `virality` itself in case it's missing from a response. The
  * backend's own schema guarantees it, but this is a client/server boundary
  * and crashing the whole dashboard over one clip's bad data is worse than
  * reporting that clip as unscored.

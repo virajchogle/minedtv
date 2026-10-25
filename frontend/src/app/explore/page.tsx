@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Explore — every published clip on the platform.
+ * Explore: every published clip on the platform.
  *
  * The search bar searches all published clips. Below it: browse by game, the
  * clip grid and the marquee, all from

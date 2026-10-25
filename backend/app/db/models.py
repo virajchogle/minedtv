@@ -52,7 +52,7 @@ class SessionStatus:
     READY = "ready"
     FAILED = "failed"
     # Terminal: transcript moderation found severe content. No clip is ever
-    # created for this session — distinct from FAILED, which is a technical error.
+    # created for this session, distinct from FAILED, which is a technical error.
     BLOCKED = "blocked"
 
 
@@ -76,7 +76,7 @@ STEP_STATUS = {
 
 def is_adult(birth_date: date | None, min_age: int = 18) -> bool:
     """No birth_date (anonymous viewer, or a pre-this-column row never backfilled) is
-    treated as NOT an adult — the safe default for gating age-restricted content."""
+    treated as NOT an adult, the safe default for gating age-restricted content."""
     if birth_date is None:
         return False
     today = date.today()
@@ -144,7 +144,7 @@ class Session(Base):
     )
 
     # Transcript + frame moderation (see app/ml/moderation.py). "severe" never
-    # reaches this row as READY — the pipeline stops and leaves status=BLOCKED instead.
+    # reaches this row as READY; the pipeline stops and leaves status=BLOCKED instead.
     moderation_severity: Mapped[str] = mapped_column(String(16), nullable=False, default="none", server_default="none")
     moderation_reason: Mapped[str | None] = mapped_column(Text)
     age_restricted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")

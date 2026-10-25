@@ -39,7 +39,7 @@ export function BackgroundGradientAnimation({
       }}
     >
       <div className="absolute inset-0" style={{ filter: "blur(40px)" }}>
-        {/* Fox Blue — slow drift */}
+        {/* Fox Blue: slow drift */}
         <div
           style={{
             ...orbBase,
@@ -48,7 +48,7 @@ export function BackgroundGradientAnimation({
             opacity: 0.7,
           }}
         />
-        {/* Fox Crimson — medium rotation */}
+        {/* Fox Crimson: medium rotation */}
         <div
           style={{
             ...orbBase,
@@ -57,7 +57,7 @@ export function BackgroundGradientAnimation({
             opacity: 0.65,
           }}
         />
-        {/* Fox Blue — complex path */}
+        {/* Fox Blue: complex path */}
         <div
           style={{
             ...orbBase,
@@ -66,7 +66,7 @@ export function BackgroundGradientAnimation({
             opacity: 0.6,
           }}
         />
-        {/* Fox Crimson — simple oscillation */}
+        {/* Fox Crimson: simple oscillation */}
         <div
           style={{
             ...orbBase,
@@ -75,7 +75,7 @@ export function BackgroundGradientAnimation({
             opacity: 0.6,
           }}
         />
-        {/* White — very subtle brightening */}
+        {/* White: very subtle brightening */}
         <div
           style={{
             ...orbBase,
