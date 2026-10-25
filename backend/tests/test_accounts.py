@@ -77,21 +77,26 @@ async def test_signup_login_and_acting_as(sessionmaker, settings):  # noqa: F811
         again = await accounts_api.login(LoginIn(login=f"P_{tag}@MAIL.com", password="password2"), db)
         assert again.user.id == player.user.id
 
-        # A token alone acts as its account; a dev token may act as anyone.
+        # A token alone acts as its account.
         assert (await _resolve(db, player.token, None)).id == player.user.id
         assert (await _resolve(db, player.token, player.user.id)).id == player.user.id
-        assert (await _resolve(db, dev.token, demo.id)).id == demo.id
-        with pytest.raises(HTTPException) as e:
-            await _resolve(db, player.token, demo.id)
-        assert e.value.status_code == 403
         with pytest.raises(HTTPException) as e:
             await _resolve(db, "not-a-token", None)
         assert e.value.status_code == 401
 
-        # Without a token, X-User-Id still works unless REQUIRE_LOGIN is on.
+        # Testing mode (REQUIRE_LOGIN off): anyone, signed in or not, may act as anyone.
         assert (await _resolve(db, None, demo.id)).id == demo.id
+        assert (await _resolve(db, player.token, demo.id)).id == demo.id
+        assert (await accounts_api.me(await db.get(User, player.user.id))).can_act_as
+
+        # REQUIRE_LOGIN on: a token is needed, and only dev accounts may act as someone else.
         settings.require_login = True
         with pytest.raises(HTTPException) as e:
             await _resolve(db, None, demo.id)
         assert e.value.status_code == 401
+        with pytest.raises(HTTPException) as e:
+            await _resolve(db, player.token, demo.id)
+        assert e.value.status_code == 403
         assert (await _resolve(db, dev.token, demo.id)).id == demo.id
+        assert not (await accounts_api.me(await db.get(User, player.user.id))).can_act_as
+        assert (await accounts_api.me(await db.get(User, dev.user.id))).can_act_as

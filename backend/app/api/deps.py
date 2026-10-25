@@ -45,14 +45,16 @@ async def current_user_optional(
         Header(description="Act as this user. Dev accounts may act as anyone; others only as themselves."),
     ] = None,
 ) -> User | None:
-    """Who the request acts as. With a login token: that account, or (dev accounts only) the
-    X-User-Id user. Without one: the X-User-Id user, unless REQUIRE_LOGIN is on."""
+    """Who the request acts as: the X-User-Id user if sent and allowed, else the signed-in account.
+    While REQUIRE_LOGIN is off (testing), anyone may act as anyone, as before accounts existed.
+    With it on, a login token is required and only dev accounts may act as someone else."""
     if x_user_id is None or (account is not None and x_user_id == account.id):
         return account
-    if account is not None and not account.is_dev:
-        raise HTTPException(403, "Only dev accounts can act as another user")
-    if account is None and get_settings().require_login:
-        raise HTTPException(401, "Sign in first (Authorization: Bearer <token>)")
+    if get_settings().require_login:
+        if account is None:
+            raise HTTPException(401, "Sign in first (Authorization: Bearer <token>)")
+        if not account.is_dev:
+            raise HTTPException(403, "Only dev accounts can act as another user")
     user = await db.get(User, x_user_id)
     if user is None:
         raise HTTPException(401, "Unknown X-User-Id")

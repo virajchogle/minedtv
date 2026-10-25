@@ -19,6 +19,8 @@ export interface UserOut {
 export interface MeOut extends UserOut {
   email: string | null;
   is_dev: boolean;
+  /** May act as other users: dev accounts, or anyone while the server doesn't require login. */
+  can_act_as: boolean;
 }
 
 /** Upstream lifecycle values seen on sessions and clips. */

@@ -44,6 +44,7 @@ class LoginIn(BaseModel):
 class MeOut(UserOut):
     email: str | None
     is_dev: bool
+    can_act_as: bool = Field(default=False, description="May act as other users: dev accounts, or anyone while REQUIRE_LOGIN is off")
 
 
 class AuthOut(BaseModel):

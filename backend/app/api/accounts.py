@@ -16,12 +16,17 @@ from app.services import accounts
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
+def _me(user: User) -> MeOut:
+    can_act_as = user.is_dev or not get_settings().require_login
+    return MeOut.model_validate(user).model_copy(update={"can_act_as": can_act_as})
+
+
 def _auth_out(user: User) -> AuthOut:
     try:
         token, expires = accounts.make_token(get_settings(), user.id)
     except accounts.AuthNotConfigured as e:
         raise HTTPException(503, str(e)) from e
-    return AuthOut(token=token, expires_at=datetime.fromtimestamp(expires, UTC), user=MeOut.model_validate(user))
+    return AuthOut(token=token, expires_at=datetime.fromtimestamp(expires, UTC), user=_me(user))
 
 
 @router.post("/signup", response_model=AuthOut, status_code=201)
@@ -55,10 +60,10 @@ async def login(body: LoginIn, db: Db) -> AuthOut:
     ok = user is not None and await run_in_threadpool(accounts.verify_password, body.password, user.password_hash)
     if not ok:
         raise HTTPException(401, "Wrong username/email or password")
-    # Picks up emails added to DEV_EMAILS after the account was made.
-    is_dev = accounts.is_dev_email(get_settings(), user.email)
-    if user.is_dev != is_dev:
-        user.is_dev = is_dev
+    # Picks up emails added to DEV_EMAILS after the account was made. Only ever promotes, so an
+    # account made dev by hand (UPDATE users SET is_dev = true ...) stays dev.
+    if not user.is_dev and accounts.is_dev_email(get_settings(), user.email):
+        user.is_dev = True
         await db.commit()
     return _auth_out(user)
 
@@ -68,7 +73,7 @@ async def me(account: SignedInUser) -> MeOut:
     """The signed-in account (not whoever a dev account is acting as)."""
     if account is None:
         raise HTTPException(401, "Not signed in")
-    return MeOut.model_validate(account)
+    return _me(account)
 
 
 @router.post("/logout", status_code=204)

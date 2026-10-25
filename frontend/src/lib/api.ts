@@ -742,11 +742,30 @@ export function setCurrentUser(user: UserOut | null): void {
 }
 
 function setAccount(account: MeOut | null): void {
+  const previous = getAccount();
   writeStored(ACCOUNT_KEY, account);
   const acting = getCurrentUser();
-  // Signed out, or a normal account: requests act as the account itself.
-  if (!account || !account.is_dev || !acting) writeStored(USER_KEY, account);
+  if (account) {
+    // Accounts that can't switch users always act as themselves.
+    if (!account.can_act_as || !acting || previous?.id !== account.id) writeStored(USER_KEY, account);
+  } else if (previous) {
+    writeStored(USER_KEY, null); // logging out also stops acting as anyone
+  }
+  // Never signed in: keep whichever test user was picked (allowed while login isn't required).
   window.dispatchEvent(new Event(USER_CHANGED_EVENT));
+}
+
+let openModeCache: Promise<boolean> | null = null;
+
+/** True while the server doesn't require login, so anyone may pick a user to act as. */
+export function actAsOpen(): Promise<boolean> {
+  openModeCache ??= request<ServerConfigOut>("/config")
+    .then((c) => !c.features.require_login)
+    .catch(() => {
+      openModeCache = null;
+      return false;
+    });
+  return openModeCache;
 }
 
 async function authRequest<T>(action: string, body?: unknown): Promise<T> {
