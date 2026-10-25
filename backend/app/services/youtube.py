@@ -236,3 +236,23 @@ async def upload_video(
 
 def video_url(video_id: str) -> str:
     return f"https://youtu.be/{video_id}"
+
+
+async def posted_urls(db, clip_ids: list[uuid.UUID]) -> dict[uuid.UUID, str]:
+    """Each clip's most recent successful YouTube post, for marking clips "On YouTube" in lists."""
+    from sqlalchemy import select
+
+    from app.db.models import YouTubeUpload, YouTubeUploadStatus
+
+    if not clip_ids:
+        return {}
+    rows = await db.execute(
+        select(YouTubeUpload.clip_id, YouTubeUpload.video_id)
+        .where(
+            YouTubeUpload.clip_id.in_(clip_ids),
+            YouTubeUpload.status == YouTubeUploadStatus.PUBLISHED,
+            YouTubeUpload.video_id.is_not(None),
+        )
+        .order_by(YouTubeUpload.updated_at)
+    )
+    return {clip_id: video_url(video_id) for clip_id, video_id in rows}  # later rows win

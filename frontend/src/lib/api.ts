@@ -90,6 +90,8 @@ export interface Video {
   liked_by_me: boolean;
   start_ms: number;
   end_ms: number;
+  /** Set once the clip has been posted to YouTube. */
+  youtube_url: string | null;
   /** Transcript moderation flagged this 18+ ("mild" or "severe" verdict). */
   age_restricted: boolean;
   moderation_severity: ModerationSeverity;
@@ -367,6 +369,7 @@ function clipToVideo(clip: ClipOut): Video {
     published_at: clip.published_at ?? null,
     owner_id: clip.user?.id ?? null,
     liked_by_me: Boolean(clip.liked_by_me),
+    youtube_url: clip.youtube_url ?? null,
     start_ms: clip.start_ms,
     end_ms: clip.end_ms,
     age_restricted: Boolean(clip.age_restricted),
@@ -405,6 +408,7 @@ function sessionToVideo(session: SessionOut): Video {
     published_at: null,
     owner_id: session.user?.id ?? null,
     liked_by_me: false,
+    youtube_url: null,
     start_ms: 0,
     end_ms: session.duration_ms ?? 0,
     age_restricted: Boolean(session.age_restricted),
@@ -846,6 +850,7 @@ export const publishClip = (clipId: string) =>
   request<ClipOut>(`/clips/${clipId}/publish`, { method: "POST" }).then(clipToVideo);
 export const unpublishClip = (clipId: string) =>
   request<ClipOut>(`/clips/${clipId}/unpublish`, { method: "POST" }).then(clipToVideo);
+/** Legacy "ready to post" state; the web app no longer uses it (Android may). */
 export const markClipReady = (clipId: string) =>
   request<ClipOut>(`/clips/${clipId}/mark-ready`, { method: "POST" }).then(clipToVideo);
 
@@ -876,7 +881,7 @@ function viralityQuery(o: ViralityOptions): string {
   return params.toString();
 }
 
-/** Synthetic audience panel. The backend only runs it on unpublished (draft/ready) clips. */
+/** Synthetic audience panel, for clips you own. Publishing starts one for YouTube automatically. */
 export const startVirality = (clipId: string, o: ViralityOptions) =>
   request<ClipViralityOut>(`/clips/${clipId}/virality`, {
     method: "POST",

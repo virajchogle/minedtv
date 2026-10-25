@@ -24,6 +24,7 @@ def clip_out(
     pending: tuple[int, int] = (0, 0),
     liked_ids: set[uuid.UUID] | None = None,
     comment_count: int = 0,
+    youtube_url: str | None = None,
 ) -> ClipOut:
     return ClipOut(
         id=clip.id,
@@ -44,6 +45,7 @@ def clip_out(
         like_count=clip.like_count + pending[1],
         liked_by_me=None if liked_ids is None else clip.id in liked_ids,
         comment_count=comment_count,
+        youtube_url=youtube_url,
         age_restricted=clip.age_restricted,
         moderation_severity=session.moderation_severity,
         moderation_reason=session.moderation_reason,

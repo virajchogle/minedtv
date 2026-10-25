@@ -94,12 +94,12 @@ export default function VideoPage() {
     return (
       <div className="mx-auto max-w-3xl space-y-4 p-8">
         <BackToGallery />
-        {error && /not found/i.test(error) && <ChooseUserNotice action="open your own drafts" />}
+        {error && /not found/i.test(error) && <ChooseUserNotice action="open your private videos" />}
         <div className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <p>
             {error && /not found/i.test(error)
-              ? "This clip doesn't exist, or it's an unpublished draft that only its owner can see."
+              ? "This clip doesn't exist, or it's a private video that only its owner can see."
               : (error ?? "This video could not be loaded.")}
           </p>
         </div>

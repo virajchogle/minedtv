@@ -93,8 +93,8 @@ export default function ProfilePage() {
 
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 {stat("Published", published.length)}
-                {stat("Drafts", clips.filter((c) => c.publish_state === "draft").length, "/library")}
-                {stat("Ready to post", clips.filter((c) => c.publish_state === "ready").length, "/library")}
+                {stat("My videos", clips.filter((c) => c.publish_state !== "published").length, "/library")}
+                {stat("On YouTube", clips.filter((c) => c.youtube_url).length, "/library")}
                 {stat("Games", new Set(clips.map((c) => c.game).filter(Boolean)).size)}
               </div>
 

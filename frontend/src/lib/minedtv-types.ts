@@ -54,6 +54,8 @@ export interface ClipOut {
   moderation_severity: ModerationSeverity;
   moderation_reason: string | null;
   created_at: string;
+  /** Latest successful post of this clip to YouTube. */
+  youtube_url?: string | null;
 }
 
 export interface EventOut {

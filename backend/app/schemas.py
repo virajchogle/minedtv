@@ -152,13 +152,14 @@ class ClipOut(_Out):
     kind: Literal["auto", "user"]
     publish_state: PublishState = Field(
         default="published",
-        description="draft (owner only) -> ready (queued to post to YouTube, owner only) -> published (public)",
+        description="draft (owner only) -> published (public). 'ready' is a legacy owner-only state the web app treats as draft",
     )
     published_at: datetime | None = None
     view_count: int
     like_count: int
     liked_by_me: bool | None = Field(default=None, description="Only set when X-User-Id is sent")
     comment_count: int = 0
+    youtube_url: str | None = Field(default=None, description="Latest successful post of this clip to YouTube")
     age_restricted: bool = Field(default=False, description="Transcript moderation flagged this clip 18+")
     moderation_severity: ModerationSeverity = Field(default="none", description="The owning session's moderation verdict")
     moderation_reason: str | None = Field(default=None, description="One-line reason, owner-visible only")

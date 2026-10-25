@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Eye, Loader2, ShieldAlert, XCircle, Youtube } from "lucide-react";
+import { CheckCircle2, Eye, Loader2, ShieldAlert, XCircle } from "lucide-react";
 
 import { PublishBadge } from "@/components/clip-actions";
 import { ChooseUserNotice, useCurrentUser } from "@/components/current-user";
@@ -14,7 +14,6 @@ import {
   STATUS_COPY,
   fetchClipsForSession,
   fetchVideo,
-  markClipReady,
   publishClip,
   uploadVideo,
   type ProcessingStatus,
@@ -188,10 +187,10 @@ export default function UploadPage() {
     setResetKey((key) => key + 1);
   };
 
-  const updateClip = async (clip: Video, action: "publish" | "ready") => {
-    setActing(`${clip.video_id}:${action}`);
+  const updateClip = async (clip: Video) => {
+    setActing(`${clip.video_id}:publish`);
     try {
-      const updated = await (action === "publish" ? publishClip : markClipReady)(clip.video_id);
+      const updated = await publishClip(clip.video_id);
       setClips((list) => list.map((c) => (c.video_id === updated.video_id ? updated : c)));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not update the clip");
@@ -257,7 +256,7 @@ export default function UploadPage() {
             </div>
             <p className="text-xs text-[var(--mtv-text-2)]">
               Uploading as <span className="font-semibold text-[var(--mtv-text)]">@{me.username}</span>. New clips
-              start as private drafts, so you can check them (and run a virality test) before publishing.
+              land in My videos (private) first. Publish one to put it on MinedTV; that also runs the virality check.
             </p>
             <div className="flex justify-end gap-3">
               <OutlineButton href="/library">Cancel</OutlineButton>
@@ -323,8 +322,8 @@ export default function UploadPage() {
             {clips.length > 0 && (
               <div className="space-y-2">
                 <p className="text-sm text-[var(--mtv-text-2)]">
-                  {clips.length === 1 ? "Your clip is" : `${clips.length} clips are`} ready. Drafts are only visible to
-                  you until you publish them.
+                  {clips.length === 1 ? "Your clip is" : `${clips.length} clips are`} ready, in My videos. Only you can see
+                  them until you publish.
                 </p>
                 {clips.map((clip) => (
                   <div
@@ -336,23 +335,12 @@ export default function UploadPage() {
                     {clip.publish_state !== "published" && (
                       <button
                         type="button"
-                        onClick={() => void updateClip(clip, "publish")}
+                        onClick={() => void updateClip(clip)}
                         disabled={acting !== null}
                         className="inline-flex items-center gap-1 rounded-lg bg-[var(--mtv-gold)] px-2.5 py-1 text-xs font-bold text-[var(--mtv-on-gold)] disabled:opacity-40"
                       >
                         {acting === `${clip.video_id}:publish` ? <Loader2 className="h-3 w-3 animate-spin" /> : <Eye className="h-3 w-3" />}
                         Publish
-                      </button>
-                    )}
-                    {clip.publish_state === "draft" && (
-                      <button
-                        type="button"
-                        onClick={() => void updateClip(clip, "ready")}
-                        disabled={acting !== null}
-                        className="inline-flex items-center gap-1 rounded-lg border border-[var(--mtv-divider)] px-2.5 py-1 text-xs font-semibold disabled:opacity-40"
-                      >
-                        {acting === `${clip.video_id}:ready` ? <Loader2 className="h-3 w-3 animate-spin" /> : <Youtube className="h-3 w-3" />}
-                        Ready to post
                       </button>
                     )}
                     <button

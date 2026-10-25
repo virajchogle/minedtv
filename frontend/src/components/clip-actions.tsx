@@ -2,8 +2,9 @@
 
 /**
  * Everything you can do with a clip beyond watching it:
- *  - publish state (owner): draft → ready to post to YouTube → published
- *  - post to YouTube (owner, ready or published clips)
+ *  - publish state (owner): private (My videos) → published on MinedTV, which
+ *    also starts the virality check and the AI creator pack
+ *  - post to YouTube (owner, published clips)
  *  - like (anyone acting as a user)
  *  - MP4 export for TikTok/Reels
  *  - AI creator pack (titles, caption, hashtags, YouTube metadata)
@@ -39,7 +40,6 @@ import {
   getYouTubeUploads,
   getExport,
   getVirality,
-  markClipReady,
   postToYouTube,
   publishClip,
   setLiked,
@@ -69,14 +69,15 @@ const POLL_MS = 5000;
 
 const STATE_COPY: Record<PublishState, { label: string; tone: string; hint: string }> = {
   draft: {
-    label: "Draft",
+    label: "Private",
     tone: "border-white/25 bg-white/10 text-white/80",
-    hint: "Only you can see this clip.",
+    hint: "In My videos: only you can see it. Publishing puts it on MinedTV and runs the virality check.",
   },
+  // Legacy state from before publish-then-post; shown exactly like a private clip.
   ready: {
-    label: "Ready to post",
-    tone: "border-[var(--mtv-gold)]/40 bg-[var(--mtv-gold)]/15 text-[var(--mtv-gold)]",
-    hint: "Ready to post to YouTube. Still private on MinedTV until published.",
+    label: "Private",
+    tone: "border-white/25 bg-white/10 text-white/80",
+    hint: "In My videos: only you can see it. Publishing puts it on MinedTV and runs the virality check.",
   },
   published: {
     label: "Published",
@@ -247,7 +248,9 @@ function PublishSection({ video, onChange }: { video: Video; onChange: (v: Video
     setBusy(name);
     setError(null);
     try {
-      onChange(await fn(video.video_id));
+      const updated = await fn(video.video_id);
+      // Publish responses are list-shaped; keep the detail page's counts.
+      onChange({ ...updated, frame_count: video.frame_count, segment_count: video.segment_count });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not update the clip");
     } finally {
@@ -264,14 +267,9 @@ function PublishSection({ video, onChange }: { video: Video; onChange: (v: Video
             <Eye className="h-3.5 w-3.5" /> Publish
           </ActionButton>
         )}
-        {state === "draft" && (
-          <ActionButton busy={busy === "ready"} onClick={() => act("ready", markClipReady)}>
-            <Youtube className="h-3.5 w-3.5" /> Mark ready to post
-          </ActionButton>
-        )}
-        {state !== "draft" && (
+        {state === "published" && (
           <ActionButton busy={busy === "draft"} onClick={() => act("draft", unpublishClip)}>
-            <EyeOff className="h-3.5 w-3.5" /> {state === "published" ? "Unpublish" : "Back to draft"}
+            <EyeOff className="h-3.5 w-3.5" /> Unpublish
           </ActionButton>
         )}
       </div>
@@ -372,7 +370,7 @@ function CreatorPackSection({ video }: { video: Video }) {
   const job = useJob<ClipCreatorPackOut>(
     () => getCreatorPack(video.video_id),
     () => startCreatorPack(video.video_id),
-    [video.video_id, video.start_ms, video.end_ms]
+    [video.video_id, video.start_ms, video.end_ms, video.publish_state]
   );
   const pack = job.state?.status === "ready" ? job.state.pack : null;
   return (
@@ -440,7 +438,7 @@ function ViralitySection({ video }: { video: Video }) {
   const job = useJob<ClipViralityOut>(
     () => getVirality(video.video_id, submitted),
     () => startVirality(video.video_id, submitted),
-    [video.video_id, video.start_ms, video.end_ms, submitted.platform, submitted.target_audience, submitted.persona_count]
+    [video.video_id, video.start_ms, video.end_ms, video.publish_state, submitted.platform, submitted.target_audience, submitted.persona_count]
   );
   const result = job.state?.status === "ready" ? job.state.result : null;
 
@@ -464,10 +462,10 @@ function ViralitySection({ video }: { video: Video }) {
   };
 
   return (
-    <Panel icon={TrendingUp} title="Virality check" aside={<span className="text-[11px] text-[var(--mtv-text-2)]">drafts only</span>}>
+    <Panel icon={TrendingUp} title="Virality check" aside={<span className="text-[11px] text-[var(--mtv-text-2)]">runs on publish</span>}>
       <p className="text-xs text-[var(--mtv-text-2)]">
-        A synthetic audience panel reacts to this clip before you publish it. It&apos;s a creative testing aid,
-        not a forecast. Takes a few minutes.
+        A synthetic audience panel reacts to this clip. Publishing runs it for YouTube automatically; run it here
+        for other platforms or audiences. It&apos;s a creative testing aid, not a forecast. Takes a few minutes.
       </p>
       <div className="flex flex-wrap items-end gap-2">
         <label className="space-y-1 text-[11px] text-[var(--mtv-text-2)]">
@@ -669,7 +667,7 @@ function YouTubeSection({ video }: { video: Video }) {
     }
   };
 
-  const postable = video.publish_state === "ready" || video.publish_state === "published";
+  const postable = video.publish_state === "published";
 
   return (
     <Panel
@@ -702,7 +700,7 @@ function YouTubeSection({ video }: { video: Video }) {
           <p className="text-xs text-[var(--mtv-text-2)]">
             {postable
               ? "Uploads this clip with the title, description and tags from its AI creator pack (written first if it doesn't exist yet)."
-              : "Mark this clip ready to post (or publish it) first."}{" "}
+              : "Publish it on MinedTV first."}{" "}
             Until Google approves the app, YouTube keeps uploads private.
           </p>
           {postable && (
@@ -763,24 +761,18 @@ export function ClipActions({ video, onChange }: { video: Video; onChange: (v: V
   const me = useCurrentUser();
   if (video.kind !== "clip") return null;
   const isOwner = Boolean(me && video.owner_id === me.id);
-  const unpublished = video.publish_state !== "published";
 
   return (
     <div className="space-y-4">
       <LikeButton video={video} onChange={onChange} />
       {!me && <ChooseUserNotice action="like, publish and run AI tools on clips" />}
       {isOwner && <PublishSection video={video} onChange={onChange} />}
-      {isOwner && <YouTubeSection video={video} />}
+      {isOwner && video.publish_state === "published" && <YouTubeSection video={video} />}
       <div className="grid gap-4 lg:grid-cols-2">
         <ExportSection video={video} />
         <CreatorPackSection video={video} />
       </div>
-      {isOwner && unpublished && <ViralitySection video={video} />}
-      {isOwner && !unpublished && (
-        <p className="text-xs text-[var(--mtv-text-2)]">
-          Virality checks run on unpublished clips. Unpublish this clip to test it with the audience panel.
-        </p>
-      )}
+      {isOwner && <ViralitySection video={video} />}
     </div>
   );
 }

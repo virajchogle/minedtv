@@ -376,23 +376,27 @@ When a clip is opened, call `MinedTvApi.view(clip.remoteId!!)` once. Have the li
 - **Stable media URLs:** thumbnails, segments and exports now use a fixed public R2 URL, so Coil and
   ExoPlayer can cache them.
 
-## 8. Drafts, "ready to post" and publishing
+## 8. My videos, publishing and the virality check
 
-Clips have a `publish_state`: `draft` → `ready` (queued to post to YouTube) → `published`.
+The flow is **upload → My videos (private) → Publish → Post to YouTube**. A clip's `publish_state` is
+`draft` (private, "My videos") or `published` (public). `ready` is a legacy private state: treat it like
+`draft`. `POST /clips/{id}/mark-ready` still works but the web app no longer uses it.
 
-- The feed, search and other users' profiles only show `published` clips. **New uploads may start as
+- The feed, search and other users' profiles only show `published` clips. **New uploads start as
   `draft`, so add a Publish button** that calls `POST /clips/{id}/publish` (owner's `X-User-Id`).
-  `POST /clips/{id}/unpublish` takes a clip back to draft, and `POST /clips/{id}/mark-ready` puts it in
-  the "ready to post to YouTube" bucket.
+  `POST /clips/{id}/unpublish` takes it back to private.
+- **Publishing also starts the virality check** for YouTube (it writes the AI creator pack on the way).
+  Show its result by polling `GET /clips/{id}/virality?platform=youtube` until `status == "ready"`.
 - On the user's own profile, `GET /users/{me}/clips?state=draft|ready|published|unpublished|all`
-  (with `X-User-Id: {me}`) gives the buckets. Anyone else only ever gets published clips.
+  (with `X-User-Id: {me}`) gives the buckets; `unpublished` = My videos. Each clip has `youtube_url`
+  once it's been posted to YouTube. Anyone else only ever gets published clips.
 - "Search your clips" (library scope) should pass `user_id={me}`. That search includes the user's own
-  drafts; global search never does.
-- **Virality check (drafts only):** `POST /clips/{id}/virality` with
-  `{"platform": "youtube", "target_audience": "...", "persona_count": 9}`, then poll
-  `GET /clips/{id}/virality?platform=youtube&...` with the same options until `status == "ready"`.
-  `result` has `virality_score` (0–100), `verdict` and the persona panel. A published clip returns
-  409, so unpublish it first. It takes a few minutes (export + Gemini + persona panel).
+  private clips; global search never does.
+- **Virality check by hand** (any clip you own, other platforms or audiences): `POST /clips/{id}/virality`
+  with `{"platform": "tiktok", "target_audience": "...", "persona_count": 9}`, then poll
+  `GET /clips/{id}/virality?platform=tiktok&...` with the same options until `status == "ready"`.
+  `result` has `virality_score` (0–100), `verdict` and the persona panel. It takes a few minutes
+  (export + Gemini + persona panel).
 - **AI creator pack:** `POST /clips/{id}/creator-pack` returns titles, caption, hashtags and YouTube
   metadata for the clip. Poll `GET` the same way.
 
@@ -416,7 +420,7 @@ Clips have a `publish_state`: `draft` → `ready` (queued to post to YouTube) �
 
 1. `GET /youtube/status` returns `{configured, connected, channel_title}`.
 2. If not connected: `GET /youtube/connect` returns `auth_url`. Open it in a Custom Tab or browser. The user approves on Google and lands on a "YouTube connected" page (or the web app). Then check status again.
-3. On a clip in the **ready** bucket: `POST /clips/{id}/youtube {"privacy": "unlisted"}`. Title, description and tags default to the AI creator pack; pass your own to override them. Then poll `GET /clips/{id}/youtube` until `status` is `published` and show the `url`. The owner also gets a `youtube_posted` notification.
+3. On a **published** clip: `POST /clips/{id}/youtube {"privacy": "unlisted"}`. Title, description and tags default to the AI creator pack; pass your own to override them. Then poll `GET /clips/{id}/youtube` until `status` is `published` and show the `url`. The owner also gets a `youtube_posted` notification.
 
 Uploads may be private-only until Google audits the app. For TikTok and Reels, share the MP4 from `/clips/{id}/export` through the Android share sheet (`IntentPlatformPublisher`), since their APIs need an app review.
 
