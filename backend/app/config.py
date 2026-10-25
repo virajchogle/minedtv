@@ -61,10 +61,13 @@ class Settings(BaseSettings):
 
     # Gemini-powered creator metadata. Leave the key empty to disable /creator/analyze.
     gemini_api_key: str | None = None
-    gemini_model: str = "gemini-3.8-flash"
+    gemini_model: str = "gemini-3.5-flash-lite"
     creator_inline_limit_mb: int = Field(default=20, gt=0)
     creator_frame_sample_fps: float = Field(default=0.25, gt=0)
     creator_max_upload_mb: int = Field(default=500, gt=0)
+    creator_request_timeout_s: int = Field(default=90, ge=10, le=600)
+    creator_persona_count: int = Field(default=9, ge=3, le=15)
+    creator_persona_model: str = "gemini-3.1-flash-lite"
 
     # --- processing ---
     segment_seconds: int = 2

@@ -1,5 +1,5 @@
 # API + data
-fastapi[standard]>=0.115,<1
+fastapi[standard]>=0.143,<1
 pydantic>=2.7,<3
 pydantic-settings>=2.3,<3
 sqlalchemy[asyncio]>=2.0,<3
@@ -15,3 +15,4 @@ rq>=1.16
 modal>=1.0
 # AI creator metadata
 google-genai>=2.33,<3
+opentelemetry-api>=1.31,<2

@@ -76,6 +76,7 @@ class GeminiCreatorEngine:
         self.model = settings.gemini_model
         self.inline_limit_bytes = settings.creator_inline_limit_mb * 1024 * 1024
         self.frame_sample_fps = settings.creator_frame_sample_fps
+        self.request_timeout_s = settings.creator_request_timeout_s
 
     def analyze(self, video_path: str | Path, mime_type: str) -> CreatorPackOut:
         if not self.api_key:
@@ -116,11 +117,16 @@ class GeminiCreatorEngine:
             interaction = client.interactions.create(
                 model=self.model,
                 input=[media_input, {"type": "text", "text": ANALYSIS_PROMPT}],
+                generation_config={
+                    "thinking_level": "minimal",
+                    "max_output_tokens": 8192,
+                },
                 response_format={
                     "type": "text",
                     "mime_type": "application/json",
                     "schema": CreatorPackOut.model_json_schema(),
                 },
+                timeout=self.request_timeout_s,
             )
             return CreatorPackOut.model_validate(extract_json(interaction.output_text))
         except CreatorAnalysisError:

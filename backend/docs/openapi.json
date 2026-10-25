@@ -1465,6 +1465,90 @@
         }
       }
     },
+    "/creator/simulate": {
+      "post": {
+        "tags": [
+          "creator"
+        ],
+        "summary": "Simulate Audience",
+        "description": "Analyze a video, collect persona reviews, and model its sharing cascade.",
+        "operationId": "simulate_audience_creator_simulate_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_simulate_audience_creator_simulate_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudienceSimulationOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/creator/simulate-analysis": {
+      "post": {
+        "tags": [
+          "creator"
+        ],
+        "summary": "Simulate Analyzed Video",
+        "description": "Run the persona cascade using an existing /creator/analyze result.",
+        "operationId": "simulate_analyzed_video_creator_simulate_analysis_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AudienceSimulationIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudienceSimulationOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/warmup": {
       "post": {
         "tags": [
@@ -1513,6 +1597,428 @@
   },
   "components": {
     "schemas": {
+      "AudienceLayerOut": {
+        "properties": {
+          "layer": {
+            "type": "string",
+            "enum": [
+              "target",
+              "adjacent",
+              "outsider"
+            ],
+            "title": "Layer"
+          },
+          "persona_count": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Persona Count"
+          },
+          "score": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Score"
+          },
+          "threshold": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Threshold"
+          },
+          "exposed_in_cascade": {
+            "type": "boolean",
+            "title": "Exposed In Cascade"
+          },
+          "cleared_threshold": {
+            "type": "boolean",
+            "title": "Cleared Threshold"
+          }
+        },
+        "type": "object",
+        "required": [
+          "layer",
+          "persona_count",
+          "score",
+          "threshold",
+          "exposed_in_cascade",
+          "cleared_threshold"
+        ],
+        "title": "AudienceLayerOut"
+      },
+      "AudienceMetricsOut": {
+        "properties": {
+          "simulated_watch_rate": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Simulated Watch Rate"
+          },
+          "simulated_completion_rate": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Simulated Completion Rate"
+          },
+          "simulated_like_rate": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Simulated Like Rate"
+          },
+          "simulated_comment_rate": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Simulated Comment Rate"
+          },
+          "simulated_save_rate": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Simulated Save Rate"
+          },
+          "simulated_share_rate": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Simulated Share Rate"
+          },
+          "action_distribution": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "propertyNames": {
+              "enum": [
+                "like",
+                "comment",
+                "save",
+                "share",
+                "skip"
+              ]
+            },
+            "type": "object",
+            "title": "Action Distribution"
+          }
+        },
+        "type": "object",
+        "required": [
+          "simulated_watch_rate",
+          "simulated_completion_rate",
+          "simulated_like_rate",
+          "simulated_comment_rate",
+          "simulated_save_rate",
+          "simulated_share_rate",
+          "action_distribution"
+        ],
+        "title": "AudienceMetricsOut"
+      },
+      "AudiencePersonaReview": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "layer": {
+            "type": "string",
+            "enum": [
+              "target",
+              "adjacent",
+              "outsider"
+            ],
+            "title": "Layer"
+          },
+          "profile": {
+            "type": "string",
+            "title": "Profile"
+          },
+          "interests": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Interests"
+          },
+          "hook_score": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Hook Score"
+          },
+          "completion_probability": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Completion Probability"
+          },
+          "like_probability": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Like Probability"
+          },
+          "comment_probability": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Comment Probability"
+          },
+          "save_probability": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Save Probability"
+          },
+          "share_probability": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Share Probability"
+          },
+          "skip_probability": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Skip Probability"
+          },
+          "primary_action": {
+            "type": "string",
+            "enum": [
+              "like",
+              "comment",
+              "save",
+              "share",
+              "skip"
+            ],
+            "title": "Primary Action"
+          },
+          "reaction": {
+            "type": "string",
+            "title": "Reaction"
+          },
+          "suggested_comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggested Comment"
+          },
+          "what_worked": {
+            "type": "string",
+            "title": "What Worked"
+          },
+          "friction": {
+            "type": "string",
+            "title": "Friction"
+          },
+          "recommended_change": {
+            "type": "string",
+            "title": "Recommended Change"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "layer",
+          "profile",
+          "interests",
+          "hook_score",
+          "completion_probability",
+          "like_probability",
+          "comment_probability",
+          "save_probability",
+          "share_probability",
+          "skip_probability",
+          "primary_action",
+          "reaction",
+          "what_worked",
+          "friction",
+          "recommended_change"
+        ],
+        "title": "AudiencePersonaReview"
+      },
+      "AudienceSimulationIn": {
+        "properties": {
+          "analysis": {
+            "$ref": "#/components/schemas/CreatorPackOut"
+          },
+          "platform": {
+            "type": "string",
+            "enum": [
+              "general",
+              "youtube",
+              "reddit",
+              "instagram",
+              "tiktok"
+            ],
+            "title": "Platform",
+            "default": "general"
+          },
+          "target_audience": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Audience"
+          },
+          "persona_count": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 15.0,
+                "minimum": 3.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persona Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "analysis"
+        ],
+        "title": "AudienceSimulationIn",
+        "description": "Run personas against an already-generated creator content pack."
+      },
+      "AudienceSimulationOut": {
+        "properties": {
+          "platform": {
+            "type": "string",
+            "enum": [
+              "general",
+              "youtube",
+              "reddit",
+              "instagram",
+              "tiktok"
+            ],
+            "title": "Platform"
+          },
+          "requested_target_audience": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested Target Audience"
+          },
+          "inferred_niche": {
+            "type": "string",
+            "title": "Inferred Niche"
+          },
+          "inferred_target_audience": {
+            "type": "string",
+            "title": "Inferred Target Audience"
+          },
+          "virality_score": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Virality Score"
+          },
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "weak",
+              "mixed",
+              "promising",
+              "strong"
+            ],
+            "title": "Verdict"
+          },
+          "cascade_depth": {
+            "type": "string",
+            "enum": [
+              "target_only",
+              "adjacent",
+              "outsider",
+              "broad_breakout"
+            ],
+            "title": "Cascade Depth"
+          },
+          "cascade_summary": {
+            "type": "string",
+            "title": "Cascade Summary"
+          },
+          "metrics": {
+            "$ref": "#/components/schemas/AudienceMetricsOut"
+          },
+          "layers": {
+            "items": {
+              "$ref": "#/components/schemas/AudienceLayerOut"
+            },
+            "type": "array",
+            "title": "Layers"
+          },
+          "persona_reviews": {
+            "items": {
+              "$ref": "#/components/schemas/AudiencePersonaReview"
+            },
+            "type": "array",
+            "title": "Persona Reviews"
+          },
+          "consensus_strengths": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Consensus Strengths"
+          },
+          "consensus_risks": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Consensus Risks"
+          },
+          "recommended_changes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Recommended Changes"
+          },
+          "analysis": {
+            "$ref": "#/components/schemas/CreatorPackOut"
+          },
+          "disclaimer": {
+            "type": "string",
+            "title": "Disclaimer"
+          }
+        },
+        "type": "object",
+        "required": [
+          "platform",
+          "requested_target_audience",
+          "inferred_niche",
+          "inferred_target_audience",
+          "virality_score",
+          "verdict",
+          "cascade_depth",
+          "cascade_summary",
+          "metrics",
+          "layers",
+          "persona_reviews",
+          "consensus_strengths",
+          "consensus_risks",
+          "recommended_changes",
+          "analysis",
+          "disclaimer"
+        ],
+        "title": "AudienceSimulationOut"
+      },
       "Body_analyze_video_creator_analyze_post": {
         "properties": {
           "video": {
@@ -1572,6 +2078,58 @@
           "image"
         ],
         "title": "Body_search_image_search_image_post"
+      },
+      "Body_simulate_audience_creator_simulate_post": {
+        "properties": {
+          "video": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "Video",
+            "description": "Video file to analyze and test with synthetic audience personas"
+          },
+          "platform": {
+            "type": "string",
+            "enum": [
+              "general",
+              "youtube",
+              "reddit",
+              "instagram",
+              "tiktok"
+            ],
+            "title": "Platform",
+            "default": "general"
+          },
+          "target_audience": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Audience"
+          },
+          "persona_count": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 15.0,
+                "minimum": 3.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persona Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "video"
+        ],
+        "title": "Body_simulate_audience_creator_simulate_post"
       },
       "ClipCreate": {
         "properties": {
