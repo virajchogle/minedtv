@@ -3,7 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart2, Compass, Home, Library, Upload, Settings, Video } from "lucide-react";
+import { BarChart2, Compass, Home, Library, Upload, Settings } from "lucide-react";
+import { BrainMark } from "@/components/brand";
 import { UserSwitcher } from "@/components/current-user";
 import { cn } from "@/lib/utils";
 
@@ -48,11 +49,9 @@ export function Sidebar() {
       <div>
         {/* Logo row */}
         <div className="flex items-center h-12 px-4 mb-4">
-          <div className="shrink-0 p-2 bg-primary rounded-lg">
-            <Video className="w-5 h-5 text-white" />
-          </div>
-          <span className="ml-3 font-bold text-xl text-white" style={textStyle}>
-            MineDTV
+          <BrainMark size={36} />
+          <span className="ml-3 text-xl font-extrabold text-white" style={textStyle}>
+            Mined<span className="text-[var(--mtv-gold)]">Tv</span>
           </span>
         </div>
 
