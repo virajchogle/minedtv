@@ -65,6 +65,10 @@ class Settings(BaseSettings):
     creator_inline_limit_mb: int = Field(default=20, gt=0)
     creator_frame_sample_fps: float = Field(default=0.25, gt=0)
     creator_max_upload_mb: int = Field(default=500, gt=0)
+    # Tried in order when the main model is overloaded or rate limited (creator packs for clips).
+    gemini_fallback_models: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["gemini-3.5-flash", "gemini-flash-latest"]
+    )
 
     # --- processing ---
     segment_seconds: int = 2
@@ -83,9 +87,14 @@ class Settings(BaseSettings):
     search_signal_limit: int = 40
     clip_window_ms: int = 15000
     moment_window_ms: int = 5000
-    # Minimum cosine similarity for semantic hits (CLIP ViT-L/14 scale; re-measure if the model changes).
-    visual_min_sim: float = 0.22
-    speech_min_sim: float = 0.70
+    # Semantic-hit cutoffs (CLIP ViT-L/14 scale, measured on real gameplay; re-measure if the model changes).
+    # Visual text search is contrastive: sim(templated query) - sim(generic gameplay baseline).
+    visual_min_score: float = 0.035
+    visual_full_score: float = 0.10
+    visual_relative_cutoff: float = 0.6  # drop frames below this fraction of the best visual score
+    # Speech is contrastive too: sim(query) - sim(generic talking baseline); lines < 3 words are skipped.
+    speech_min_score: float = 0.03
+    speech_full_score: float = 0.12
     image_min_sim: float = 0.55
     image_full_sim: float = 0.85
 
@@ -97,7 +106,7 @@ class Settings(BaseSettings):
     def _empty_is_none(cls, v):
         return v or None
 
-    @field_validator("cors_origins", "api_keys", mode="before")
+    @field_validator("cors_origins", "api_keys", "gemini_fallback_models", mode="before")
     @classmethod
     def _split_origins(cls, v):
         if isinstance(v, str) and not v.strip().startswith("["):

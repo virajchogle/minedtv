@@ -1,4 +1,5 @@
 import asyncio
+import json
 import uuid
 
 from fastapi import APIRouter, HTTPException, Response
@@ -8,15 +9,28 @@ from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.api.deps import CurrentUser, Db, OptionalUser, Urls
+from app.config import get_settings
 from app.db.models import Clip, Event, Like, Segment, Session, SessionStatus, Transcript, User
-from app.schemas import ClipCreate, ClipDetailOut, ClipOut, ClipPatch, CountsOut, EventOut, ExportOut, TranscriptOut
+from app.schemas import (
+    ClipCreate,
+    ClipCreatorPackOut,
+    ClipDetailOut,
+    ClipOut,
+    ClipPatch,
+    CountsOut,
+    CreatorPackOut,
+    EventOut,
+    ExportOut,
+    TranscriptOut,
+)
 from app.services import counters
 from app.services.playlist import build_playlist, validate_clip_range
 from app.services.queries import nearest_frame_key
 from app.services.redis import get_redis
 from app.services.serialize import clip_out
 from app.services.storage import get_storage
-from app.worker.enqueue import enqueue_export
+from app.worker.creator_pack import pack_key, pack_status_key
+from app.worker.enqueue import enqueue_creator_pack, enqueue_export
 from app.worker.export import export_key, status_key
 
 router = APIRouter(prefix="/clips", tags=["clips"])
@@ -238,4 +252,43 @@ async def start_export(clip_id: uuid.UUID, db: Db) -> ExportOut:
         return state
     await get_redis().set(status_key(clip.id, clip.start_ms, clip.end_ms), "processing", ex=6 * 3600)
     await run_in_threadpool(enqueue_export, clip.id)
+    return state.model_copy(update={"status": "processing", "error": None})
+
+
+async def _pack_state(clip: Clip) -> ClipCreatorPackOut:
+    key = pack_key(clip.id, clip.start_ms, clip.end_ms)
+    base = dict(clip_id=clip.id, start_ms=clip.start_ms, end_ms=clip.end_ms)
+    storage = get_storage()
+    if await asyncio.to_thread(storage.exists, key):
+        body = json.loads(await asyncio.to_thread(storage.get_bytes, key))
+        return ClipCreatorPackOut(
+            **base, status="ready", model=body.get("model"), pack=CreatorPackOut.model_validate(body["pack"])
+        )
+    raw = await get_redis().get(pack_status_key(clip.id, clip.start_ms, clip.end_ms))
+    if raw is None:
+        return ClipCreatorPackOut(**base, status="none")
+    if raw.startswith("failed"):
+        return ClipCreatorPackOut(**base, status="failed", error=raw.partition(":")[2] or None)
+    return ClipCreatorPackOut(**base, status="processing")
+
+
+@router.get("/{clip_id}/creator-pack", response_model=ClipCreatorPackOut)
+async def get_creator_pack(clip_id: uuid.UUID, db: Db) -> ClipCreatorPackOut:
+    """Status of the AI creator pack (titles, caption, hashtags, YouTube/Reddit metadata) for this clip."""
+    clip, _, _ = await _load(db, clip_id)
+    return await _pack_state(clip)
+
+
+@router.post("/{clip_id}/creator-pack", response_model=ClipCreatorPackOut, status_code=202)
+async def start_creator_pack(clip_id: uuid.UUID, db: Db) -> ClipCreatorPackOut:
+    """Generate the creator pack for an already-uploaded clip (no re-upload). Gemini watches the
+    clip's MP4; takes ~1-2 min. Idempotent; poll GET until status is 'ready'."""
+    if not get_settings().gemini_api_key:
+        raise HTTPException(503, "Creator packs are not configured (GEMINI_API_KEY missing)")
+    clip, _, _ = await _load(db, clip_id)
+    state = await _pack_state(clip)
+    if state.status in ("ready", "processing"):
+        return state
+    await get_redis().set(pack_status_key(clip.id, clip.start_ms, clip.end_ms), "processing", ex=6 * 3600)
+    await run_in_threadpool(enqueue_creator_pack, clip.id)
     return state.model_copy(update={"status": "processing", "error": None})

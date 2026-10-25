@@ -27,3 +27,15 @@ def enqueue_export(clip_id: uuid.UUID) -> str:
         failure_ttl=86400,
     )
     return job.id
+
+
+def enqueue_creator_pack(clip_id: uuid.UUID) -> str:
+    job = get_queue().enqueue(
+        "app.worker.jobs.creator_pack",
+        str(clip_id),
+        job_id=f"creator-{clip_id}-{uuid.uuid4().hex[:8]}",
+        job_timeout=1500,  # export + Gemini, including model fallbacks
+        result_ttl=3600,
+        failure_ttl=86400,
+    )
+    return job.id

@@ -104,11 +104,11 @@ def test_drop_weak_keeps_exact_signals_and_strong_semantic_hits():
     s = uuid.uuid4()
     lists = {
         "visual": [Hit(s, 1000, "visual", 0.30), Hit(s, 2000, "visual", 0.18)],
-        "speech": [Hit(s, 3000, "speech", 0.77), Hit(s, 4000, "speech", 0.65)],
+        "speech": [Hit(s, 3000, "speech", 0.08), Hit(s, 4000, "speech", 0.001)],
         "keyword": [Hit(s, 5000, "keyword", 0.01)],
         "event": [Hit(s, 6000, "event", 0.2, label="kill")],
     }
-    kept = drop_weak(lists, Thresholds(visual=0.22, speech=0.70))
+    kept = drop_weak(lists, Thresholds(visual=0.22, speech=0.03))
     assert [h.t_ms for h in kept["visual"]] == [1000]
     assert [h.t_ms for h in kept["speech"]] == [3000]
     assert len(kept["keyword"]) == 1 and len(kept["event"]) == 1
@@ -118,10 +118,10 @@ def test_confidence_rises_with_agreement_and_strength():
     from app.services.search import Thresholds, confidence
 
     th = Thresholds()
-    weak_visual = confidence({"visual": 0.22}, th)
-    strong_visual = confidence({"visual": 0.40}, th)
+    weak_visual = confidence({"visual": 0.04}, th)
+    strong_visual = confidence({"visual": 0.09}, th)
     assert 0.0 < weak_visual < strong_visual <= 1.0
-    assert confidence({"visual": 0.30, "speech": 0.77}, th) > max(confidence({"visual": 0.30}, th), confidence({"speech": 0.77}, th))
+    assert confidence({"visual": 0.06, "speech": 0.08}, th) > max(confidence({"visual": 0.06}, th), confidence({"speech": 0.08}, th))
     assert confidence({"keyword": 0.1}, th) == pytest.approx(0.85)
     assert confidence({}, th) == 0.0
 
@@ -131,3 +131,21 @@ def test_fuse_tracks_strength_and_event_label():
     lists = {"speech": [Hit(s, 10_000, "speech", 0.8, "gg")], "event": [Hit(s, 10_500, "event", 0.9, label="clutch")]}
     m = fuse(lists, k=60, window_ms=5000)[0]
     assert m.label == "clutch" and m.strength == {"speech": 0.8, "event": 0.9}
+
+
+
+def test_relative_cutoff_drops_lookalikes():
+    from app.services.search import Thresholds, drop_weak
+
+    knife, gun, gun2 = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    # Contrastive scores measured on real clips for "knife".
+    lists = {"visual": [Hit(knife, 1000, "visual", 0.063), Hit(gun, 2000, "visual", 0.033), Hit(gun2, 3000, "visual", 0.032)]}
+    kept = drop_weak(lists, Thresholds())
+    assert [h.session_id for h in kept["visual"]] == [knife]
+
+
+def test_mean_unit_is_normalized():
+    from app.services.search import mean_unit
+
+    v = mean_unit([[1.0, 0.0], [0.0, 1.0]])
+    assert abs(sum(x * x for x in v) - 1) < 1e-9 and abs(v[0] - v[1]) < 1e-9

@@ -42,6 +42,37 @@ EVENT_SYNONYMS: dict[str, tuple[str, ...]] = {
 }
 
 
+# CLIP matches a phrased description better than a bare word, so visual queries are embedded
+# with these templates and averaged. The baseline describes "any gameplay frame"; subtracting
+# its similarity removes what every FPS/game frame shares, so the query's subject decides.
+VISUAL_TEMPLATES = (
+    "{}",
+    "a screenshot of a video game showing {}",
+    "a first-person view of a player holding {} in a video game",
+    "gameplay footage with {}",
+)
+VISUAL_BASELINE_PROMPTS = (
+    "a screenshot of a video game",
+    "gameplay footage",
+    "a first-person shooter game screenshot",
+)
+# Same idea for voice chat: CLIP's text encoder rates short utterances ("Yeah", "Ah") ~0.8 similar
+# to any short query, so speech is scored relative to "generic talking" too.
+SPEECH_BASELINE_PROMPTS = (
+    "someone talking",
+    "people talking while playing a video game",
+    "background music",
+)
+# Shorter lines are filler for semantic matching (still found by exact keyword search).
+SPEECH_MIN_WORDS = 3
+
+
+def mean_unit(vectors: list[list[float]]) -> list[float]:
+    m = [sum(c) / len(vectors) for c in zip(*vectors, strict=True)]
+    norm = sum(x * x for x in m) ** 0.5 or 1.0
+    return [x / norm for x in m]
+
+
 @dataclass
 class Filters:
     game: str | None = None
@@ -75,19 +106,29 @@ class Moment:
 
 @dataclass
 class Thresholds:
-    """Minimum similarity for a semantic hit to count. Measured on CLIP ViT-L/14: matching frames
-    score ~0.30 vs 0.14-0.19 for unrelated text; a matching transcript line ~0.77 vs 0.61-0.67."""
+    """Minimum scores for semantic hits to count (CLIP ViT-L/14, measured on real gameplay).
 
-    visual: float = 0.22
-    speech: float = 0.70
-    visual_full: float = 0.32  # similarity treated as full confidence
-    speech_full: float = 0.85
+    Both semantic signals are contrastive: similarity to the query minus similarity to a generic
+    baseline. Visual: the right clip ~0.05-0.10, lookalikes (gun clips for "knife") ~0.02-0.035.
+    Speech: the right line ~0.03-0.14, unrelated lines <= 0.001.
+    """
+
+    visual: float = 0.035
+    speech: float = 0.03
+    visual_full: float = 0.10  # score treated as full confidence
+    speech_full: float = 0.12
+    # Drop visual hits scoring below this fraction of the query's best visual hit.
+    visual_relative: float = 0.6
 
 
 def drop_weak(hit_lists: dict[str, list[Hit]], th: Thresholds) -> dict[str, list[Hit]]:
     """Remove semantic hits below threshold. Keyword and event hits are exact matches and always kept."""
     out = dict(hit_lists)
-    out["visual"] = [h for h in hit_lists.get("visual", []) if h.raw_score >= th.visual]
+    visual = [h for h in hit_lists.get("visual", []) if h.raw_score >= th.visual]
+    if visual and th.visual_relative > 0:
+        floor = max(h.raw_score for h in visual) * th.visual_relative
+        visual = [h for h in visual if h.raw_score >= floor]
+    out["visual"] = visual
     out["speech"] = [h for h in hit_lists.get("speech", []) if h.raw_score >= th.speech]
     return out
 
@@ -215,23 +256,43 @@ def _filtered(stmt: Select, f: Filters) -> Select:
     return stmt
 
 
-async def visual_hits(db: AsyncSession, vec: list[float], f: Filters, limit: int) -> list[Hit]:
+async def visual_hits(
+    db: AsyncSession, vec: list[float], f: Filters, limit: int, baseline: list[float] | None = None
+) -> list[Hit]:
+    """Nearest frames to vec. With a baseline, score = sim(query) - sim(baseline): candidates
+    come from the vector index (5x the limit), then are re-ranked by that contrastive score."""
     dist = Frame.embedding.cosine_distance(vec)
-    stmt = _filtered(
-        select(Frame.session_id, Frame.t_ms, (1 - dist).label("sim")).join(Session, Session.id == Frame.session_id), f
-    ).order_by(dist).limit(limit)
-    return [Hit(r.session_id, r.t_ms, "visual", float(r.sim)) for r in await db.execute(stmt)]
+    cols = [Frame.session_id, Frame.t_ms, (1 - dist).label("sim")]
+    if baseline is not None:
+        cols.append((1 - Frame.embedding.cosine_distance(baseline)).label("base"))
+    stmt = _filtered(select(*cols).join(Session, Session.id == Frame.session_id), f).order_by(dist)
+    rows = (await db.execute(stmt.limit(limit * 5 if baseline is not None else limit))).all()
+    if baseline is None:
+        return [Hit(r.session_id, r.t_ms, "visual", float(r.sim)) for r in rows]
+    hits = [Hit(r.session_id, r.t_ms, "visual", float(r.sim) - float(r.base)) for r in rows]
+    return sorted(hits, key=lambda h: -h.raw_score)[:limit]
 
 
-async def speech_hits(db: AsyncSession, vec: list[float], f: Filters, limit: int) -> list[Hit]:
+async def speech_hits(
+    db: AsyncSession, vec: list[float], f: Filters, limit: int, baseline: list[float] | None = None
+) -> list[Hit]:
+    """Transcript lines nearest to vec, skipping filler (< SPEECH_MIN_WORDS words). With a
+    baseline, score = sim(query) - sim(baseline), re-ranked like visual_hits."""
     dist = Transcript.embedding.cosine_distance(vec)
-    stmt = _filtered(
-        select(Transcript.session_id, Transcript.start_ms, Transcript.text, (1 - dist).label("sim")).join(
-            Session, Session.id == Transcript.session_id
-        ),
-        f,
-    ).order_by(dist).limit(limit)
-    return [Hit(r.session_id, r.start_ms, "speech", float(r.sim), r.text) for r in await db.execute(stmt)]
+    cols = [Transcript.session_id, Transcript.start_ms, Transcript.text, (1 - dist).label("sim")]
+    if baseline is not None:
+        cols.append((1 - Transcript.embedding.cosine_distance(baseline)).label("base"))
+    words = func.array_length(func.regexp_split_to_array(func.trim(Transcript.text), r"\s+"), 1)
+    stmt = (
+        _filtered(select(*cols).join(Session, Session.id == Transcript.session_id), f)
+        .where(words >= SPEECH_MIN_WORDS)
+        .order_by(dist)
+    )
+    rows = (await db.execute(stmt.limit(limit * 5 if baseline is not None else limit))).all()
+    if baseline is None:
+        return [Hit(r.session_id, r.start_ms, "speech", float(r.sim), r.text) for r in rows]
+    hits = [Hit(r.session_id, r.start_ms, "speech", float(r.sim) - float(r.base), r.text) for r in rows]
+    return sorted(hits, key=lambda h: -h.raw_score)[:limit]
 
 
 async def keyword_hits(db: AsyncSession, q: str, f: Filters, limit: int) -> list[Hit]:
@@ -380,6 +441,9 @@ async def resolve(db: AsyncSession, hits: list[SessionHit], window_ms: int) -> l
 
 
 class SearchService:
+    _baseline: list[float] | None = None  # generic-gameplay embedding, computed once per process
+    _speech_baseline: list[float] | None = None  # generic-talking embedding
+
     def __init__(self, sessionmaker: async_sessionmaker[AsyncSession], embedder: Embedder, settings: Settings, redis=None):
         self.sessionmaker = sessionmaker
         self.embedder = embedder
@@ -394,8 +458,12 @@ class SearchService:
         st = self.settings
         if image:
             # Image-to-image similarity runs much higher than text-to-image.
-            return Thresholds(visual=st.image_min_sim, speech=1.0, visual_full=st.image_full_sim)
-        return Thresholds(visual=st.visual_min_sim, speech=st.speech_min_sim)
+            return Thresholds(visual=st.image_min_sim, speech=1.0, visual_full=st.image_full_sim, visual_relative=0)
+        return Thresholds(
+            visual=st.visual_min_score, speech=st.speech_min_score, visual_full=st.visual_full_score,
+            speech_full=st.speech_full_score,
+            visual_relative=st.visual_relative_cutoff,
+        )
 
     async def _finish(self, hit_lists: dict[str, list[Hit]], limit: int, th: Thresholds) -> list[Resolved]:
         st = self.settings
@@ -418,11 +486,22 @@ class SearchService:
                 log.warning("search cache read failed", exc_info=True)
 
         t0 = time.monotonic()
-        vec = (await asyncio.to_thread(self.embedder.embed_texts, [normalize_query(q)]))[0]
+        nq = normalize_query(q)
+        texts = [nq] + [t.format(nq) for t in VISUAL_TEMPLATES[1:]]
+        need_baselines = self._baseline is None or self._speech_baseline is None
+        if need_baselines:
+            texts += list(VISUAL_BASELINE_PROMPTS) + list(SPEECH_BASELINE_PROMPTS)
+        vecs = await asyncio.to_thread(self.embedder.embed_texts, texts)
+        vec = vecs[0]  # plain query: best for transcript (text-to-text) matching
+        visual_vec = mean_unit(vecs[: len(VISUAL_TEMPLATES)])
+        if need_baselines:
+            i = len(VISUAL_TEMPLATES)
+            SearchService._baseline = mean_unit(vecs[i : i + len(VISUAL_BASELINE_PROMPTS)])
+            SearchService._speech_baseline = mean_unit(vecs[i + len(VISUAL_BASELINE_PROMPTS) :])
         n = st.search_signal_limit
         results = await asyncio.gather(
-            self._run(visual_hits, vec, f, n),
-            self._run(speech_hits, vec, f, n),
+            self._run(visual_hits, visual_vec, f, n, self._baseline),
+            self._run(speech_hits, vec, f, n, self._speech_baseline),
             self._run(keyword_hits, q, f, n),
             self._run(event_hits, event_types_for(q), f, n),
         )
