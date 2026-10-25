@@ -29,7 +29,13 @@ def decode_cursor(cursor: str) -> tuple[datetime, uuid.UUID]:
 
 
 async def clip_page(db, stmt: Select, limit: int, cursor: str | None, urls: UrlBuilder, me) -> FeedOut:
-    """Newest-first keyset pagination over a select(Clip, Session, User) statement."""
+    """Newest-first keyset pagination over a select(Clip, Session, User) statement.
+
+    Age-restricted clips are excluded unless the viewer is a signed-in adult
+    account — applied as a SQL predicate (not a post-filter) so pagination
+    counts stay correct."""
+    if not (me is not None and me.is_adult):
+        stmt = stmt.where(Clip.age_restricted.is_(False))
     if cursor:
         ts, cid = decode_cursor(cursor)
         stmt = stmt.where(or_(Clip.created_at < ts, and_(Clip.created_at == ts, Clip.id < cid)))

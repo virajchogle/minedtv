@@ -34,6 +34,7 @@ def status_event(s: Session) -> SessionStatusEvent:
         done=s.status in _TERMINAL,
         moderation_severity=s.moderation_severity,
         age_restricted=s.age_restricted,
+        moderation_violations=s.moderation_violations,
     )
 
 

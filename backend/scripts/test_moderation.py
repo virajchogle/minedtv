@@ -12,6 +12,10 @@ blocking uploads when no classifier is configured.
 --image sends exactly that file as the one "sampled frame" for a single custom
 case; it does not touch the built-in CASES, which are text-only (no sample
 images ship with this script).
+
+The built-in cases carry [Xs] timestamp markers, same as the real pipeline
+builds (see worker/pipeline.py:step_moderate), so this also exercises whether
+the model correctly cites a timestamp per violation.
 """
 
 import argparse
@@ -21,14 +25,21 @@ from app.config import get_settings
 from app.ml.moderation import ContentModerator
 
 CASES = {
-    "clean": "Nice shot, let's push mid and rotate on their jungler.",
-    "trash_talk": "You're actually so bad at this game, uninstall, noob.",
-    "profanity": "Holy shit that was such a clean headshot, fuck yes!",
-    "crude_innuendo": "That's what she said, my guy, ez clap.",
-    "severe_sexual": "Explicit description of a sex act goes here for testing purposes.",
-    "threat": "I know where you live and I'm going to come hurt you tonight.",
+    "clean": "[0.0s] Nice shot, let's push mid. [4.2s] rotate on their jungler.",
+    "trash_talk": "[0.0s] You're actually so bad at this game. [3.1s] uninstall, noob.",
+    "profanity": "[0.0s] Just farming lanes. [12.3s] Holy shit that was such a clean headshot, fuck yes!",
+    "crude_innuendo": "[0.0s] gg. [5.0s] That's what she said, my guy, ez clap.",
+    "severe_sexual": "[0.0s] Normal chat. [8.7s] Explicit description of a sex act goes here for testing purposes.",
+    "threat": "[0.0s] gg wp. [20.0s] I know where you live and I'm going to come hurt you tonight.",
     "empty": "",
 }
+
+
+def _print(label: str, result) -> None:
+    print(f"[{label}] severity={result.severity!r} categories={result.categories} reason={result.reason!r}")
+    for v in result.violations:
+        t = f"{v.timestamp_ms / 1000:.1f}s" if v.timestamp_ms is not None else "no specific moment"
+        print(f"    - at {t}: {v.category} — {v.note}")
 
 
 def main() -> None:
@@ -44,15 +55,13 @@ def main() -> None:
         print("GEMINI_API_KEY is not set — every case below will report severity=none (fail-open).\n")
 
     if args.text or args.image:
-        frames = [Path(args.image).read_bytes()] if args.image else []
+        frames = [(0, Path(args.image).read_bytes())] if args.image else []
         result = moderator.classify(args.text, frames)
-        label = "custom" + ("+image" if args.image else "")
-        print(f"[{label}] severity={result.severity!r} categories={result.categories} reason={result.reason!r}")
+        _print("custom" + ("+image" if args.image else ""), result)
         return
 
     for name, text in CASES.items():
-        result = moderator.classify(text)
-        print(f"[{name}] severity={result.severity!r} categories={result.categories} reason={result.reason!r}")
+        _print(name, moderator.classify(text))
 
 
 if __name__ == "__main__":

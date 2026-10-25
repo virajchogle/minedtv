@@ -74,6 +74,16 @@ STEP_STATUS = {
 }
 
 
+def is_adult(birth_date: date | None, min_age: int = 18) -> bool:
+    """No birth_date (anonymous viewer, or a pre-this-column row never backfilled) is
+    treated as NOT an adult — the safe default for gating age-restricted content."""
+    if birth_date is None:
+        return False
+    today = date.today()
+    age = today.year - birth_date.year - ((today.month, today.day) < (birth_date.month, birth_date.day))
+    return age >= min_age
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -85,7 +95,14 @@ class User(Base):
     password_hash: Mapped[str | None] = mapped_column(Text)
     # Dev accounts (emails in DEV_EMAILS) may act as any user via X-User-Id.
     is_dev: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    # Required at signup going forward; nullable so it doesn't break rows that predate this
+    # column. A user with no birth_date is treated as NOT an adult (safe default); see is_adult().
+    birth_date: Mapped[date | None] = mapped_column(Date)
     created_at: Mapped[datetime] = _created()
+
+    @property
+    def is_adult(self) -> bool:
+        return is_adult(self.birth_date)
 
 
 class Session(Base):
@@ -120,11 +137,13 @@ class Session(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
     )
 
-    # Transcript moderation (see app/ml/moderation.py). "severe" never reaches
-    # this row as READY — the pipeline stops and leaves status=BLOCKED instead.
+    # Transcript + frame moderation (see app/ml/moderation.py). "severe" never
+    # reaches this row as READY — the pipeline stops and leaves status=BLOCKED instead.
     moderation_severity: Mapped[str] = mapped_column(String(16), nullable=False, default="none", server_default="none")
     moderation_reason: Mapped[str | None] = mapped_column(Text)
     age_restricted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    # [{category, timestamp_ms, note}, ...], itemized findings with where they occur.
+    moderation_violations: Mapped[list] = mapped_column(JSONB, nullable=False, default=list, server_default="[]")
 
 
 class Segment(Base):
@@ -174,6 +193,7 @@ class Clip(Base):
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Copied from the owning session's moderation verdict when this clip is created.
     age_restricted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    moderation_violations: Mapped[list] = mapped_column(JSONB, nullable=False, default=list, server_default="[]")
 
 
 class Frame(Base):

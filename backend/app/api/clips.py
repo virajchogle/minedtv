@@ -75,6 +75,14 @@ def _check_visible(clip: Clip, me: User | None) -> None:
         raise HTTPException(404, "Clip not found")
 
 
+def _check_age(clip: Clip, me: User | None) -> None:
+    """Age-restricted clips are visible to their owner regardless of the owner's own age
+    (so uploaders can see what they posted), but otherwise need a signed-in adult account."""
+    is_owner = me is not None and me.id == clip.user_id
+    if clip.age_restricted and not is_owner and not (me is not None and me.is_adult):
+        raise HTTPException(403, "This clip is restricted to users 18 and older")
+
+
 async def _liked(db, user: User | None, clip_ids: list[uuid.UUID]) -> set[uuid.UUID] | None:
     if user is None:
         return None
@@ -95,6 +103,7 @@ async def get_clip(clip_id: uuid.UUID, db: Db, urls: Urls, me: OptionalUser) -> 
     Unpublished clips are only visible to their owner (send X-User-Id)."""
     clip, session, user = await _load(db, clip_id)
     _check_visible(clip, me)
+    _check_age(clip, me)
     events = (
         await db.scalars(
             select(Event)
@@ -175,6 +184,7 @@ async def create_clip(body: ClipCreate, user: CurrentUser, db: Db, urls: Urls) -
         status="ready",
         kind="user",
         age_restricted=session.age_restricted,
+        moderation_violations=session.moderation_violations,
     )
     db.add(clip)
     await db.commit()

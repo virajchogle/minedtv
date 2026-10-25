@@ -1,6 +1,7 @@
 """Password accounts, login tokens and who a request acts as."""
 
 import uuid
+from datetime import date
 
 import pytest
 from fastapi import HTTPException
@@ -58,9 +59,12 @@ async def _resolve(db, token: str | None, x_user_id: uuid.UUID | None):
 async def test_signup_login_and_acting_as(sessionmaker, settings):  # noqa: F811
     tag = uuid.uuid4().hex[:6]
     async with sessionmaker() as db:
-        dev = await accounts_api.signup(SignupIn(username=f"dev_{tag}", email=f"DEV@team.gg", password="password1"), db)
+        dev = await accounts_api.signup(
+            SignupIn(username=f"dev_{tag}", email=f"DEV@team.gg", password="password1", birth_date=date(1990, 1, 1)), db
+        )
         player = await accounts_api.signup(
-            SignupIn(username=f"p_{tag}", email=f"p_{tag}@mail.com", password="password2"), db
+            SignupIn(username=f"p_{tag}", email=f"p_{tag}@mail.com", password="password2", birth_date=date(1990, 1, 1)),
+            db,
         )
         demo = User(username=f"demo_{tag}")
         db.add(demo)
@@ -69,7 +73,9 @@ async def test_signup_login_and_acting_as(sessionmaker, settings):  # noqa: F811
 
     async with sessionmaker() as db:
         with pytest.raises(HTTPException) as e:
-            await accounts_api.signup(SignupIn(username=f"P_{tag}", email="new@mail.com", password="password3"), db)
+            await accounts_api.signup(
+                SignupIn(username=f"P_{tag}", email="new@mail.com", password="password3", birth_date=date(1990, 1, 1)), db
+            )
         assert e.value.status_code == 409  # usernames are case-insensitive
         with pytest.raises(HTTPException) as e:
             await accounts_api.login(LoginIn(login=f"p_{tag}", password="wrong-pass"), db)

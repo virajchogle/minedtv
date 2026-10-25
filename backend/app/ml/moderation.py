@@ -3,10 +3,11 @@
 Runs once per session, in the pipeline, over the real Whisper transcript and
 a handful of frames `step_frames` already extracted — not a second video
 upload to Gemini. Judges both together (spoken content AND on-screen
-text/imagery) into none / mild / severe:
+text/imagery) into none / mild / severe, with itemized, timestamped
+violations so the UI can show exactly what was flagged and where:
 
   - mild   -> the clip is allowed to finish processing but is flagged
-              age_restricted, and the owner sees a short warning.
+              age_restricted, and the owner sees the itemized list.
   - severe -> `ContentPolicyViolation` is raised; the pipeline stops before
               `finalize`, so no clip is ever created for this session. That
               is the practical equivalent of "not allowed to upload": by the
@@ -16,8 +17,8 @@ text/imagery) into none / mild / severe:
 
 The policy text below is server-only: it is never returned by any endpoint,
 never logged in full, and nothing here echoes the transcript back to a
-client. Only the generated verdict (severity, categories, one-line reason)
-is ever exposed, through SessionOut/ClipOut.
+client. Only the generated verdict (severity, categories, reason, and the
+itemized violations) is ever exposed, through SessionOut/ClipOut.
 """
 
 import base64
@@ -37,8 +38,10 @@ Severity = Literal["none", "mild", "severe"]
 
 # Internal only. Not exposed through any schema or API response.
 _POLICY = """You are a content moderator for short gameplay clips. You are given the
-spoken TRANSCRIPT and a handful of frames sampled across the video. Judge both together
-— spoken words AND anything on screen (HUD text, chat overlays, imagery).
+spoken TRANSCRIPT (each line prefixed with its timestamp, e.g. "[12.3s] ...") and a
+handful of frames sampled across the video (each preceded by a text marker giving its
+timestamp). Judge both together — spoken words AND anything on screen (HUD text, chat
+overlays, imagery).
 
 SEVERE (always blocks publishing) — any of:
 - Explicit sexual content: spoken, written on screen, or shown in a frame
@@ -59,9 +62,21 @@ HUD/chat text with no slurs or profanity). Default to NONE when in doubt; only e
 on clear evidence actually present in the transcript or a frame. Ordinary game violence is
 not severe or even mild just for being violent — games are violent by genre.
 
+For every individual thing you flag (mild or severe), add one entry to "violations" with
+its timestamp in milliseconds, taken from the nearest preceding [Xs] marker in the
+transcript or frame list (multiply seconds by 1000). If something applies generally and
+has no specific moment (e.g. the whole video's tone), use null for timestamp_ms. An empty
+violations list is correct and expected when severity is "none".
+
 Return ONLY this JSON shape, no other text:
-{"severity": "none"|"mild"|"severe", "categories": ["short tags, e.g. profanity, sexual_content, visual_gore, hate_symbol, on_screen_text"], "reason": "one factual sentence explaining the verdict, no quotes of the transcript"}
+{"severity": "none"|"mild"|"severe", "categories": ["short tags, e.g. profanity, sexual_content, visual_gore, hate_symbol, on_screen_text"], "reason": "one factual sentence explaining the overall verdict, no quotes of the transcript", "violations": [{"category": "short tag", "timestamp_ms": 12300, "note": "one factual sentence, no quotes of the transcript"}]}
 """
+
+
+class ModerationViolation(BaseModel):
+    category: str
+    timestamp_ms: int | None
+    note: str
 
 
 class ModerationResult(BaseModel):
@@ -73,19 +88,21 @@ class ModerationResult(BaseModel):
     severity: Severity
     categories: list[str]
     reason: str
+    violations: list[ModerationViolation]
 
 
 class ContentPolicyViolation(RuntimeError):
     """Raised by the pipeline's moderate step to stop processing before finalize."""
 
-    def __init__(self, reason: str, categories: list[str]):
+    def __init__(self, reason: str, categories: list[str], violations: list[ModerationViolation] | None = None):
         self.reason = reason or "Content violates community guidelines"
         self.categories = categories
+        self.violations = violations or []
         super().__init__(self.reason)
 
 
 def _none() -> ModerationResult:
-    return ModerationResult(severity="none", categories=[], reason="")
+    return ModerationResult(severity="none", categories=[], reason="", violations=[])
 
 
 class ContentModerator:
@@ -93,7 +110,9 @@ class ContentModerator:
         self.api_key = settings.gemini_api_key
         self.model = settings.moderation_model
 
-    def classify(self, transcript_text: str, frames: list[bytes] | None = None) -> ModerationResult:
+    def classify(self, transcript_text: str, frames: list[tuple[int, bytes]] | None = None) -> ModerationResult:
+        """transcript_text should already carry per-line [Xs] timestamp markers
+        (see pipeline.py's step_moderate). frames are (timestamp_ms, jpeg_bytes) pairs."""
         text = transcript_text.strip()
         frames = frames or []
         if not text and not frames:
@@ -109,10 +128,12 @@ class ContentModerator:
             # Keep a strong local reference to the client for the duration of the
             # call — see the same note in audience_simulator.py.
             client = genai.Client(api_key=self.api_key)
-            content: list[dict] = [
-                {"type": "image", "data": base64.b64encode(frame).decode("ascii"), "mime_type": "image/jpeg"}
-                for frame in frames
-            ]
+            content: list[dict] = []
+            for t_ms, frame in frames:
+                content.append({"type": "text", "text": f"[frame at {t_ms / 1000:.1f}s]"})
+                content.append(
+                    {"type": "image", "data": base64.b64encode(frame).decode("ascii"), "mime_type": "image/jpeg"}
+                )
             content.append(
                 {
                     "type": "text",
@@ -123,7 +144,7 @@ class ContentModerator:
                 model=self.model,
                 system_instruction=_POLICY,
                 input=content,
-                generation_config={"thinking_level": "minimal", "max_output_tokens": 300},
+                generation_config={"thinking_level": "minimal", "max_output_tokens": 800},
                 response_format={
                     "type": "text",
                     "mime_type": "application/json",

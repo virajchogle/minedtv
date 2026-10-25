@@ -15,12 +15,14 @@ export function ClipThumbnail({
   alt = "",
   duration,
   compact = false,
+  ageRestricted = false,
   className,
 }: {
   src: string | null;
   alt?: string;
   duration?: string;
   compact?: boolean;
+  ageRestricted?: boolean;
   className?: string;
 }) {
   return (
@@ -54,6 +56,12 @@ export function ClipThumbnail({
       {duration && (
         <span className="absolute bottom-1.5 right-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[11px] font-semibold text-white">
           {duration}
+        </span>
+      )}
+
+      {ageRestricted && (
+        <span className="absolute bottom-1.5 left-1.5 rounded border border-[var(--mtv-red)]/50 bg-black/75 px-1.5 py-0.5 text-[10px] font-bold text-[var(--mtv-red)]">
+          18+
         </span>
       )}
     </div>

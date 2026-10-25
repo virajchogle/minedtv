@@ -44,6 +44,7 @@ async def signup(body: SignupIn, db: Db) -> AuthOut:
         password_hash=await run_in_threadpool(accounts.hash_password, body.password),
         is_dev=accounts.is_dev_email(get_settings(), email),
         avatar_url=f"https://api.dicebear.com/9.x/bottts/png?seed={quote(body.username)}",
+        birth_date=body.birth_date,
     )
     db.add(user)
     await db.commit()

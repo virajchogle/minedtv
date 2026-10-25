@@ -282,12 +282,12 @@ def _sample_evenly(items: list, n: int) -> list:
     return [items[int(i * step)] for i in range(n)]
 
 
-def _fetch_frames(storage: Storage, keys: list[str]) -> list[bytes]:
+def _fetch_frames(storage: Storage, items: list[tuple[int, str]]) -> list[tuple[int, bytes]]:
     """Best-effort: a frame storage hiccup shouldn't fail moderation over one image."""
-    out: list[bytes] = []
-    for key in keys:
+    out: list[tuple[int, bytes]] = []
+    for t_ms, key in items:
         try:
-            out.append(storage.get_bytes(key))
+            out.append((t_ms, storage.get_bytes(key)))
         except Exception:
             log.warning("moderation: could not fetch frame %s, skipping", key)
     return out
@@ -301,19 +301,25 @@ async def step_moderate(ctx: Ctx) -> None:
     st = ctx.settings
     async with ctx.deps.sessionmaker() as db:
         rows = (
-            await db.execute(select(Transcript.text).where(Transcript.session_id == ctx.session_id).order_by(Transcript.start_ms))
-        ).scalars().all()
-        frame_keys = (
             await db.execute(
-                select(Frame.thumbnail_key)
+                select(Transcript.start_ms, Transcript.text)
+                .where(Transcript.session_id == ctx.session_id)
+                .order_by(Transcript.start_ms)
+            )
+        ).all()
+        frame_rows = (
+            await db.execute(
+                select(Frame.t_ms, Frame.thumbnail_key)
                 .where(Frame.session_id == ctx.session_id, Frame.thumbnail_key.is_not(None))
                 .order_by(Frame.t_ms)
             )
-        ).scalars().all()
-    text = " ".join(rows).strip()
+        ).all()
+    # Timestamps stay in the prompt text itself (see _POLICY) so Gemini can cite
+    # them back per-violation instead of returning one undated verdict.
+    text = "\n".join(f"[{row.start_ms / 1000:.1f}s] {row.text}" for row in rows).strip()
 
-    sampled_keys = _sample_evenly(list(frame_keys), st.moderation_max_frames)
-    frames = await asyncio.to_thread(_fetch_frames, ctx.deps.storage, sampled_keys)
+    sampled = _sample_evenly([(row.t_ms, row.thumbnail_key) for row in frame_rows], st.moderation_max_frames)
+    frames = await asyncio.to_thread(_fetch_frames, ctx.deps.storage, sampled)
 
     result = await asyncio.to_thread(get_moderator().classify, text, frames)
 
@@ -322,11 +328,15 @@ async def step_moderate(ctx: Ctx) -> None:
         s.moderation_severity = result.severity
         s.moderation_reason = result.reason or None
         s.age_restricted = result.severity in ("mild", "severe")
+        s.moderation_violations = [v.model_dump() for v in result.violations]
         await db.commit()
-    log.info("moderation classified", extra={"severity": result.severity, "categories": result.categories})
+    log.info(
+        "moderation classified",
+        extra={"severity": result.severity, "categories": result.categories, "violation_count": len(result.violations)},
+    )
 
     if result.severity == "severe":
-        raise ContentPolicyViolation(result.reason, result.categories)
+        raise ContentPolicyViolation(result.reason, result.categories, result.violations)
 
 
 async def step_highlights(ctx: Ctx) -> None:
@@ -391,6 +401,7 @@ async def step_finalize(ctx: Ctx) -> None:
                         publish_state=st.new_clip_publish_state,
                         published_at=func.now() if st.new_clip_publish_state == "published" else None,
                         age_restricted=s.age_restricted,
+                        moderation_violations=s.moderation_violations,
                     )
                 )
         else:
@@ -407,6 +418,7 @@ async def step_finalize(ctx: Ctx) -> None:
                     publish_state=st.new_clip_publish_state,
                     published_at=func.now() if st.new_clip_publish_state == "published" else None,
                     age_restricted=s.age_restricted,
+                    moderation_violations=s.moderation_violations,
                 )
             )
         await db.flush()

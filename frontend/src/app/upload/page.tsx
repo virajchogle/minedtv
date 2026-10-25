@@ -3,12 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Eye, Loader2, ShieldAlert, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Eye, Loader2, ShieldAlert, XCircle } from "lucide-react";
 
 import { PublishBadge } from "@/components/clip-actions";
 import { ChooseUserNotice, useCurrentUser } from "@/components/current-user";
 import { FileUpload } from "@/components/file-upload";
 import { SiteNav } from "@/components/hero/site-nav";
+import { ModerationFlag } from "@/components/moderation-flag";
 import { ScreenTitle } from "@/components/ui/screen-header";
 import {
   STATUS_COPY,
@@ -16,6 +17,7 @@ import {
   fetchVideo,
   publishClip,
   uploadVideo,
+  type ModerationViolationOut,
   type ProcessingStatus,
   type Video,
 } from "@/lib/api";
@@ -113,6 +115,8 @@ export default function UploadPage() {
   const [acting, setActing] = useState<string | null>(null);
   const [ageRestricted, setAgeRestricted] = useState(false);
   const [moderationReason, setModerationReason] = useState<string | null>(null);
+  const [moderationViolations, setModerationViolations] = useState<ModerationViolationOut[]>([]);
+  const [confirmingPublish, setConfirmingPublish] = useState<string | null>(null);
   const me = useCurrentUser();
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -132,6 +136,7 @@ export default function UploadPage() {
         setStatus(video.processing_status);
         setAgeRestricted(video.age_restricted);
         setModerationReason(video.moderation_reason);
+        setModerationViolations(video.moderation_violations);
         if (video.searchable) {
           setPhase("complete");
           stopPolling();
@@ -184,6 +189,8 @@ export default function UploadPage() {
     setGame("");
     setAgeRestricted(false);
     setModerationReason(null);
+    setModerationViolations([]);
+    setConfirmingPublish(null);
     setResetKey((key) => key + 1);
   };
 
@@ -308,17 +315,7 @@ export default function UploadPage() {
                 Transcript search will work after a re-index.
               </p>
             )}
-            {ageRestricted && (
-              <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
-                <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
-                <div>
-                  <p className="font-semibold">Marked 18+</p>
-                  <p className="text-amber-200/80">
-                    {moderationReason ?? "The transcript contains language that isn't suitable for all audiences."}
-                  </p>
-                </div>
-              </div>
-            )}
+            {ageRestricted && <ModerationFlag reason={moderationReason} violations={moderationViolations} />}
             {clips.length > 0 && (
               <div className="space-y-2">
                 <p className="text-sm text-[var(--mtv-text-2)]">
@@ -332,15 +329,37 @@ export default function UploadPage() {
                   >
                     <span className="min-w-0 flex-1 truncate text-sm font-semibold">{clip.title}</span>
                     {clip.publish_state && <PublishBadge state={clip.publish_state} />}
+                    {confirmingPublish === clip.video_id && (
+                      <p className="flex w-full items-start gap-1.5 rounded-lg border border-[var(--mtv-red)]/40 bg-[var(--mtv-red)]/10 p-2 text-xs text-[var(--mtv-red)]">
+                        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                        This video can only be accessed by users 18 and older. Publish anyway?
+                      </p>
+                    )}
                     {clip.publish_state !== "published" && (
                       <button
                         type="button"
-                        onClick={() => void updateClip(clip)}
+                        onClick={() => {
+                          if (clip.age_restricted && confirmingPublish !== clip.video_id) {
+                            setConfirmingPublish(clip.video_id);
+                            return;
+                          }
+                          setConfirmingPublish(null);
+                          void updateClip(clip);
+                        }}
                         disabled={acting !== null}
                         className="inline-flex items-center gap-1 rounded-lg bg-[var(--mtv-gold)] px-2.5 py-1 text-xs font-bold text-[var(--mtv-on-gold)] disabled:opacity-40"
                       >
                         {acting === `${clip.video_id}:publish` ? <Loader2 className="h-3 w-3 animate-spin" /> : <Eye className="h-3 w-3" />}
-                        Publish
+                        {confirmingPublish === clip.video_id ? "Yes, publish" : "Publish"}
+                      </button>
+                    )}
+                    {confirmingPublish === clip.video_id && (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmingPublish(null)}
+                        className="rounded-lg border border-[var(--mtv-divider)] px-2.5 py-1 text-xs font-semibold"
+                      >
+                        Cancel
                       </button>
                     )}
                     <button
@@ -381,9 +400,10 @@ export default function UploadPage() {
               <ShieldAlert className="h-6 w-6 shrink-0" />
               <span className="text-lg font-semibold">This video can&apos;t be posted</span>
             </div>
-            <p className="text-sm text-[var(--mtv-red)]/90">
-              {moderationReason ?? "The transcript violates our community guidelines."}
-            </p>
+            <ModerationFlag
+              reason={moderationReason ?? "The transcript violates our community guidelines."}
+              violations={moderationViolations}
+            />
             <p className="text-xs text-[var(--mtv-text-2)]">
               Nothing from this upload is public or searchable. Remove the flagged content and
               try again with a different clip.

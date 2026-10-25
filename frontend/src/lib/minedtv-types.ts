@@ -21,6 +21,8 @@ export interface MeOut extends UserOut {
   is_dev: boolean;
   /** May act as other users: dev accounts, or anyone while the server doesn't require login. */
   can_act_as: boolean;
+  birth_date: string | null;
+  is_adult: boolean;
 }
 
 /** Upstream lifecycle values seen on sessions and clips. */
@@ -32,6 +34,13 @@ export type PublishState = "draft" | "ready" | "published";
 /** Transcript moderation verdict. "severe" never reaches a readable session —
  * the pipeline stops and session status becomes "blocked" instead. */
 export type ModerationSeverity = "none" | "mild" | "severe";
+
+/** One itemized finding, with where in the video it occurs. */
+export interface ModerationViolationOut {
+  category: string;
+  timestamp_ms: number | null;
+  note: string;
+}
 
 export interface ClipOut {
   id: string;
@@ -55,6 +64,7 @@ export interface ClipOut {
   age_restricted: boolean;
   moderation_severity: ModerationSeverity;
   moderation_reason: string | null;
+  moderation_violations: ModerationViolationOut[];
   created_at: string;
   /** Latest successful post of this clip to YouTube. */
   youtube_url?: string | null;
@@ -146,6 +156,7 @@ export interface SessionOut {
   moderation_severity: ModerationSeverity;
   moderation_reason: string | null;
   age_restricted: boolean;
+  moderation_violations: ModerationViolationOut[];
 }
 
 export interface SessionStatusEvent {
