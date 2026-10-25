@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Profile — the acting user's channel: stats across their clips, their
+ * Profile: the acting user's channel: stats across their clips, their
  * published clips (what everyone sees), and quick links into the private
  * buckets in My Library. Keeps the scroll-expansion hero.
  */

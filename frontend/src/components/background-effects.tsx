@@ -5,7 +5,7 @@ import { useEffect } from "react";
 /**
  * Flat black backdrop plus a faint cursor-follow glow (set via body::after
  * in globals.css). Previously drew three drifting navy/crimson orbs; dropped
- * in favor of medal.tv's plain, minimal black — no ambient color wash.
+ * in favor of medal.tv's plain, minimal black, with no ambient color wash.
  */
 export function BackgroundEffects() {
   useEffect(() => {

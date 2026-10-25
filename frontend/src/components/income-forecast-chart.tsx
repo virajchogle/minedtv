@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Expected Income — one continuous series: solid where it's built from real
+ * Expected Income: one continuous series: solid where it's built from real
  * tracked views, dashed-looking muted series where it's projected from each
  * clip's virality score. The two halves share one cumulative total so the
  * projected line picks up exactly where the tracked one stops.
@@ -182,7 +182,7 @@ export function IncomeForecastChart({
                 In {cp} days
               </span>
               <span className="mt-1 block text-2xl font-semibold tracking-tight tabular-nums text-[var(--mtv-gold)]">
-                {point ? usd(point.y) : "—"}
+                {point ? usd(point.y) : "-"}
               </span>
               <span className="text-[11px] text-white/45">
                 <span className={cn("font-medium", delta >= 0 ? "text-[var(--mtv-green)]" : "text-[var(--mtv-red)]")}>

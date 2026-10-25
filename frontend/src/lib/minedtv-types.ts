@@ -1,7 +1,7 @@
 /**
  * Types for the deployed MinedIt API.
  *
- * These mirror the service's OpenAPI schema exactly — same field names, same
+ * These mirror the service's OpenAPI schema exactly: same field names, same
  * units (milliseconds), same nullability. Nothing is renamed here; the
  * translation into the shapes our components use happens in `lib/api.ts`, so
  * there is one obvious place to look when the upstream contract changes.
@@ -31,7 +31,7 @@ export type UpstreamStatus = string;
 /** Clip visibility. draft/ready are owner-only; published is public. */
 export type PublishState = "draft" | "ready" | "published";
 
-/** Transcript moderation verdict. "severe" never reaches a readable session —
+/** Transcript moderation verdict. "severe" never reaches a readable session;
  * the pipeline stops and session status becomes "blocked" instead. */
 export type ModerationSeverity = "none" | "mild" | "severe";
 

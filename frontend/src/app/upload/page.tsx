@@ -26,7 +26,7 @@ import { cn } from "@/lib/utils";
 type Phase = "idle" | "uploading" | "processing" | "complete" | "failed" | "blocked";
 
 const STAGE_DETAIL: Partial<Record<ProcessingStatus, string>> = {
-  pending: "Queued — the worker picks uploads up within about a minute.",
+  pending: "Queued. The worker picks uploads up within about a minute.",
   extracting_frames: "Transcoding to 720p and cutting 2-second streaming segments.",
   analyzing: "Whisper is transcribing voice chat; highlights are being detected.",
   indexing: "Embedding one frame per second with CLIP and writing the search index.",
@@ -291,7 +291,7 @@ export default function UploadPage() {
               />
             </div>
             <p className="text-sm text-[var(--mtv-text-2)]">
-              {progress}% — keep this tab open until the upload finishes.
+              {progress}%. Keep this tab open until the upload finishes.
             </p>
           </MtvCard>
         )}

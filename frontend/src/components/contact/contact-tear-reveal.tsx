@@ -4,7 +4,7 @@
  * Closing "Contact us" section: the MinedIt wordmark tears open like a film
  * clapperboard snapping shut, in the spirit of the tiger-tear-reveal
  * reference but scoped down to a one-shot in-view animation (no scroll
- * scrubbing) and restyled gold-on-dark for MinedIt — no tiger artwork, no
+ * scrubbing) and restyled gold-on-dark for MinedIt: no tiger artwork, no
  * borrowed branding.
  *
  * Two clapperboard bars start pressed together over the wordmark, then snap
@@ -38,7 +38,7 @@ export function ContactTearReveal({
         </motion.p>
 
         <div className="relative isolate h-[14vw] max-h-32 min-h-20 w-full">
-          {/* clapperboard bars — pressed together, then snap to the edges */}
+          {/* clapperboard bars: pressed together, then snap to the edges */}
           <motion.div
             initial={{ y: 0 }}
             whileInView={{ y: "-130%" }}
@@ -89,7 +89,7 @@ export function ContactTearReveal({
           className="mt-10 flex flex-col items-center gap-4"
         >
           <p className="max-w-md text-sm text-white/55 sm:text-base">
-            Judging, feedback, or just want to talk clips — we&apos;re here.
+            Judging, feedback, or just want to talk clips, we&apos;re here.
           </p>
           <a
             href={`mailto:${email}`}

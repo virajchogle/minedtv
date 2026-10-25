@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * ScrollExpandMedia — faithful port of the 21st.dev scroll-expansion-hero
+ * ScrollExpandMedia: faithful port of the 21st.dev scroll-expansion-hero
  * reference you supplied (full source this time, not just the demo). Behavior
  * is unchanged from that source: wheel/touch are captured and expand a
  * centered media card from a small frame to near-fullscreen, then release
@@ -11,7 +11,7 @@
  * Only changes from the pasted version:
  *  - `WheelEvent`/`TouchEvent` are the native DOM types, not re-imported from
  *    "react" (that import shadowed the globals in the original, which is why
- *    it needed `as unknown as EventListener` casts everywhere — removed).
+ *    it needed `as unknown as EventListener` casts everywhere, removed).
  *  - Recolored from the demo's blue-200 to this app's palette.
  *  - `next/image` swapped for a plain `<img>` for the background/media, since
  *    this app's hero images live in `/public` without a configured remote

@@ -111,7 +111,7 @@ export function VideoCard({ video }: { video: Video }) {
         )}
         {video.processing_status === "visual_only" && (
           <p className="pt-1 text-xs text-[var(--mtv-gold)]/90">
-            Searchable by appearance only — no transcript was indexed.
+            Searchable by appearance only; no transcript was indexed.
           </p>
         )}
         {video.processing_status === "failed" && video.processing_error && (

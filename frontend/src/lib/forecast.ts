@@ -1,5 +1,5 @@
 /**
- * MinedTV Forecast — illustrative earnings/attention projection.
+ * MinedIt Forecast: illustrative earnings/attention projection.
  *
  * This is explicitly NOT a validated predictive model. It's one transparent,
  * documented formula turning a clip's real virality score and real view
@@ -14,11 +14,11 @@
  *  - RPM only scales earnings, never predicted views.
  *  - Scenario only scales predicted views/earnings, independent of RPM.
  *  - The full 365-day daily series is computed once; every horizon (15..365)
- *    reads a slice/day of that SAME series — horizons are never independently
+ *    reads a slice/day of that SAME series; horizons are never independently
  *    recomputed, so a 90-day and a 365-day forecast agree on day 90.
  *  - Daily views/earnings are a sum of two non-negative terms (a Gaussian
  *    spike + a decaying evergreen floor), so cumulative values are provably
- *    monotonically non-decreasing — no clamping required to enforce it.
+ *    monotonically non-decreasing, with no clamping required to enforce it.
  */
 
 export type Scenario = "conservative" | "expected" | "breakout";
@@ -38,7 +38,7 @@ export const MAX_HORIZON_DAYS = 365;
  * Assumed $ per 1,000 views. Not official payout tables.
  *
  * TikTok's Creativity Program is typically cited in the low-cents-per-1k range,
- * far below YouTube ads. Twitch and Medal are not used here — they are not
+ * far below YouTube ads. Twitch and Medal are not used here: they are not
  * how a short clip earns, and those old presets invented a mid-dollar RPM
  * that made TikTok forecasts look like streaming income.
  */
@@ -51,7 +51,7 @@ export const RPM_PRESETS: { id: string; label: string; rpm: number }[] = [
 
 const SCENARIO_PARAMS: Record<Scenario, { viewMultiplier: number; peakDayFactor: number; spreadFactor: number }> = {
   // viewMultiplier scales the whole curve's height. peakDayFactor/spreadFactor
-  // shape *when* and *how sharply* attention arrives — breakout clips are
+  // shape *when* and *how sharply* attention arrives; breakout clips are
   // modeled as arriving faster and sharper; conservative ones slower and flatter.
   conservative: { viewMultiplier: 0.5, peakDayFactor: 1.5, spreadFactor: 1.4 },
   expected: { viewMultiplier: 1.0, peakDayFactor: 1.0, spreadFactor: 1.0 },
@@ -84,13 +84,13 @@ export interface ForecastDay {
 
 export interface ForecastResult {
   input: ForecastInput;
-  /** Always MAX_HORIZON_DAYS entries — callers slice to the selected horizon. */
+  /** Always MAX_HORIZON_DAYS entries; callers slice to the selected horizon. */
   days: ForecastDay[];
   usedDefaultScore: boolean;
 }
 
 /**
- * The score→views mapping: an explicit, tunable, documented formula —
+ * The score→views mapping: an explicit, tunable, documented formula:
  * score 0 → the clip's own recent run-rate; score 100 → 10× that run-rate at
  * peak. This has not been fit to any outcome data; it only guarantees "higher
  * score → bigger modeled audience," which is the one property the real

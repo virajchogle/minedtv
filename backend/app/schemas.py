@@ -137,7 +137,7 @@ class SessionOut(_Out):
     playlist_url: str | None
     created_at: datetime
     moderation_severity: ModerationSeverity = Field(
-        description="Transcript moderation verdict. 'severe' never reaches this as a readable session — "
+        description="Transcript moderation verdict. 'severe' never reaches this as a readable session; "
         "the pipeline stops and status becomes 'blocked' instead."
     )
     moderation_reason: str | None = Field(default=None, description="One-line reason, owner-visible only")

@@ -3,7 +3,7 @@
 /**
  * Horizontal grayscale wordmark strip, same idea as medal.tv's supported-games
  * band under their hero. These are stylized text treatments approximating
- * each game's native type feel (condensed/italic/blocky/etc.) — not actual
+ * each game's native type feel (condensed/italic/blocky/etc.), not actual
  * logo artwork, since reproducing trademarked logos isn't something to do
  * without the rights holder's assets.
  */
