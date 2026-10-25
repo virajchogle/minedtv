@@ -117,7 +117,7 @@ export function IncomeForecastChart({
   const chart = (
     <GlowChart
       type="line"
-      color="#cbff3d"
+      color="#eab308"
       data={series}
       label="Expected income from tracked and projected views"
       height={compact ? 148 : 240}
@@ -132,7 +132,7 @@ export function IncomeForecastChart({
 
   if (compact) {
     return (
-      <NeonFrame as="section" label="Expected income" tabs={{ topRight: usd(at60) }} color="#cbff3d" className="h-full min-h-0 rounded-2xl border-white/10 p-4">
+      <NeonFrame as="section" label="Expected income" tabs={{ topRight: usd(at60) }} color="#eab308" className="h-full min-h-0 rounded-2xl border-white/10 p-4">
         <p className="text-xs text-white/50">Illustrative at 60 days</p>
         <p className="mt-1 text-3xl font-semibold tracking-tight text-white">{usd(at60)}</p>
         <div className="mt-3 min-h-0 flex-1">{chart}</div>
@@ -142,7 +142,7 @@ export function IncomeForecastChart({
   }
 
   return (
-    <NeonFrame as="section" label="Expected income" tabs={{ topRight: usd(at60) }} color="#cbff3d" className="flex h-full flex-col p-4 sm:p-6">
+    <NeonFrame as="section" label="Expected income" tabs={{ topRight: usd(at60) }} color="#eab308" className="flex h-full flex-col p-4 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <p className="text-sm text-white/55">
           Tracked uses real views. Projected continues from each clip&apos;s virality score.

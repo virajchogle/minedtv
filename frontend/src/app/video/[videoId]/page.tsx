@@ -184,7 +184,7 @@ export default function VideoPage() {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-[var(--mtv-bg)] px-4 pb-20 pt-28 text-[var(--mtv-text)] sm:px-8 sm:pt-32">
+    <div className="min-h-screen px-4 pb-20 pt-28 text-[var(--mtv-text)] sm:px-8 sm:pt-32">
       <SiteNav />
       <div className="mx-auto max-w-6xl">{children}</div>
     </div>

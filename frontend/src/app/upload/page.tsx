@@ -207,7 +207,7 @@ export default function UploadPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--mtv-bg)] px-4 pb-16 pt-28 text-[var(--mtv-text)] sm:px-8 sm:pt-32">
+    <div className="min-h-screen px-4 pb-16 pt-28 text-[var(--mtv-text)] sm:px-8 sm:pt-32">
       <SiteNav />
       <div className="mx-auto max-w-2xl space-y-6">
         <ScreenTitle

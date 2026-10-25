@@ -3,9 +3,10 @@
 import { useEffect } from "react";
 
 /**
- * Flat black backdrop plus a faint cursor-follow glow (set via body::after
- * in globals.css). Previously drew three drifting navy/crimson orbs; dropped
- * in favor of medal.tv's plain, minimal black — no ambient color wash.
+ * Flat black fallback backdrop plus a faint cursor-follow glow (set via
+ * body::after in globals.css) for pages that don't mount their own animated
+ * background (e.g. <Velaris>, which sits at z-[-10] — this stays further
+ * back at z-[-20] so it never paints over it).
  */
 export function BackgroundEffects() {
   useEffect(() => {
@@ -37,7 +38,7 @@ export function BackgroundEffects() {
         position: "fixed",
         inset: 0,
         pointerEvents: "none",
-        zIndex: -1,
+        zIndex: -20,
         background: "#050505",
       }}
     />

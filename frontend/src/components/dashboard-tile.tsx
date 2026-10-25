@@ -24,8 +24,8 @@ export function HoverBeam({
       className={cn("group/beam min-h-0 h-full w-full text-left", interactive && "cursor-pointer")}
     >
       <BorderBeam
-        color="#cbff3d"
-        colorTo="#3ddc84"
+        color="#eab308"
+        colorTo="#f59e0b"
         className={cn(
           "flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-white/10 bg-[var(--mtv-surface)] p-1",
           // The beam's traveling-ring overlay paints after this panel in the DOM, so without this

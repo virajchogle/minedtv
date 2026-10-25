@@ -22,8 +22,8 @@ import { ScreenTitle, SectionHeader } from "@/components/ui/screen-header";
 import { ScrollExpandMedia } from "@/components/ui/scroll-expansion-hero";
 import { absoluteUrl, fetchVideos, formatDuration, type SearchResult, type Video } from "@/lib/api";
 
-const EXPLORE_HERO_VIDEO = "/videos/explore-hero.mp4";
-const EXPLORE_HERO_POSTER = "/images/minecraft-hero.webp";
+const EXPLORE_HERO_VIDEO = "/videos/1.mp4";
+const EXPLORE_HERO_POSTER = "/images/explore-hero.jpg";
 
 export default function ExplorePage() {
   const router = useRouter();
@@ -58,7 +58,7 @@ export default function ExplorePage() {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--mtv-bg)] text-[var(--mtv-text)]">
+    <div className="min-h-screen text-[var(--mtv-text)]">
       <SiteNav />
 
       <ScrollExpandMedia

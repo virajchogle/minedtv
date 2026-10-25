@@ -16,8 +16,12 @@ import { SiteNav } from "@/components/hero/site-nav";
 import { SearchPanel } from "@/components/search-panel";
 import { Pill, PillRow } from "@/components/ui/pill";
 import { ScreenTitle } from "@/components/ui/screen-header";
+import { ScrollExpandMedia } from "@/components/ui/scroll-expansion-hero";
 import { VideoCard } from "@/components/video-card";
 import { fetchMyVideos, type SearchResult, type Video } from "@/lib/api";
+
+const LIBRARY_HERO_VIDEO = "/videos/2.mp4";
+const LIBRARY_HERO_POSTER = "/images/library-hero.jpg";
 
 // Clips being processed change state server-side, so the list re-polls while any are working.
 const POLL_INTERVAL_MS = 5000;
@@ -118,10 +122,19 @@ function Library() {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--mtv-bg)] px-4 pb-16 pt-28 text-[var(--mtv-text)] sm:px-8 sm:pt-32">
+    <div className="min-h-screen text-[var(--mtv-text)]">
       <SiteNav />
 
-      <div className="mx-auto max-w-5xl space-y-10">
+      <ScrollExpandMedia
+        mediaType="video"
+        mediaSrc={LIBRARY_HERO_VIDEO}
+        posterSrc={LIBRARY_HERO_POSTER}
+        bgImageSrc={LIBRARY_HERO_POSTER}
+        title="My Library"
+        date="Everything you've shot"
+        scrollToExpand="Scroll to expand"
+      >
+      <div className="mx-auto max-w-5xl space-y-10 px-4 pb-16 sm:px-8">
         <ScreenTitle
           action={
             <Link
@@ -224,6 +237,7 @@ function Library() {
           </>
         )}
       </div>
+      </ScrollExpandMedia>
     </div>
   );
 }

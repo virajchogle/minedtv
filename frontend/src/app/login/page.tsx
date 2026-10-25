@@ -16,7 +16,7 @@ type Mode = "signin" | "signup";
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen bg-[var(--mtv-bg)] px-4 pb-16 pt-28 text-[var(--mtv-text)] sm:px-8 sm:pt-32">
+    <div className="min-h-screen px-4 pb-16 pt-28 text-[var(--mtv-text)] sm:px-8 sm:pt-32">
       <SiteNav />
       <Suspense>
         <LoginForm />

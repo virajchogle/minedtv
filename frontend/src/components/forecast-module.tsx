@@ -315,7 +315,7 @@ function ForecastRangeChart({
   const series = useMemo(() => {
     const base: Omit<ForecastInput, "scenario"> = { existingViews, viralityScore, daysSincePublish, rpm };
     const colors: Record<Scenario, string> = {
-      expected: "#cbff3d",
+      expected: "#eab308",
       conservative: "#94a3b8",
       breakout: "#fbbf24",
     };
@@ -342,7 +342,7 @@ function ForecastRangeChart({
     <div>
       <GlowChart
         type="bar"
-        color="#cbff3d"
+        color="#eab308"
         data={series}
         label={mode === "views" ? "Predicted views by horizon" : "Predicted earnings by horizon"}
         height={compact ? 160 : 260}

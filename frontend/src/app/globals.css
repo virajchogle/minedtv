@@ -92,7 +92,7 @@
     --card-foreground: hsl(0 0% 100%);
     --popover: #121212;
     --popover-foreground: hsl(0 0% 100%);
-    --primary: #cbff3d;                    /* Medal-style neon lime accent */
+    --primary: #eab308;                    /* Medal-style neon lime accent */
     --primary-foreground: #000000;
     --secondary: hsl(0 0% 12%);
     --secondary-foreground: hsl(0 0% 100%);
@@ -104,15 +104,15 @@
     --destructive-foreground: hsl(0 0% 98%);
     --border: hsl(0 0% 16%);
     --input: hsl(0 0% 14%);
-    --ring: #cbff3d;
+    --ring: #eab308;
     --sidebar: #050505;
     --sidebar-foreground: hsl(0 0% 100%);
-    --sidebar-primary: #cbff3d;
+    --sidebar-primary: #eab308;
     --sidebar-primary-foreground: #000000;
     --sidebar-accent: hsl(0 0% 11%);
     --sidebar-accent-foreground: hsl(0 0% 100%);
     --sidebar-border: hsl(0 0% 16%);
-    --sidebar-ring: #cbff3d;
+    --sidebar-ring: #eab308;
     --sidebar-glass-bg: rgba(0, 0, 0, 0.7);
     --sidebar-glass-border: rgba(255, 255, 255, 0.06);
   }
@@ -138,7 +138,7 @@ body::after {
   z-index: 0;
   background: radial-gradient(
     600px circle at var(--mx, 50%) var(--my, 50%),
-    rgba(203, 255, 61, 0.05),
+    rgba(234, 179, 8, 0.05),
     transparent 60%
   );
 }
@@ -191,7 +191,7 @@ body::before {
   --mtv-bg: #050505;
   --mtv-surface: #121212;
   --mtv-surface-high: #1c1c1c;
-  --mtv-gold: #cbff3d;
+  --mtv-gold: #eab308;
   --mtv-on-gold: #000000;
   --mtv-text: #ffffff;
   --mtv-text-2: #9b9b9b;
@@ -199,7 +199,7 @@ body::before {
   --mtv-red: #ff4d5e;
   --mtv-green: #3ddc84;
   --mtv-shimmer: #2a2a2a;
-  --neon-accent: 203 255 61;
+  --neon-accent: 234 179 8;
 }
 
 /* ── Marquee: continuous-scroll track for the Explore clip wall ─────────── */

@@ -3,6 +3,7 @@ import { Archivo_Black, Geist, Geist_Mono, JetBrains_Mono, Space_Grotesk } from 
 import { AppShell } from "@/components/app-shell";
 import { BackgroundEffects } from "@/components/background-effects";
 import { Splash } from "@/components/splash";
+import Velaris from "@/components/ui/velaris";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -71,6 +72,7 @@ export default function RootLayout({
           }}
         />
         <BackgroundEffects />
+        <Velaris height="100%" className="fixed inset-0 -z-10 opacity-70" />
         <AppShell>{children}</AppShell>
       </body>
     </html>

@@ -62,7 +62,7 @@ export type EChartsOption = ComposeOption<
 /** Shared frosted-glass tooltip chrome, matching the app's dark/gold surface tokens. */
 export const TOOLTIP_STYLE = {
   backgroundColor: "rgba(10,10,10,0.92)",
-  borderColor: "rgba(203,255,61,0.25)",
+  borderColor: "rgba(234,179,8,0.25)",
   borderWidth: 1,
   borderRadius: 10,
   padding: [10, 12] as [number, number],

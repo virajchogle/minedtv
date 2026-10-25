@@ -44,7 +44,7 @@ const CAPABILITIES = [
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-[#07090f] text-white">
+    <div className="min-h-screen text-white">
       <SiteNav />
 
       {/* ── 1 + 2: hero and scroll-driven sunrise ── */}
@@ -92,13 +92,6 @@ export default function LandingPage() {
 
       {/* ── closing call to action ── */}
       <section className="relative overflow-hidden border-t border-white/5">
-        <div
-          className="pointer-events-none absolute inset-0 opacity-60"
-          style={{
-            background:
-              "radial-gradient(ellipse at 50% 120%, rgba(203,255,61,0.14) 0%, rgba(203,255,61,0.04) 40%, rgba(0,0,0,0) 70%)",
-          }}
-        />
         <motion.div
           {...RISE}
           transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}

@@ -50,7 +50,7 @@ export default function ProfilePage() {
   };
 
   return (
-    <div className="bg-[var(--mtv-bg)] text-[var(--mtv-text)]">
+    <div className="text-[var(--mtv-text)]">
       <SiteNav />
       <ScrollExpandMedia
         mediaType="image"

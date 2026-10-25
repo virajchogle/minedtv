@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 type Metric = keyof AnalyticsTotals;
 
 const METRICS: { id: Metric; label: string; color: string }[] = [
-  { id: "views", label: "Views", color: "#cbff3d" },
+  { id: "views", label: "Views", color: "#eab308" },
   { id: "likes", label: "Likes", color: "#22d3ee" },
   { id: "comments", label: "Comments", color: "#f472b6" },
 ];
@@ -68,7 +68,7 @@ export function DailyEngagementChart({
   ) : (
     <GlowChart
       type="line"
-      color="#cbff3d"
+      color="#eab308"
       data={series}
       label={`${highlightMeta.label} per day`}
       height={compact ? 132 : 232}
@@ -124,7 +124,7 @@ export function DailyEngagementChart({
         as="section"
         label="Daily"
         tabs={{ topRight: `${data.days}d` }}
-        color="#cbff3d"
+        color="#eab308"
         className="flex h-full min-h-0 flex-col rounded-2xl border-white/10 p-4"
       >
         <div className="flex items-baseline gap-2">
@@ -148,7 +148,7 @@ export function DailyEngagementChart({
       as="section"
       label={`${highlightMeta.label} per day`}
       tabs={{ topRight: `${dayLabel(data.start)} – ${dayLabel(data.end)}` }}
-      color="#cbff3d"
+      color="#eab308"
       className="flex h-full flex-col p-4 sm:p-6"
     >
       <div className="flex items-start justify-between gap-3">

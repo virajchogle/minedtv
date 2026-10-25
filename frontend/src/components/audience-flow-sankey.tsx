@@ -17,7 +17,7 @@ const OUTCOME_LIKED = "Liked";
 const OUTCOME_COMMENTED = "Commented";
 const OUTCOME_VIEWED_ONLY = "Viewed only";
 
-const GAME_COLORS = ["#cbff3d", "#22d3ee", "#a78bfa", "#fb923c", "#60a5fa", "#f472b6"];
+const GAME_COLORS = ["#eab308", "#22d3ee", "#a78bfa", "#fb923c", "#60a5fa", "#f472b6"];
 const OUTCOME_COLORS: Record<string, string> = {
   [OUTCOME_LIKED]: "#4ade80",
   [OUTCOME_COMMENTED]: "#fb923c",
@@ -135,7 +135,7 @@ export function AudienceFlowSankey({ clips, compact = false }: { clips: ClipAnal
         <div className="mt-3 min-h-0 flex-1">
           <GlowChart
             type="bar"
-            color="#cbff3d"
+            color="#eab308"
             data={outcomes}
             label="Period views by outcome"
             height={160}

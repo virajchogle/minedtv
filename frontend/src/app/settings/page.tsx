@@ -92,7 +92,7 @@ export default function SettingsPage() {
     "inline-flex items-center gap-1.5 rounded-lg border border-[var(--mtv-divider)] px-3 py-1.5 text-[13px] font-semibold transition-colors hover:bg-[var(--mtv-surface-high)] disabled:opacity-40";
 
   return (
-    <div className="min-h-screen bg-[var(--mtv-bg)] px-4 pb-20 pt-28 text-[var(--mtv-text)] sm:px-8 sm:pt-32">
+    <div className="min-h-screen px-4 pb-20 pt-28 text-[var(--mtv-text)] sm:px-8 sm:pt-32">
       <SiteNav />
       <div className="mx-auto max-w-3xl space-y-12">
         <ScreenTitle eyebrow="Settings">Settings</ScreenTitle>

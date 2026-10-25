@@ -89,7 +89,7 @@ export default function DashboardPage() {
   }, [open]);
 
   return (
-    <div className="flex h-[100dvh] flex-col overflow-hidden bg-[var(--mtv-bg)] px-3 pb-3 pt-20 text-[var(--mtv-text)] sm:px-5 [--neon-accent:203_255_61]">
+    <div className="flex h-[100dvh] flex-col overflow-hidden px-3 pb-3 pt-20 text-[var(--mtv-text)] sm:px-5 [--neon-accent:234_179_8]">
       <SiteNav />
       <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col gap-3">
         <header className="flex shrink-0 flex-wrap items-center justify-between gap-3">
