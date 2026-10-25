@@ -20,6 +20,7 @@ import {
   HORIZONS,
   RPM_PRESETS,
   SCENARIOS,
+  TIKTOK_RPM,
   forecast,
   summarize,
   type ForecastDay,
@@ -53,7 +54,7 @@ const compactNum = (n: number) => new Intl.NumberFormat("en", { notation: "compa
 
 export function ForecastModule({ clips }: { clips: ClipAnalytics[] }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [rpm, setRpm] = useState(2.0);
+  const [rpm, setRpm] = useState(TIKTOK_RPM);
   const [horizon, setHorizon] = useState<(typeof HORIZONS)[number]>(90);
   const [scenario, setScenario] = useState<Scenario>("expected");
   const [mode, setMode] = useState<ChartMode>("cumulative_earnings");
@@ -198,7 +199,7 @@ export function ForecastModule({ clips }: { clips: ClipAnalytics[] }) {
               <input
                 type="number"
                 min={0}
-                step={0.1}
+                step={0.01}
                 value={rpm}
                 onChange={(e) => setRpm(Math.max(0, Number(e.target.value) || 0))}
                 className="w-16 rounded-lg border border-[var(--mtv-divider)] bg-[var(--mtv-surface)] px-2 py-1.5 text-[13px]"
@@ -251,7 +252,8 @@ export function ForecastModule({ clips }: { clips: ClipAnalytics[] }) {
       <p className="text-[11px] leading-relaxed text-[var(--mtv-text-2)]">
         Illustrative projection, not a guarantee of income. Predicted views scale with this clip&apos;s real virality
         score and recent view run-rate using one documented formula (see the forecast module source) — it has not
-        been fitted to real outcomes. RPM presets are generic assumptions, not published or verified platform rates.
+        been fitted to real outcomes. Earnings use an assumed TikTok RPM ($0.04 / 1k views) unless you change it —
+        not a published Creativity Program rate, and not a Twitch or Medal figure.
         Cumulative figures only ever increase; daily figures can rise and fall.
       </p>
     </section>

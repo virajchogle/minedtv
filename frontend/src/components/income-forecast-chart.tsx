@@ -13,7 +13,7 @@ import { Sparkles } from "lucide-react";
 import { Pill, PillRow } from "@/components/ui/pill";
 import { EChartsBase, TOOLTIP_STYLE, type EChartsOption } from "@/components/ui/echarts-base";
 import { clipViralityScore } from "@/lib/api";
-import { SCENARIOS, forecast, type Scenario } from "@/lib/forecast";
+import { SCENARIOS, TIKTOK_RPM, forecast, type Scenario } from "@/lib/forecast";
 import type { AnalyticsDay, ClipAnalytics } from "@/lib/minedtv-types";
 import { cn } from "@/lib/utils";
 
@@ -36,7 +36,7 @@ function useCssVar(name: string, fallback: string): string {
 }
 
 export function IncomeForecastChart({ clips, daily }: { clips: ClipAnalytics[]; daily: AnalyticsDay[] }) {
-  const [rpm, setRpm] = useState(2);
+  const [rpm, setRpm] = useState(TIKTOK_RPM);
   const [scenario, setScenario] = useState<Scenario>("expected");
   const [now] = useState(() => Date.now());
   const gold = useCssVar("--mtv-gold", "#cbff3d");
@@ -213,7 +213,7 @@ export function IncomeForecastChart({ clips, daily }: { clips: ClipAnalytics[]; 
             <input
               type="number"
               min={0}
-              step={0.1}
+              step={0.01}
               value={rpm}
               onChange={(e) => setRpm(Math.max(0, Number(e.target.value) || 0))}
               className="w-16 rounded-lg border border-[var(--mtv-divider)] bg-[var(--mtv-surface-high)] px-2 py-1.5 text-sm"
@@ -252,9 +252,9 @@ export function IncomeForecastChart({ clips, daily }: { clips: ClipAnalytics[]; 
       <EChartsBase option={option} height={280} className="min-h-[240px] w-full" />
 
       <p className="text-xs leading-relaxed text-[var(--mtv-text-2)]">
-        Illustrative. The solid portion applies an assumed RPM to real tracked views; the dashed portion also predicts
-        future views from each clip&apos;s real virality score using one documented, unvalidated formula. Not a
-        guarantee of income.
+        Illustrative. Earnings default to an assumed TikTok RPM ($0.04 / 1k views), not Twitch or Medal rates.
+        The solid portion applies that RPM to real tracked views; the dashed portion also predicts future views.
+        Not a published payout table and not a guarantee of income.
       </p>
     </section>
   );

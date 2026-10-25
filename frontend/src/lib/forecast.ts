@@ -34,14 +34,19 @@ export type Horizon = (typeof HORIZONS)[number];
 
 export const MAX_HORIZON_DAYS = 365;
 
-/** Illustrative RPM presets. Not official, published, or verified platform payout
- * rates — a creator's actual revenue depends on monetization eligibility, ad
- * mix, region, and program terms this app has no access to. */
+/**
+ * Assumed $ per 1,000 views. Not official payout tables.
+ *
+ * TikTok's Creativity Program is typically cited in the low-cents-per-1k range,
+ * far below YouTube ads. Twitch and Medal are not used here — they are not
+ * how a short clip earns, and those old presets invented a mid-dollar RPM
+ * that made TikTok forecasts look like streaming income.
+ */
+export const TIKTOK_RPM = 0.04;
+
 export const RPM_PRESETS: { id: string; label: string; rpm: number }[] = [
-  { id: "demo", label: "Demo ($2.00)", rpm: 2.0 },
-  { id: "youtube", label: "YouTube-like", rpm: 2.5 },
-  { id: "twitch", label: "Twitch-like", rpm: 1.5 },
-  { id: "medal", label: "Medal-like", rpm: 1.0 },
+  { id: "tiktok", label: "TikTok assumed ($0.04)", rpm: TIKTOK_RPM },
+  { id: "youtube", label: "YouTube assumed ($2.50)", rpm: 2.5 },
 ];
 
 const SCENARIO_PARAMS: Record<Scenario, { viewMultiplier: number; peakDayFactor: number; spreadFactor: number }> = {
