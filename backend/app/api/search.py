@@ -5,7 +5,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 
-from app.api.deps import UrlBuilder, Urls
+from app.api.deps import OptionalUser, UrlBuilder, Urls
 from app.config import get_settings
 from app.db.session import get_sessionmaker
 from app.ml.registry import get_embedder
@@ -59,6 +59,7 @@ def _out(r: Resolved, urls: UrlBuilder) -> SearchResult:
 @router.get("", response_model=SearchOut)
 async def search(
     urls: Urls,
+    me: OptionalUser,
     q: str = Query(min_length=1, max_length=300, examples=["the clutch on Bind"]),
     game: str | None = None,
     user_id: uuid.UUID | None = None,
@@ -69,11 +70,14 @@ async def search(
 ) -> SearchOut:
     """Hybrid semantic search: visual frames + speech (semantic and keyword) + highlight events, fused with RRF.
 
-    One result per session, resolved to the clip containing the best moment, or a suggested
-    ±15 s window when no clip contains it.
+    One result per session, resolved to the clip containing the best moment. Only published clips
+    are searched, except when user_id is your own X-User-Id: then your drafts and "ready" clips
+    are included too, plus suggested ±15 s windows for matches outside any clip.
     """
     t0 = time.monotonic()
-    results, cached = await _service(cache=not nocache).search_text(q, Filters(game, user_id, from_, to), limit)
+    # Searching your own clips (user_id == your X-User-Id) includes drafts and "ready" clips.
+    own = me is not None and user_id == me.id
+    results, cached = await _service(cache=not nocache).search_text(q, Filters(game, user_id, from_, to, own), limit)
     return SearchOut(
         query=q, results=[_out(r, urls) for r in results], took_ms=round((time.monotonic() - t0) * 1000), cached=cached
     )
@@ -82,6 +86,7 @@ async def search(
 @router.post("/image", response_model=SearchOut)
 async def search_image(
     urls: Urls,
+    me: OptionalUser,
     image: UploadFile = File(description="A screenshot (JPEG or PNG)"),
     game: str | None = Form(default=None),
     user_id: uuid.UUID | None = Form(default=None),
@@ -94,7 +99,8 @@ async def search_image(
     if not data:
         raise HTTPException(422, "Empty image")
     t0 = time.monotonic()
-    results = await _service(cache=False).search_image(data, Filters(game, user_id), limit)
+    own = me is not None and user_id == me.id
+    results = await _service(cache=False).search_image(data, Filters(game, user_id, include_unpublished=own), limit)
     return SearchOut(
         query=f"image:{image.filename or 'upload'}",
         results=[_out(r, urls) for r in results],

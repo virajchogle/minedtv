@@ -16,7 +16,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sqlalchemy import delete, insert, select
+from sqlalchemy import delete, func, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import Settings, get_settings
@@ -315,6 +315,8 @@ async def step_finalize(ctx: Ctx) -> None:
                         thumbnail_key=await nearest_frame_key(db, s.id, t) or s.poster_key,
                         status="ready",
                         kind="auto",
+                        publish_state=st.new_clip_publish_state,
+                        published_at=func.now() if st.new_clip_publish_state == "published" else None,
                     )
                 )
         else:
@@ -328,6 +330,8 @@ async def step_finalize(ctx: Ctx) -> None:
                     thumbnail_key=s.poster_key,
                     status="ready",
                     kind="auto",
+                    publish_state=st.new_clip_publish_state,
+                    published_at=func.now() if st.new_clip_publish_state == "published" else None,
                 )
             )
         await db.commit()

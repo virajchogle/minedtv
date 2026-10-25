@@ -372,7 +372,27 @@ When a clip is opened, call `MinedTvApi.view(clip.remoteId!!)` once. Have the li
 - **Stable media URLs:** thumbnails, segments and exports now use a fixed public R2 URL, so Coil and
   ExoPlayer can cache them.
 
-## 8. Uploading from the phone (optional)
+## 8. Drafts, "ready to post" and publishing
+
+Clips have a `publish_state`: `draft` → `ready` (queued to post to YouTube) → `published`.
+
+- The feed, search and other users' profiles only show `published` clips. **New uploads may start as
+  `draft`, so add a Publish button** that calls `POST /clips/{id}/publish` (owner's `X-User-Id`).
+  `POST /clips/{id}/unpublish` takes a clip back to draft, and `POST /clips/{id}/mark-ready` puts it in
+  the "ready to post to YouTube" bucket.
+- On the user's own profile, `GET /users/{me}/clips?state=draft|ready|published|unpublished|all`
+  (with `X-User-Id: {me}`) gives the buckets. Anyone else only ever gets published clips.
+- "Search your clips" (library scope) should pass `user_id={me}`. That search includes the user's own
+  drafts; global search never does.
+- **Virality check (drafts only):** `POST /clips/{id}/virality` with
+  `{"platform": "youtube", "target_audience": "...", "persona_count": 9}`, then poll
+  `GET /clips/{id}/virality?platform=youtube&...` with the same options until `status == "ready"`.
+  `result` has `virality_score` (0–100), `verdict` and the persona panel. A published clip returns
+  409, so unpublish it first. It takes a few minutes (export + Gemini + persona panel).
+- **AI creator pack:** `POST /clips/{id}/creator-pack` returns titles, caption, hashtags and YouTube
+  metadata for the clip. Poll `GET` the same way.
+
+## 9. Uploading from the phone (optional)
 
 1. `POST /uploads` with `{"filename": "x.mp4", "content_type": "video/mp4", "game": "Valorant", "title": "..."}`
    returns `upload_url` and `session_id`.

@@ -39,3 +39,18 @@ def enqueue_creator_pack(clip_id: uuid.UUID) -> str:
         failure_ttl=86400,
     )
     return job.id
+
+
+def enqueue_virality(clip_id: uuid.UUID, platform: str, target_audience: str | None, persona_count: int | None) -> str:
+    job = get_queue().enqueue(
+        "app.worker.jobs.virality",
+        str(clip_id),
+        platform=platform,
+        target_audience=target_audience,
+        persona_count=persona_count,
+        job_id=f"virality-{clip_id}-{uuid.uuid4().hex[:8]}",
+        job_timeout=1800,  # export + creator pack + persona panel
+        result_ttl=3600,
+        failure_ttl=86400,
+    )
+    return job.id

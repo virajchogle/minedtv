@@ -82,6 +82,9 @@ class Settings(BaseSettings):
     transcript_min_window_ms: int = 5000
     transcript_max_window_ms: int = 10000
     auto_clip_count: int = 3
+    # Publish state for clips the pipeline creates. "draft" keeps new uploads private until the owner
+    # publishes; "published" puts them straight in the feed (useful until the app has a publish button).
+    new_clip_publish_state: Literal["draft", "ready", "published"] = "draft"
     upload_concurrency: int = 8
 
     # --- search ---

@@ -5,15 +5,17 @@ import uuid
 from fastapi import APIRouter, HTTPException, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import PlainTextResponse
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.api.deps import CurrentUser, Db, OptionalUser, Urls
 from app.config import get_settings
-from app.db.models import Clip, Event, Like, Segment, Session, SessionStatus, Transcript, User
+from app.db.models import UNPUBLISHED_STATES, Clip, Event, Like, Segment, Session, SessionStatus, Transcript, User
 from app.schemas import (
     ClipCreate,
     ClipCreatorPackOut,
+    ClipViralityIn,
+    ClipViralityOut,
     ClipDetailOut,
     ClipOut,
     ClipPatch,
@@ -30,8 +32,9 @@ from app.services.redis import get_redis
 from app.services.serialize import clip_out
 from app.services.storage import get_storage
 from app.worker.creator_pack import pack_key, pack_status_key
-from app.worker.enqueue import enqueue_creator_pack, enqueue_export
+from app.worker.enqueue import enqueue_creator_pack, enqueue_export, enqueue_virality
 from app.worker.export import export_key, status_key
+from app.worker.virality import virality_key, virality_status_key
 
 router = APIRouter(prefix="/clips", tags=["clips"])
 
@@ -52,6 +55,12 @@ async def _load(db, clip_id: uuid.UUID) -> tuple[Clip, Session, User]:
     return row.Clip, row.Session, row.User
 
 
+def _check_visible(clip: Clip, me: User | None) -> None:
+    """Unpublished clips (draft / ready) exist only for their owner; everyone else gets a 404."""
+    if clip.publish_state != "published" and (me is None or me.id != clip.user_id):
+        raise HTTPException(404, "Clip not found")
+
+
 async def _liked(db, user: User | None, clip_ids: list[uuid.UUID]) -> set[uuid.UUID] | None:
     if user is None:
         return None
@@ -66,8 +75,10 @@ async def _clip_out(db, clip, session, user, urls, me) -> ClipOut:
 
 @router.get("/{clip_id}", response_model=ClipDetailOut)
 async def get_clip(clip_id: uuid.UUID, db: Db, urls: Urls, me: OptionalUser) -> ClipDetailOut:
-    """Clip detail, with the highlight events and transcript lines inside its time range."""
+    """Clip detail, with the highlight events and transcript lines inside its time range.
+    Unpublished clips are only visible to their owner (send X-User-Id)."""
     clip, session, user = await _load(db, clip_id)
+    _check_visible(clip, me)
     events = (
         await db.scalars(
             select(Event)
@@ -121,7 +132,8 @@ async def clip_playlist(clip_id: uuid.UUID, db: Db):
 
 @router.post("", response_model=ClipOut, status_code=201)
 async def create_clip(body: ClipCreate, user: CurrentUser, db: Db, urls: Urls) -> ClipOut:
-    """Create a clip from any time range of a ready session. No video is copied."""
+    """Create a clip from any time range of a ready session. No video is copied. New clips start
+    as drafts (owner-only); publish them with POST /clips/{id}/publish."""
     session = await db.get(Session, body.session_id)
     if session is None:
         raise HTTPException(404, "Session not found")
@@ -183,6 +195,7 @@ async def _counts(db, clip: Clip, me: User | None) -> CountsOut:
 @router.post("/{clip_id}/like", response_model=CountsOut)
 async def like(clip_id: uuid.UUID, user: CurrentUser, db: Db) -> CountsOut:
     clip, _, _ = await _load(db, clip_id)
+    _check_visible(clip, user)
     inserted = await db.execute(
         pg_insert(Like).values(user_id=user.id, clip_id=clip.id).on_conflict_do_nothing().returning(Like.clip_id)
     )
@@ -207,6 +220,7 @@ async def unlike(clip_id: uuid.UUID, user: CurrentUser, db: Db) -> CountsOut:
 @router.post("/{clip_id}/view", response_model=CountsOut)
 async def view(clip_id: uuid.UUID, db: Db, me: OptionalUser) -> CountsOut:
     clip, _, _ = await _load(db, clip_id)
+    _check_visible(clip, me)
     await counters.incr_view(clip.id)
     return await _counts(db, clip, me)
 
@@ -292,3 +306,102 @@ async def start_creator_pack(clip_id: uuid.UUID, db: Db) -> ClipCreatorPackOut:
     await get_redis().set(pack_status_key(clip.id, clip.start_ms, clip.end_ms), "processing", ex=6 * 3600)
     await run_in_threadpool(enqueue_creator_pack, clip.id)
     return state.model_copy(update={"status": "processing", "error": None})
+
+
+# ---------------------------------------------------------------- publish state
+
+
+async def _set_state(clip_id: uuid.UUID, state: str, user: User, db, urls) -> ClipOut:
+    clip, session, owner = await _load(db, clip_id)
+    if clip.user_id != user.id:
+        raise HTTPException(403, "Not your clip")
+    if clip.publish_state != state:
+        clip.publish_state = state
+        clip.published_at = func.now() if state == "published" else None
+        await db.commit()
+        await db.refresh(clip)
+    return await _clip_out(db, clip, session, owner, urls, user)
+
+
+@router.post("/{clip_id}/publish", response_model=ClipOut)
+async def publish_clip(clip_id: uuid.UUID, user: CurrentUser, db: Db, urls: Urls) -> ClipOut:
+    """Make the clip public: it appears in the feed, search and the owner's profile."""
+    return await _set_state(clip_id, "published", user, db, urls)
+
+
+@router.post("/{clip_id}/unpublish", response_model=ClipOut)
+async def unpublish_clip(clip_id: uuid.UUID, user: CurrentUser, db: Db, urls: Urls) -> ClipOut:
+    """Back to draft: hidden from everyone but the owner."""
+    return await _set_state(clip_id, "draft", user, db, urls)
+
+
+@router.post("/{clip_id}/mark-ready", response_model=ClipOut)
+async def mark_ready(clip_id: uuid.UUID, user: CurrentUser, db: Db, urls: Urls) -> ClipOut:
+    """Queue the clip as "ready to post to YouTube". Still private (owner only) until published."""
+    return await _set_state(clip_id, "ready", user, db, urls)
+
+
+# ---------------------------------------------------------------- virality (unpublished clips only)
+
+
+def _virality_args(clip: Clip, body: ClipViralityIn) -> tuple:
+    return (clip.id, clip.start_ms, clip.end_ms, body.platform, body.target_audience, body.persona_count)
+
+
+async def _virality_state(clip: Clip, body: ClipViralityIn) -> ClipViralityOut:
+    from app.schemas import AudienceSimulationOut
+
+    args = _virality_args(clip, body)
+    base = dict(clip_id=clip.id, platform=body.platform, start_ms=clip.start_ms, end_ms=clip.end_ms)
+    storage = get_storage()
+    key = virality_key(*args)
+    if await asyncio.to_thread(storage.exists, key):
+        result = AudienceSimulationOut.model_validate_json(await asyncio.to_thread(storage.get_bytes, key))
+        return ClipViralityOut(**base, status="ready", result=result)
+    raw = await get_redis().get(virality_status_key(*args))
+    if raw is None:
+        return ClipViralityOut(**base, status="none")
+    if raw.startswith("failed"):
+        return ClipViralityOut(**base, status="failed", error=raw.partition(":")[2] or None)
+    return ClipViralityOut(**base, status="processing")
+
+
+async def _load_unpublished(db, clip_id: uuid.UUID, user: User) -> Clip:
+    clip, _, _ = await _load(db, clip_id)
+    if clip.user_id != user.id:
+        raise HTTPException(403, "Not your clip")
+    if clip.publish_state not in UNPUBLISHED_STATES:
+        raise HTTPException(409, "Virality checks run on unpublished clips only; unpublish it first")
+    return clip
+
+
+@router.post("/{clip_id}/virality", response_model=ClipViralityOut, status_code=202)
+async def start_virality(clip_id: uuid.UUID, body: ClipViralityIn, user: CurrentUser, db: Db) -> ClipViralityOut:
+    """Run the synthetic audience panel on an unpublished (draft or ready) clip you own. Builds the
+    clip's creator pack first if needed; takes a few minutes. Poll GET with the same options."""
+    clip = await _load_unpublished(db, clip_id, user)
+    if not get_settings().gemini_api_key:
+        raise HTTPException(503, "Virality checks are not configured (GEMINI_API_KEY missing)")
+    state = await _virality_state(clip, body)
+    if state.status in ("ready", "processing"):
+        return state
+    await get_redis().set(virality_status_key(*_virality_args(clip, body)), "processing", ex=6 * 3600)
+    await run_in_threadpool(enqueue_virality, clip.id, body.platform, body.target_audience, body.persona_count)
+    return state.model_copy(update={"status": "processing", "error": None})
+
+
+@router.get("/{clip_id}/virality", response_model=ClipViralityOut)
+async def get_virality(
+    clip_id: uuid.UUID,
+    user: CurrentUser,
+    db: Db,
+    platform: str = "general",
+    target_audience: str | None = None,
+    persona_count: int | None = None,
+) -> ClipViralityOut:
+    """Status/result of the virality check for these options (same values you POSTed)."""
+    body = ClipViralityIn(platform=platform, target_audience=target_audience, persona_count=persona_count)
+    clip, _, _ = await _load(db, clip_id)
+    if clip.user_id != user.id:
+        raise HTTPException(403, "Not your clip")
+    return await _virality_state(clip, body)

@@ -90,6 +90,9 @@ class SessionStatusEvent(_Out):
 # --- clips ---
 
 
+PublishState = Literal["draft", "ready", "published"]
+
+
 class ClipOut(_Out):
     id: uuid.UUID
     session_id: uuid.UUID
@@ -103,6 +106,11 @@ class ClipOut(_Out):
     playlist_url: str
     status: str
     kind: Literal["auto", "user"]
+    publish_state: PublishState = Field(
+        default="published",
+        description="draft (owner only) -> ready (queued to post to YouTube, owner only) -> published (public)",
+    )
+    published_at: datetime | None = None
     view_count: int
     like_count: int
     liked_by_me: bool | None = Field(default=None, description="Only set when X-User-Id is sent")
@@ -335,6 +343,22 @@ class ClipCreatorPackOut(_Out):
     )
     model: str | None = Field(default=None, description="Gemini model that produced the pack")
     pack: CreatorPackOut | None = None
+    error: str | None = None
+    start_ms: int
+    end_ms: int
+
+
+class ClipViralityIn(BaseModel):
+    platform: CreatorPlatform = "general"
+    target_audience: str | None = Field(default=None, max_length=500)
+    persona_count: int | None = Field(default=None, ge=3, le=15)
+
+
+class ClipViralityOut(_Out):
+    clip_id: uuid.UUID
+    status: Literal["none", "processing", "ready", "failed"]
+    platform: CreatorPlatform
+    result: AudienceSimulationOut | None = None
     error: str | None = None
     start_ms: int
     end_ms: int
