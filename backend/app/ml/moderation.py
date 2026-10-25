@@ -24,7 +24,7 @@ from functools import lru_cache
 from typing import Literal
 
 from google import genai
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ValidationError
 
 from app.config import Settings, get_settings
 from app.ml.gemini_creator import extract_json
@@ -61,9 +61,14 @@ Return ONLY this JSON shape, no other text:
 
 
 class ModerationResult(BaseModel):
-    severity: Severity = "none"
-    categories: list[str] = Field(default_factory=list)
-    reason: str = ""
+    # No Python-side defaults: Pydantic's generated JSON schema only marks a
+    # field "required" when it has none, and Gemini's structured-output mode
+    # only reliably fills fields the schema requires. With defaults here,
+    # Gemini was correctly matching severity but silently omitting
+    # categories/reason since the schema told it they were optional.
+    severity: Severity
+    categories: list[str]
+    reason: str
 
 
 class ContentPolicyViolation(RuntimeError):
@@ -75,6 +80,10 @@ class ContentPolicyViolation(RuntimeError):
         super().__init__(self.reason)
 
 
+def _none() -> ModerationResult:
+    return ModerationResult(severity="none", categories=[], reason="")
+
+
 class TranscriptModerator:
     def __init__(self, settings: Settings):
         self.api_key = settings.gemini_api_key
@@ -83,13 +92,13 @@ class TranscriptModerator:
     def classify(self, transcript_text: str) -> ModerationResult:
         text = transcript_text.strip()
         if not text:
-            return ModerationResult(severity="none")
+            return _none()
 
         if not self.api_key:
             # No Gemini configured (local dev / stub env): fail open rather than
             # block every upload when there is no classifier available at all.
             log.warning("moderation skipped: GEMINI_API_KEY not configured")
-            return ModerationResult(severity="none")
+            return _none()
 
         try:
             # Keep a strong local reference to the client for the duration of the
@@ -109,10 +118,10 @@ class TranscriptModerator:
             return ModerationResult.model_validate(extract_json(interaction.output_text))
         except (ValidationError, ValueError, KeyError) as exc:
             log.warning("moderation returned an unusable response, failing open: %s", exc)
-            return ModerationResult(severity="none")
+            return _none()
         except Exception:
             log.exception("moderation classification failed, failing open")
-            return ModerationResult(severity="none")
+            return _none()
 
 
 @lru_cache
