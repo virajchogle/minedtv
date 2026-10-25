@@ -333,3 +333,27 @@ export interface AnalyticsOut {
   daily: AnalyticsDay[];
   clips: ClipAnalytics[];
 }
+
+// ── comments ─────────────────────────────────────────────────────────────────
+
+export interface CommentOut {
+  id: string;
+  clip_id: string;
+  user: UserOut;
+  body: string;
+  parent_id: string | null;
+  created_at: string;
+  reply_count: number;
+  /** Oldest first; only on top-level comments. */
+  replies: CommentOut[];
+  /** Author or clip owner; only set when acting as a user. */
+  can_delete: boolean | null;
+}
+
+export interface CommentsPage {
+  /** Top-level comments, newest first, each with its replies. */
+  items: CommentOut[];
+  next_cursor: string | null;
+  /** All comments on the clip, replies included. */
+  total: number;
+}

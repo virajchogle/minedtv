@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 
 import { ChooseUserNotice, useCurrentUser } from "@/components/current-user";
+import { ShareMenu } from "@/components/share-menu";
 import { ViralityReport } from "@/components/virality-report";
 import {
   disconnectYouTube,
@@ -662,10 +663,17 @@ export function ClipActions({ video, onChange }: { video: Video; onChange: (v: V
 
   return (
     <div className="space-y-4">
-      <LikeButton video={video} onChange={onChange} />
+      <div className="flex flex-wrap items-start gap-3">
+        <LikeButton video={video} onChange={onChange} />
+        <ShareMenu video={video} isOwner={isOwner} />
+      </div>
       {!me && <ChooseUserNotice action="like clips, or use the AI tools on your own" />}
       {isOwner && <PublishSection video={video} onChange={onChange} />}
-      {isOwner && video.publish_state === "published" && <YouTubeSection video={video} />}
+      {isOwner && video.publish_state === "published" && (
+        <div id="post-to-youtube" className="scroll-mt-24">
+          <YouTubeSection video={video} />
+        </div>
+      )}
       {isOwner && (
         <div className="grid gap-4 lg:grid-cols-2">
           <ExportSection video={video} />

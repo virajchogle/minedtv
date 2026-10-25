@@ -8,15 +8,15 @@ import { AlertTriangle, ArrowLeft, Film, Loader2 } from "lucide-react";
 import { ClipActions, PublishBadge } from "@/components/clip-actions";
 import { ChooseUserNotice, useCurrentUser } from "@/components/current-user";
 import { HlsPlayer, type HlsPlayerHandle } from "@/components/hls-player";
+import { Comments } from "@/components/comments";
+import { RelatedClips } from "@/components/related-clips";
 import { SearchPanel } from "@/components/search-panel";
 import {
-  STATUS_COPY,
   fetchVideoWithSegments,
   formatTimestamp,
   recordView,
   streamUrlFor,
   type SearchResult,
-  type Segment,
   type Video,
 } from "@/lib/api";
 
@@ -31,7 +31,6 @@ export default function VideoPage() {
 
   const playerRef = useRef<HlsPlayerHandle>(null);
   const [video, setVideo] = useState<Video | null>(null);
-  const [segments, setSegments] = useState<Segment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeMoment, setActiveMoment] = useState<SearchResult | null>(null);
@@ -55,7 +54,6 @@ export default function VideoPage() {
       .then((loaded) => {
         if (cancelled) return;
         setVideo(loaded.video);
-        setSegments(loaded.segments);
         setError(null);
       })
       .catch((caught: Error) => {
@@ -107,16 +105,6 @@ export default function VideoPage() {
     );
   }
 
-  const status = STATUS_COPY[video.processing_status];
-  const transcriptLines = segments.filter((s) => s.kind === "transcript").length;
-  const events = segments.filter((s) => s.kind === "scene").length;
-  const stats = [
-    formatTimestamp(video.duration_seconds),
-    status.label,
-    video.kind === "clip" && `${video.frame_count} frames indexed`,
-    video.kind === "clip" && `${transcriptLines} transcript ${transcriptLines === 1 ? "line" : "lines"}`,
-    events > 0 && `${events} highlight ${events === 1 ? "event" : "events"}`,
-  ].filter(Boolean);
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-8">
@@ -134,9 +122,6 @@ export default function VideoPage() {
             {video.game}
           </p>
         )}
-        <p className="text-xs text-muted-foreground">
-          {stats.join(" · ")}
-        </p>
         {video.summary && (
           <p className="max-w-3xl pt-1 text-sm text-muted-foreground">{video.summary}</p>
         )}
@@ -212,6 +197,10 @@ export default function VideoPage() {
             : "This video is still being indexed. Search will open once it is ready."
         }
       />
+
+      {video.kind === "clip" && <Comments clipId={video.video_id} />}
+
+      {video.game && <RelatedClips game={video.game} excludeId={video.video_id} />}
 
       {video.processing_status === "visual_only" && (
         <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-200">

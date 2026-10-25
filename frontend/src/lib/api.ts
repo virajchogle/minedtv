@@ -20,6 +20,8 @@ import type {
   ClipDetailOut,
   ClipOut,
   ClipViralityOut,
+  CommentOut,
+  CommentsPage,
   CountsOut,
   ExportOut,
   FeedOut,
@@ -942,6 +944,32 @@ export const postToYouTube = (
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+
+// ── comments and related clips ───────────────────────────────────────────────
+
+export const fetchComments = (clipId: string, cursor?: string | null) =>
+  request<CommentsPage>(
+    `/clips/${clipId}/comments?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`
+  );
+
+/** A comment, or a reply when parentId is set (replies attach to the top-level comment). */
+export const postComment = (clipId: string, body: string, parentId?: string | null) =>
+  request<CommentOut>(`/clips/${clipId}/comments`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ body, parent_id: parentId ?? null }),
+  });
+
+export const deleteComment = (commentId: string) =>
+  request<void>(`/comments/${commentId}`, { method: "DELETE" });
+
+/** Other published clips of the same game, newest first. */
+export async function fetchRelated(game: string, excludeId: string, limit = 8): Promise<Video[]> {
+  const feed = await request<FeedOut>(`/feed?limit=${limit + 1}&game=${encodeURIComponent(game)}`);
+  return (Array.isArray(feed?.items) ? feed.items.map(clipToVideo) : [])
+    .filter((v) => v.video_id !== excludeId)
+    .slice(0, limit);
+}
 
 // ── creator analytics ────────────────────────────────────────────────────────
 
