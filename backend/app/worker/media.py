@@ -205,9 +205,21 @@ def _ass_timestamp(ms: int) -> str:
     return f"{hours}:{minutes:02d}:{seconds:02d}.{centiseconds:02d}"
 
 
-def write_ass_captions(cues: list[tuple[int, int, str]], out: Path) -> Path:
+def write_ass_captions(
+    cues: list[tuple[int, int, str]],
+    out: Path,
+    *,
+    style: str = "bold",
+) -> Path:
     """Write phone-readable, centered burn-in captions for a 720x1280 canvas."""
-    header = """[Script Info]
+    styles = {
+        "bold": "Arial,44,&H00FFFFFF,&H00FFFFFF,&H00101010,&H78000000,-1,0,0,0,100,100,0,0,1,4,1,2,54,54,106,1",
+        "minimal": "Arial,32,&H00FFFFFF,&H00FFFFFF,&H00101010,&H00000000,0,0,0,0,100,100,0,0,1,2,0,2,70,70,92,1",
+        "gamer": "Arial,42,&H0000FF7F,&H0000FF7F,&H00100805,&H90000000,-1,0,0,0,100,100,1,0,1,4,2,2,48,48,108,1",
+    }
+    if style not in styles:
+        raise ValueError(f"unknown caption style {style!r}")
+    header = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: 720
 PlayResY: 1280
@@ -216,7 +228,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Mobile,Arial,38,&H00FFFFFF,&H00FFFFFF,&H00101010,&H78000000,-1,0,0,0,100,100,0,0,1,3,1,2,54,54,106,1
+Style: Mobile,{styles[style]}
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text

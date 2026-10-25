@@ -10,7 +10,7 @@ from app.ml import audience_simulator, gemini_captions, gemini_creator
 from app.ml.audience_simulator import AudiencePanelDraft, GeminiAudienceSimulator, build_audience_simulation
 from app.ml.gemini_captions import GeminiCaptionEngine
 from app.ml.gemini_creator import GeminiCreatorEngine, extract_json
-from app.schemas import CreatorPackOut
+from app.schemas import CreatorPackOut, VideoViralityEvidenceOut
 
 
 def _content_pack():
@@ -294,6 +294,58 @@ def test_audience_simulator_builds_three_layer_cascade(monkeypatch):
     assert "reddit" not in request_data["video_content"]
 
 
+def test_audience_simulator_blends_frame_evidence_without_extra_model_calls(monkeypatch):
+    captured = {}
+    calls = 0
+
+    class FakeInteractions:
+        def create(self, **kwargs):
+            nonlocal calls
+            calls += 1
+            captured.update(kwargs)
+            return SimpleNamespace(output_text=json.dumps(_audience_wire_panel()))
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            self.interactions = FakeInteractions()
+
+    evidence = VideoViralityEvidenceOut(
+        algorithm_version="persona-frame-virality-test",
+        duration_ms=10_000,
+        frames_analyzed=5,
+        frame_score=20,
+        peak_score=50,
+        hook_score=40,
+        sustained_score=30,
+        coverage=0.2,
+        moments=[],
+    )
+    monkeypatch.setattr(audience_simulator.genai, "Client", FakeClient)
+    simulator = GeminiAudienceSimulator(
+        Settings(
+            app_env="test",
+            gemini_api_key="test-key",
+            creator_persona_count=3,
+            creator_virality_frame_weight=0.25,
+        )
+    )
+    result = simulator.simulate(
+        CreatorPackOut.model_validate(_content_pack()),
+        "youtube",
+        "competitive FPS players",
+        3,
+        evidence,
+    )
+
+    assert calls == 1
+    assert result.video_evidence == evidence
+    assert result.persona_score is not None
+    assert result.virality_score == round(result.persona_score * 0.75 + 20 * 0.25, 1)
+    assert "persona-frame-virality-test" in result.scoring_version
+    request_data = json.loads(captured["input"].split("INPUT DATA:\n", 1)[1])
+    assert request_data["frame_evidence"]["frames_analyzed"] == 5
+
+
 def test_audience_simulation_endpoint(monkeypatch):
     analysis = CreatorPackOut.model_validate(_content_pack())
     simulation = build_audience_simulation(
@@ -333,6 +385,77 @@ def test_audience_simulation_endpoint(monkeypatch):
     assert response.status_code == 200
     assert response.json()["persona_reviews"][0]["name"] == "Core fan"
     assert response.json()["disclaimer"].startswith("Synthetic persona feedback")
+
+
+def test_frame_aware_video_virality_endpoint_reuses_one_upload(monkeypatch):
+    analysis = CreatorPackOut.model_validate(_content_pack())
+    evidence = VideoViralityEvidenceOut(
+        algorithm_version="persona-frame-virality-test",
+        duration_ms=10_000,
+        frames_analyzed=5,
+        frame_score=72,
+        peak_score=90,
+        hook_score=75,
+        sustained_score=68,
+        coverage=0.4,
+        moments=[],
+    )
+    simulation = build_audience_simulation(
+        AudiencePanelDraft.model_validate(_audience_panel()),
+        analysis,
+        "general",
+        "FPS fans",
+        evidence,
+    )
+    calls = {"analysis": 0, "prepare": 0, "evidence": 0, "persona": 0}
+
+    class FakeEngine:
+        def analyze(self, video_path, mime_type):
+            calls["analysis"] += 1
+            assert video_path.read_bytes() == b"short video"
+            return analysis
+
+    class FakeEvidenceEngine:
+        def prepare(self, video_path):
+            calls["prepare"] += 1
+            assert video_path.read_bytes() == b"short video"
+            return "prepared-frames"
+
+        def evidence(self, prepared, received_analysis):
+            calls["evidence"] += 1
+            assert prepared == "prepared-frames"
+            assert received_analysis == analysis
+            return evidence
+
+    class FakeSimulator:
+        def simulate(self, received_analysis, platform, target_audience, persona_count, received_evidence):
+            calls["persona"] += 1
+            assert received_analysis == analysis
+            assert received_evidence == evidence
+            assert (platform, target_audience, persona_count) == ("general", "FPS fans", 3)
+            return simulation
+
+    monkeypatch.setattr(creator.media, "tools_available", lambda: True)
+    monkeypatch.setattr(creator, "get_creator_engine", lambda: FakeEngine())
+    monkeypatch.setattr(creator, "get_video_persona_virality_engine", lambda: FakeEvidenceEngine())
+    monkeypatch.setattr(creator, "get_audience_simulator", lambda: FakeSimulator())
+    monkeypatch.setattr(
+        creator,
+        "get_settings",
+        lambda: Settings(app_env="test", creator_max_upload_mb=1, creator_persona_count=3),
+    )
+    client = TestClient(create_app(Settings(app_env="test", api_keys=[])))
+
+    response = client.post(
+        "/creator/virality",
+        data={"target_audience": "FPS fans", "persona_count": "3"},
+        files={"video": ("clip.mp4", b"short video", "video/mp4")},
+    )
+
+    assert response.status_code == 200
+    assert calls == {"analysis": 1, "prepare": 1, "evidence": 1, "persona": 1}
+    assert response.json()["video_evidence"]["frames_analyzed"] == 5
+    assert response.json()["persona_score"] == simulation.persona_score
 
 
 def test_audience_simulation_reuses_existing_analysis(monkeypatch):

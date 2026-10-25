@@ -1674,6 +1674,226 @@
         }
       }
     },
+    "/clips/{clip_id}/highlights": {
+      "post": {
+        "tags": [
+          "clips"
+        ],
+        "summary": "Start Clip Highlights",
+        "description": "Start or reuse an asynchronous AI-share render for a stored clip. Owner only.",
+        "operationId": "start_clip_highlights_clips__clip_id__highlights_post",
+        "parameters": [
+          {
+            "name": "clip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Clip Id"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
+              "title": "X-User-Id"
+            },
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClipHighlightsIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClipHighlightsOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "clips"
+        ],
+        "summary": "Get Clip Highlights",
+        "description": "Poll the stored-clip AI-share job using the same options supplied to POST.",
+        "operationId": "get_clip_highlights_clips__clip_id__highlights_get",
+        "parameters": [
+          {
+            "name": "clip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Clip Id"
+            }
+          },
+          {
+            "name": "platform",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "tiktok",
+              "title": "Platform"
+            }
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "single",
+              "title": "Mode"
+            }
+          },
+          {
+            "name": "captions",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Captions"
+            }
+          },
+          {
+            "name": "caption_style",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "bold",
+              "title": "Caption Style"
+            }
+          },
+          {
+            "name": "hook",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Hook"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
+              "title": "X-User-Id"
+            },
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClipHighlightsOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/clips/{clip_id}/publish": {
       "post": {
         "tags": [
@@ -4056,6 +4276,48 @@
         }
       }
     },
+    "/creator/virality": {
+      "post": {
+        "tags": [
+          "creator"
+        ],
+        "summary": "Calculate Video Virality",
+        "description": "Calculate frame-aware video virality with one video analysis and one persona-panel call.\n\nFrame extraction/embedding runs locally in parallel with the Gemini content analysis.\nThe resulting score curve is passed into the single persona request and blended with\nthe deterministic audience cascade; no per-frame or per-persona API calls are made.",
+        "operationId": "calculate_video_virality_creator_virality_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_calculate_video_virality_creator_virality_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudienceSimulationOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/creator/simulate-analysis": {
       "post": {
         "tags": [
@@ -5023,6 +5285,35 @@
             "minimum": 0.0,
             "title": "Virality Score"
           },
+          "persona_score": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 100.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persona Score",
+            "description": "Persona-cascade score before frame evidence is blended; null on older stored reports"
+          },
+          "scoring_version": {
+            "type": "string",
+            "title": "Scoring Version",
+            "default": "persona-cascade-v1"
+          },
+          "video_evidence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VideoViralityEvidenceOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "verdict": {
             "type": "string",
             "enum": [
@@ -5161,6 +5452,58 @@
         ],
         "title": "Body_analyze_video_creator_analyze_post"
       },
+      "Body_calculate_video_virality_creator_virality_post": {
+        "properties": {
+          "video": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "Video",
+            "description": "Video file to score with frame evidence and audience personas"
+          },
+          "platform": {
+            "type": "string",
+            "enum": [
+              "general",
+              "youtube",
+              "reddit",
+              "instagram",
+              "tiktok"
+            ],
+            "title": "Platform",
+            "default": "general"
+          },
+          "target_audience": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Audience"
+          },
+          "persona_count": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 15.0,
+                "minimum": 3.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persona Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "video"
+        ],
+        "title": "Body_calculate_video_virality_creator_virality_post"
+      },
       "Body_create_direct_highlights_creator_highlights_post": {
         "properties": {
           "video": {
@@ -5168,6 +5511,30 @@
             "contentMediaType": "application/octet-stream",
             "title": "Video",
             "description": "Video to score and cut into highlights"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "single",
+              "montage"
+            ],
+            "title": "Mode",
+            "default": "montage"
+          },
+          "captions": {
+            "type": "boolean",
+            "title": "Captions",
+            "default": true
+          },
+          "caption_style": {
+            "type": "string",
+            "enum": [
+              "bold",
+              "minimal",
+              "gamer"
+            ],
+            "title": "Caption Style",
+            "default": "bold"
           }
         },
         "type": "object",
@@ -5659,6 +6026,315 @@
           "transcript"
         ],
         "title": "ClipDetailOut"
+      },
+      "ClipHighlightMomentOut": {
+        "properties": {
+          "source_start_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Source Start Ms",
+            "description": "Start relative to the stored clip, not the session"
+          },
+          "source_end_ms": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Source End Ms",
+            "description": "End relative to the stored clip, not the session"
+          },
+          "score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Score"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_start_ms",
+          "source_end_ms",
+          "score",
+          "reason"
+        ],
+        "title": "ClipHighlightMomentOut"
+      },
+      "ClipHighlightsIn": {
+        "properties": {
+          "platform": {
+            "type": "string",
+            "enum": [
+              "general",
+              "youtube",
+              "reddit",
+              "instagram",
+              "tiktok"
+            ],
+            "title": "Platform",
+            "default": "tiktok"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "single",
+              "montage"
+            ],
+            "title": "Mode",
+            "default": "single"
+          },
+          "captions": {
+            "type": "boolean",
+            "title": "Captions",
+            "default": true
+          },
+          "caption_style": {
+            "type": "string",
+            "enum": [
+              "bold",
+              "minimal",
+              "gamer"
+            ],
+            "title": "Caption Style",
+            "default": "bold"
+          },
+          "hook": {
+            "type": "boolean",
+            "title": "Hook",
+            "default": true
+          }
+        },
+        "type": "object",
+        "title": "ClipHighlightsIn",
+        "description": "Options that identify one cached AI-share render for a stored clip."
+      },
+      "ClipHighlightsOut": {
+        "properties": {
+          "clip_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Clip Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "none",
+              "processing",
+              "ready",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "exporting",
+              "analyzing",
+              "selecting",
+              "captioning",
+              "rendering"
+            ],
+            "title": "Stage"
+          },
+          "progress": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Progress"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "start_ms": {
+            "type": "integer",
+            "title": "Start Ms"
+          },
+          "end_ms": {
+            "type": "integer",
+            "title": "End Ms"
+          },
+          "platform": {
+            "type": "string",
+            "enum": [
+              "general",
+              "youtube",
+              "reddit",
+              "instagram",
+              "tiktok"
+            ],
+            "title": "Platform"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "single",
+              "montage"
+            ],
+            "title": "Mode"
+          },
+          "captions_enabled": {
+            "type": "boolean",
+            "title": "Captions Enabled"
+          },
+          "caption_style": {
+            "type": "string",
+            "enum": [
+              "bold",
+              "minimal",
+              "gamer"
+            ],
+            "title": "Caption Style"
+          },
+          "hook_enabled": {
+            "type": "boolean",
+            "title": "Hook Enabled"
+          },
+          "algorithm_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Algorithm Version"
+          },
+          "video_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Video Url"
+          },
+          "download_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Download Url"
+          },
+          "width": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Width"
+          },
+          "height": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Height"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "frames_analyzed": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Frames Analyzed",
+            "default": 0
+          },
+          "captions_burned": {
+            "type": "boolean",
+            "title": "Captions Burned",
+            "default": false
+          },
+          "moments": {
+            "items": {
+              "$ref": "#/components/schemas/ClipHighlightMomentOut"
+            },
+            "type": "array",
+            "title": "Moments"
+          },
+          "captions": {
+            "items": {
+              "$ref": "#/components/schemas/HighlightCaptionOut"
+            },
+            "type": "array",
+            "title": "Captions"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "suggested_caption": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggested Caption"
+          },
+          "hashtags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Hashtags"
+          }
+        },
+        "type": "object",
+        "required": [
+          "clip_id",
+          "status",
+          "stage",
+          "progress",
+          "start_ms",
+          "end_ms",
+          "platform",
+          "mode",
+          "captions_enabled",
+          "caption_style",
+          "hook_enabled"
+        ],
+        "title": "ClipHighlightsOut"
       },
       "ClipOut": {
         "properties": {
@@ -7064,6 +7740,43 @@
         ],
         "title": "HealthOut"
       },
+      "HighlightCaptionOut": {
+        "properties": {
+          "start_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Start Ms",
+            "description": "Caption start relative to the rendered output"
+          },
+          "end_ms": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "End Ms",
+            "description": "Caption end relative to the rendered output"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "hook",
+              "speech",
+              "moment"
+            ],
+            "title": "Kind"
+          }
+        },
+        "type": "object",
+        "required": [
+          "start_ms",
+          "end_ms",
+          "text",
+          "kind"
+        ],
+        "title": "HighlightCaptionOut"
+      },
       "LoginIn": {
         "properties": {
           "login": {
@@ -8387,6 +9100,152 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "VideoViralityEvidenceOut": {
+        "properties": {
+          "algorithm_version": {
+            "type": "string",
+            "title": "Algorithm Version"
+          },
+          "duration_ms": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Duration Ms"
+          },
+          "frames_analyzed": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Frames Analyzed"
+          },
+          "frame_score": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Frame Score",
+            "description": "Aggregate strength of the video frame curve"
+          },
+          "peak_score": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Peak Score"
+          },
+          "hook_score": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Hook Score",
+            "description": "Strongest score near the opening of the video"
+          },
+          "sustained_score": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Sustained Score",
+            "description": "75th-percentile frame strength"
+          },
+          "coverage": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Coverage",
+            "description": "Share of sampled frames supporting a strong moment"
+          },
+          "moments": {
+            "items": {
+              "$ref": "#/components/schemas/VideoViralityMomentOut"
+            },
+            "type": "array",
+            "title": "Moments"
+          }
+        },
+        "type": "object",
+        "required": [
+          "algorithm_version",
+          "duration_ms",
+          "frames_analyzed",
+          "frame_score",
+          "peak_score",
+          "hook_score",
+          "sustained_score",
+          "coverage",
+          "moments"
+        ],
+        "title": "VideoViralityEvidenceOut",
+        "description": "Explainable video evidence blended with the synthetic audience panel."
+      },
+      "VideoViralityMomentOut": {
+        "properties": {
+          "t_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "T Ms",
+            "description": "Peak position in the source video"
+          },
+          "context_start_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Context Start Ms",
+            "description": "Start of the setup retained around the peak"
+          },
+          "context_end_ms": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Context End Ms",
+            "description": "End of the payoff retained around the peak"
+          },
+          "score": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Score",
+            "description": "Combined frame virality score on a 0-100 scale"
+          },
+          "visual_score": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Visual Score"
+          },
+          "novelty_score": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Novelty Score"
+          },
+          "speech_score": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Speech Score"
+          },
+          "visibility_score": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Visibility Score"
+          },
+          "scene_score": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Scene Score"
+          }
+        },
+        "type": "object",
+        "required": [
+          "t_ms",
+          "context_start_ms",
+          "context_end_ms",
+          "score",
+          "visual_score",
+          "novelty_score",
+          "speech_score",
+          "visibility_score",
+          "scene_score"
+        ],
+        "title": "VideoViralityMomentOut",
+        "description": "One contextual peak from the video's deterministic frame-score curve."
       },
       "ViralitySummaryOut": {
         "properties": {

@@ -70,6 +70,19 @@ def enqueue_frame_highlights(session_id: uuid.UUID, requested_count: int, clip_d
     return job.id
 
 
+def enqueue_clip_highlights(clip_id: uuid.UUID, options: dict) -> str:
+    job = get_queue().enqueue(
+        "app.worker.jobs.clip_highlights",
+        str(clip_id),
+        options=options,
+        job_id=f"clip-highlights-{clip_id}-{uuid.uuid4().hex[:8]}",
+        job_timeout=1800,
+        result_ttl=3600,
+        failure_ttl=86400,
+    )
+    return job.id
+
+
 def enqueue_youtube_post(upload_id: uuid.UUID) -> str:
     job = get_queue().enqueue(
         "app.worker.jobs.youtube_post",

@@ -289,6 +289,64 @@ class DirectHighlightsOut(_Out):
     clips: list[DirectHighlightClipOut]
 
 
+CreatorPlatform = Literal["general", "youtube", "reddit", "instagram", "tiktok"]
+HighlightMode = Literal["single", "montage"]
+HighlightCaptionStyle = Literal["bold", "minimal", "gamer"]
+HighlightStage = Literal["queued", "exporting", "analyzing", "selecting", "captioning", "rendering"]
+
+
+class ClipHighlightsIn(BaseModel):
+    """Options that identify one cached AI-share render for a stored clip."""
+
+    platform: CreatorPlatform = "tiktok"
+    mode: HighlightMode = "single"
+    captions: bool = True
+    caption_style: HighlightCaptionStyle = "bold"
+    hook: bool = True
+
+
+class HighlightCaptionOut(_Out):
+    start_ms: int = Field(ge=0, description="Caption start relative to the rendered output")
+    end_ms: int = Field(gt=0, description="Caption end relative to the rendered output")
+    text: str
+    kind: Literal["hook", "speech", "moment"]
+
+
+class ClipHighlightMomentOut(_Out):
+    source_start_ms: int = Field(ge=0, description="Start relative to the stored clip, not the session")
+    source_end_ms: int = Field(gt=0, description="End relative to the stored clip, not the session")
+    score: float = Field(ge=0, le=1)
+    reason: str
+
+
+class ClipHighlightsOut(_Out):
+    clip_id: uuid.UUID
+    status: Literal["none", "processing", "ready", "failed"]
+    stage: HighlightStage
+    progress: float = Field(ge=0, le=1)
+    error: str | None = None
+    start_ms: int
+    end_ms: int
+    platform: CreatorPlatform
+    mode: HighlightMode
+    captions_enabled: bool
+    caption_style: HighlightCaptionStyle
+    hook_enabled: bool
+    algorithm_version: str | None = None
+    video_url: str | None = None
+    download_url: str | None = None
+    width: int | None = None
+    height: int | None = None
+    duration_ms: int | None = None
+    frames_analyzed: int = Field(default=0, ge=0)
+    captions_burned: bool = False
+    moments: list[ClipHighlightMomentOut] = Field(default_factory=list)
+    captions: list[HighlightCaptionOut] = Field(default_factory=list)
+    summary: str | None = None
+    suggested_caption: str | None = None
+    hashtags: list[str] = Field(default_factory=list)
+
+
 class FeedOut(_Out):
     items: list[ClipOut]
     next_cursor: str | None = Field(description="Pass as ?cursor= to get the next page; null at the end")
@@ -437,7 +495,6 @@ class CreatorPackOut(_Out):
     content_warnings: list[str]
 
 
-CreatorPlatform = Literal["general", "youtube", "reddit", "instagram", "tiktok"]
 AudienceLayer = Literal["target", "adjacent", "outsider"]
 AudienceAction = Literal["like", "comment", "save", "share", "skip"]
 
@@ -490,12 +547,48 @@ class AudienceLayerOut(BaseModel):
     cleared_threshold: bool
 
 
+class VideoViralityMomentOut(BaseModel):
+    """One contextual peak from the video's deterministic frame-score curve."""
+
+    t_ms: int = Field(ge=0, description="Peak position in the source video")
+    context_start_ms: int = Field(ge=0, description="Start of the setup retained around the peak")
+    context_end_ms: int = Field(gt=0, description="End of the payoff retained around the peak")
+    score: float = Field(ge=0, le=100, description="Combined frame virality score on a 0-100 scale")
+    visual_score: float = Field(ge=0, le=100)
+    novelty_score: float = Field(ge=0, le=100)
+    speech_score: float = Field(ge=0, le=100)
+    visibility_score: float = Field(ge=0, le=100)
+    scene_score: float = Field(ge=0, le=100)
+
+
+class VideoViralityEvidenceOut(BaseModel):
+    """Explainable video evidence blended with the synthetic audience panel."""
+
+    algorithm_version: str
+    duration_ms: int = Field(gt=0)
+    frames_analyzed: int = Field(ge=1)
+    frame_score: float = Field(ge=0, le=100, description="Aggregate strength of the video frame curve")
+    peak_score: float = Field(ge=0, le=100)
+    hook_score: float = Field(ge=0, le=100, description="Strongest score near the opening of the video")
+    sustained_score: float = Field(ge=0, le=100, description="75th-percentile frame strength")
+    coverage: float = Field(ge=0, le=1, description="Share of sampled frames supporting a strong moment")
+    moments: list[VideoViralityMomentOut]
+
+
 class AudienceSimulationOut(_Out):
     platform: CreatorPlatform
     requested_target_audience: str | None
     inferred_niche: str
     inferred_target_audience: str
     virality_score: float = Field(ge=0, le=100)
+    persona_score: float | None = Field(
+        default=None,
+        ge=0,
+        le=100,
+        description="Persona-cascade score before frame evidence is blended; null on older stored reports",
+    )
+    scoring_version: str = "persona-cascade-v1"
+    video_evidence: VideoViralityEvidenceOut | None = None
     verdict: Literal["weak", "mixed", "promising", "strong"]
     cascade_depth: Literal["target_only", "adjacent", "outsider", "broad_breakout"]
     cascade_summary: str

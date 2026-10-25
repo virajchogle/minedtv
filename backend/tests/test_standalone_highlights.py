@@ -178,3 +178,49 @@ def test_montage_combines_distinct_main_moments_in_chronological_order(tmp_path,
     assert montage.end_ms == sum(moment.end_ms - moment.start_ms for moment in montage.moments)
     assert sum(frame.selected for frame in result.scores) == len(montage.moments)
     assert (tmp_path / "output" / str(result.run_id) / "clips" / "1.mp4").read_bytes() == b"combined"
+
+
+def test_direct_engine_caps_frame_sampling_for_long_uploads(tmp_path, monkeypatch):
+    from app.services import standalone_highlights as module
+
+    source = tmp_path / "long.mp4"
+    source.write_bytes(b"video")
+    captured = {}
+
+    def sample_frames(src, out_dir, *, fps, width):
+        captured["fps"] = fps
+        out_dir.mkdir(parents=True)
+        path = out_dir / "frame.jpg"
+        path.write_bytes(b"peak")
+        return [(5_000, path)]
+
+    monkeypatch.setattr(module.media, "tools_available", lambda: True)
+    monkeypatch.setattr(module.media, "probe", lambda path: ProbeResult(600_000, 1920, 1080, 30, False))
+    monkeypatch.setattr(module.media, "sample_frames", sample_frames)
+    monkeypatch.setattr(
+        module.media,
+        "render_mobile_clip",
+        lambda src, out, start_ms, end_ms, **kwargs: out.write_bytes(b"segment") or out,
+    )
+    monkeypatch.setattr(
+        module.media,
+        "concatenate_mp4_segments",
+        lambda segments, out: out.write_bytes(b"combined") or out,
+    )
+    monkeypatch.setattr(module, "image_visibility_score", lambda image: 1.0)
+    settings = get_settings().model_copy(
+        update={
+            "standalone_highlight_dir": str(tmp_path / "output"),
+            "standalone_highlight_sample_fps": 0.5,
+            "standalone_highlight_max_frames": 60,
+        }
+    )
+
+    StandaloneHighlightEngine(settings, FakeEmbedder()).process(
+        source,
+        "long.mp4",
+        mode="single",
+        captions=False,
+    )
+
+    assert captured["fps"] == 0.1

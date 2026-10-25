@@ -16,6 +16,8 @@ from app.main import create_app
 from app.ml.audience_simulator import AudiencePanelDraft, build_audience_simulation
 from app.schemas import (
     ClipDetailOut,
+    ClipHighlightMomentOut,
+    ClipHighlightsOut,
     CommentOut,
     CommentsPage,
     FollowOut,
@@ -37,6 +39,7 @@ from app.schemas import (
     FrameHighlightsOut,
     FrameViralityPoint,
     HealthOut,
+    HighlightCaptionOut,
     SearchOut,
     SearchResult,
     SessionOut,
@@ -44,6 +47,8 @@ from app.schemas import (
     TranscriptOut,
     UploadOut,
     UserOut,
+    VideoViralityEvidenceOut,
+    VideoViralityMomentOut,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -268,6 +273,42 @@ def examples() -> dict[str, object]:
         "clips.export.processing.json": ExportOut(clip_id=c0.id, status="processing", url=None, start_ms=c0.start_ms, end_ms=c0.end_ms),
         "clips.export.ready.json": ExportOut(clip_id=c0.id, status="ready", url=f"{CDN}/exports/{c0.id}/{c0.start_ms}-{c0.end_ms}.mp4",
                                              start_ms=c0.start_ms, end_ms=c0.end_ms),
+        "clips.highlights.ready.json": ClipHighlightsOut(
+            clip_id=c0.id,
+            status="ready",
+            stage="rendering",
+            progress=1.0,
+            start_ms=c0.start_ms,
+            end_ms=c0.end_ms,
+            platform="tiktok",
+            mode="single",
+            captions_enabled=True,
+            caption_style="bold",
+            hook_enabled=True,
+            algorithm_version="stored-ai-share-v1",
+            video_url=f"{CDN}/highlights/{c0.id}/{c0.start_ms}-{c0.end_ms}-abcdef0123456789.mp4",
+            download_url=f"{CDN}/highlights/{c0.id}/{c0.start_ms}-{c0.end_ms}-abcdef0123456789.mp4",
+            width=720,
+            height=1280,
+            duration_ms=20_000,
+            frames_analyzed=31,
+            captions_burned=True,
+            moments=[
+                ClipHighlightMomentOut(
+                    source_start_ms=8_000,
+                    source_end_ms=28_000,
+                    score=0.934,
+                    reason="The final elimination wins the round",
+                )
+            ],
+            captions=[
+                HighlightCaptionOut(start_ms=0, end_ms=2_500, text="1v5 Clutch on Ascent", kind="hook"),
+                HighlightCaptionOut(start_ms=4_000, end_ms=7_000, text="No way.", kind="speech"),
+            ],
+            summary=creator.summary,
+            suggested_caption=creator.caption,
+            hashtags=creator.hashtags,
+        ),
         "comments.list.json": CommentsPage(
             total=3,
             next_cursor=None,
@@ -354,6 +395,36 @@ def examples() -> dict[str, object]:
             ],
         ),
         "creator.simulate.json": build_audience_simulation(panel, creator, "instagram", "FPS highlight viewers"),
+        "creator.virality.json": build_audience_simulation(
+            panel,
+            creator,
+            "instagram",
+            "FPS highlight viewers",
+            VideoViralityEvidenceOut(
+                algorithm_version="persona-frame-virality-v1",
+                duration_ms=91_000,
+                frames_analyzed=46,
+                frame_score=76.8,
+                peak_score=93.4,
+                hook_score=71.2,
+                sustained_score=74.6,
+                coverage=0.2391,
+                moments=[
+                    VideoViralityMomentOut(
+                        t_ms=40_000,
+                        context_start_ms=34_000,
+                        context_end_ms=47_000,
+                        score=93.4,
+                        visual_score=91.0,
+                        novelty_score=82.0,
+                        speech_score=77.0,
+                        visibility_score=95.0,
+                        scene_score=88.0,
+                    )
+                ],
+            ),
+            0.25,
+        ),
     }
 
 

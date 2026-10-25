@@ -78,6 +78,12 @@ class Settings(BaseSettings):
     creator_request_timeout_s: int = Field(default=90, ge=10, le=600)
     creator_persona_count: int = Field(default=9, ge=3, le=15)
     creator_persona_model: str = "gemini-3.1-flash-lite"
+    # Direct-upload video virality samples frames locally in parallel with the one
+    # Gemini content-analysis call, then blends this much frame evidence into the
+    # deterministic persona-cascade score. It never calls Gemini once per frame.
+    creator_virality_sample_fps: float = Field(default=0.5, gt=0, le=4)
+    creator_virality_max_frames: int = Field(default=240, ge=12, le=2000)
+    creator_virality_frame_weight: float = Field(default=0.25, ge=0, le=0.5)
     # Extra persona panels per clip virality check, run in parallel; their scores give a range.
     virality_extra_panels: int = Field(default=2, ge=0, le=5)
     # Content moderation (app/ml/moderation.py). Same cheap model tier as persona
@@ -122,8 +128,13 @@ class Settings(BaseSettings):
     standalone_highlight_dir: str = ".data/standalone-highlights"
     standalone_highlight_ttl_s: int = Field(default=86_400, ge=300)
     standalone_highlight_sample_fps: float = Field(default=0.5, gt=0, le=4)
+    # Bound extraction work for long direct uploads. At 240 frames a ten-minute
+    # recording is sampled at 0.4 fps instead of growing without limit.
+    standalone_highlight_max_frames: int = Field(default=240, ge=12, le=2000)
     standalone_mobile_width: int = Field(default=720, ge=360, le=2160, multiple_of=2)
     standalone_mobile_height: int = Field(default=1280, ge=640, le=3840, multiple_of=2)
+    stored_highlight_max_minutes: int = Field(default=10, ge=1, le=90)
+    stored_highlight_max_source_mb: int = Field(default=1024, ge=1)
     # Publish state for clips the pipeline creates. "draft" keeps new uploads private until the owner
     # publishes; "published" puts them straight in the feed (useful until the app has a publish button).
     new_clip_publish_state: Literal["draft", "ready", "published"] = "draft"

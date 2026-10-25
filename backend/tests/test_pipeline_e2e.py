@@ -283,6 +283,52 @@ async def test_creator_pack_for_existing_clip(sessionmaker, video, tmp_path):
     assert calls == ["busy-model", "ok-model"]
 
 
+async def test_stored_clip_highlight_reuses_pack_and_pipeline_evidence(sessionmaker, video, tmp_path):
+    import json as _json
+
+    from app.schemas import ClipHighlightsIn
+    from app.worker.clip_highlights import highlight_video_key, run_clip_highlights
+    from app.worker.creator_pack import pack_key
+    from tests.test_creator_pack import PACK
+
+    storage = LocalStorage(tmp_path / "storage")
+    sid = await _new_session(sessionmaker, storage, video)
+    deps = _deps(sessionmaker, storage, FakeDetector())
+    assert await run_pipeline(sid, deps=deps) == SessionStatus.READY
+    async with sessionmaker() as db:
+        session = await db.get(Session, sid)
+        clip = Clip(
+            session_id=sid,
+            user_id=session.user_id,
+            start_ms=0,
+            end_ms=VIDEO_S * 1000,
+            kind="user",
+            status="ready",
+        )
+        db.add(clip)
+        await db.commit()
+
+    pack = dict(PACK)
+    pack["title_options"] = ["Wait for the clutch"]
+    pack["key_moments"] = [{"timestamp": "00:15", "label": "The final clutch"}]
+    storage.put_bytes(
+        pack_key(clip.id, clip.start_ms, clip.end_ms),
+        _json.dumps({"model": "cached-test-model", "pack": pack}).encode(),
+        "application/json",
+    )
+    options = ClipHighlightsIn(mode="single", captions=True, caption_style="gamer")
+    manifest_key = await run_clip_highlights(clip.id, deps, options)
+    manifest = _json.loads(storage.get_bytes(manifest_key))
+
+    assert manifest["duration_ms"] <= 25_000
+    assert manifest["captions_burned"] is True
+    assert [line["kind"] for line in manifest["captions"]][0] == "hook"
+    assert manifest["moments"][0]["reason"]
+    assert storage.exists(highlight_video_key(clip.id, clip.start_ms, clip.end_ms, options))
+    # Identical options use the stored manifest and do not render again.
+    assert await run_clip_highlights(clip.id, deps, options) == manifest_key
+
+
 async def test_virality_runs_panels_on_any_clip(sessionmaker, video, tmp_path):
     from app.worker.virality import run_virality
     from tests.test_creator_pack import engine_factory

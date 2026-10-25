@@ -27,6 +27,8 @@ from app.db.models import (
 from app.schemas import (
     ClipCreate,
     ClipCreatorPackOut,
+    ClipHighlightsIn,
+    ClipHighlightsOut,
     ClipViralityIn,
     ClipViralityOut,
     ClipDetailOut,
@@ -46,8 +48,13 @@ from app.services.serialize import clip_out
 from app.services.social import comment_counts, notify
 from app.services.storage import get_storage
 from app.worker.creator_pack import pack_key, pack_status_key
-from app.worker.enqueue import enqueue_creator_pack, enqueue_export, enqueue_virality
+from app.worker.enqueue import enqueue_clip_highlights, enqueue_creator_pack, enqueue_export, enqueue_virality
 from app.worker.export import export_key, status_key
+from app.worker.clip_highlights import (
+    highlight_result_key,
+    highlight_status_key,
+    status_payload as highlight_status_payload,
+)
 from app.worker.virality import virality_key, virality_status_key
 
 router = APIRouter(prefix="/clips", tags=["clips"])
@@ -367,6 +374,131 @@ async def start_creator_pack(clip_id: uuid.UUID, user: CurrentUser, db: Db) -> C
     await get_redis().set(pack_status_key(clip.id, clip.start_ms, clip.end_ms), "processing", ex=6 * 3600)
     await run_in_threadpool(enqueue_creator_pack, clip.id)
     return state.model_copy(update={"status": "processing", "error": None})
+
+
+def _highlight_base(clip: Clip, options: ClipHighlightsIn) -> dict:
+    return {
+        "clip_id": clip.id,
+        "start_ms": clip.start_ms,
+        "end_ms": clip.end_ms,
+        "platform": options.platform,
+        "mode": options.mode,
+        "captions_enabled": options.captions,
+        "caption_style": options.caption_style,
+        "hook_enabled": options.hook,
+    }
+
+
+async def _highlight_state(clip: Clip, options: ClipHighlightsIn) -> ClipHighlightsOut:
+    base = _highlight_base(clip, options)
+    storage = get_storage()
+    result_key = highlight_result_key(clip.id, clip.start_ms, clip.end_ms, options)
+    if await asyncio.to_thread(storage.exists, result_key):
+        manifest = json.loads(await asyncio.to_thread(storage.get_bytes, result_key))
+        video_url = storage.url_for(manifest["video_key"])
+        return ClipHighlightsOut(
+            **base,
+            status="ready",
+            stage="rendering",
+            progress=1.0,
+            error=None,
+            algorithm_version=manifest.get("algorithm_version"),
+            video_url=video_url,
+            download_url=video_url,
+            width=manifest.get("width"),
+            height=manifest.get("height"),
+            duration_ms=manifest.get("duration_ms"),
+            frames_analyzed=manifest.get("frames_analyzed", 0),
+            captions_burned=manifest.get("captions_burned", False),
+            moments=manifest.get("moments", []),
+            captions=manifest.get("captions", []),
+            summary=manifest.get("summary"),
+            suggested_caption=manifest.get("suggested_caption"),
+            hashtags=manifest.get("hashtags", []),
+        )
+
+    raw = await get_redis().get(highlight_status_key(clip.id, clip.start_ms, clip.end_ms, options))
+    if raw is None:
+        return ClipHighlightsOut(**base, status="none", stage="queued", progress=0.0)
+    if isinstance(raw, bytes):
+        raw = raw.decode("utf-8", errors="replace")
+    try:
+        state = json.loads(raw)
+    except (TypeError, ValueError):
+        state = {
+            "status": "failed" if str(raw).startswith("failed") else "processing",
+            "stage": "queued",
+            "progress": 0.0,
+            "error": str(raw).partition(":")[2] or None,
+        }
+    return ClipHighlightsOut(**base, **state)
+
+
+@router.post("/{clip_id}/highlights", response_model=ClipHighlightsOut, status_code=202)
+async def start_clip_highlights(
+    clip_id: uuid.UUID,
+    body: ClipHighlightsIn,
+    user: CurrentUser,
+    db: Db,
+) -> ClipHighlightsOut:
+    """Start or reuse an asynchronous AI-share render for a stored clip. Owner only."""
+    clip = await _load_owned(db, clip_id, user)
+    settings = get_settings()
+    if clip.end_ms - clip.start_ms > settings.stored_highlight_max_minutes * 60_000:
+        raise HTTPException(422, f"Clip exceeds the {settings.stored_highlight_max_minutes}-minute highlight limit")
+    cached_pack = pack_key(clip.id, clip.start_ms, clip.end_ms)
+    if not settings.gemini_api_key and not await asyncio.to_thread(get_storage().exists, cached_pack):
+        raise HTTPException(503, "Stored highlights are not configured (GEMINI_API_KEY missing)")
+    state = await _highlight_state(clip, body)
+    if state.status in ("ready", "processing"):
+        return state
+    skey = highlight_status_key(clip.id, clip.start_ms, clip.end_ms, body)
+    redis = get_redis()
+    queued = highlight_status_payload("processing", "queued", 0.0)
+    if state.status == "none":
+        claimed = await redis.set(skey, queued, ex=24 * 3600, nx=True)
+        if not claimed:
+            return await _highlight_state(clip, body)
+    else:
+        # A POST after failure is an explicit retry for the same cached options.
+        await redis.set(skey, queued, ex=24 * 3600)
+    try:
+        await run_in_threadpool(enqueue_clip_highlights, clip.id, body.model_dump(mode="json"))
+    except Exception as exc:
+        log.exception("Could not enqueue stored highlight", extra={"clip_id": str(clip.id)})
+        await redis.set(
+            skey,
+            highlight_status_payload("failed", "queued", 0.0, f"{type(exc).__name__}: {exc}"[:500]),
+            ex=24 * 3600,
+        )
+        raise HTTPException(503, "Could not queue highlight generation") from exc
+    return state.model_copy(update={"status": "processing", "stage": "queued", "progress": 0.0, "error": None})
+
+
+@router.get("/{clip_id}/highlights", response_model=ClipHighlightsOut)
+async def get_clip_highlights(
+    clip_id: uuid.UUID,
+    user: CurrentUser,
+    db: Db,
+    platform: str = "tiktok",
+    mode: str = "single",
+    captions: bool = True,
+    caption_style: str = "bold",
+    hook: bool = True,
+) -> ClipHighlightsOut:
+    """Poll the stored-clip AI-share job using the same options supplied to POST."""
+    clip = await _load_owned(db, clip_id, user)
+    try:
+        options = ClipHighlightsIn(
+            platform=platform,
+            mode=mode,
+            captions=captions,
+            caption_style=caption_style,
+            hook=hook,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return await _highlight_state(clip, options)
 
 
 # ---------------------------------------------------------------- publish state

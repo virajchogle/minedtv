@@ -98,7 +98,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "accounts": bool(st.auth_secret),
                 "require_login": st.require_login,
             },
-            "limits": {"max_upload_mb": st.max_upload_mb, "max_video_minutes": st.max_video_minutes},
+            "limits": {
+                "max_upload_mb": st.max_upload_mb,
+                "max_video_minutes": st.max_video_minutes,
+                "creator_max_upload_mb": st.creator_max_upload_mb,
+                "highlight_max_minutes": st.stored_highlight_max_minutes,
+                "highlight_max_source_mb": st.stored_highlight_max_source_mb,
+                "highlight_max_sampled_frames": st.standalone_highlight_max_frames,
+            },
         }
 
     @app.get("/health", response_model=HealthOut, tags=["health"])

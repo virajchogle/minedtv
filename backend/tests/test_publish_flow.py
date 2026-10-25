@@ -8,7 +8,7 @@ from fastapi import HTTPException
 from app.api import clips as clips_api
 from app.config import get_settings
 from app.db.models import Clip, Session, SessionStatus, User
-from app.schemas import ClipViralityIn
+from app.schemas import ClipHighlightsIn, ClipViralityIn
 from tests.test_pipeline_e2e import migrated_db, sessionmaker  # noqa: F401  (fixtures)
 
 
@@ -92,3 +92,17 @@ async def test_creator_tools_are_owner_only(sessionmaker):  # noqa: F811
             assert e.value.status_code == 403, call.__name__
         assert (await clips_api.get_creator_pack(clip.id, owner, db)).status == "none"
         assert (await clips_api.get_export(clip.id, owner, db)).status == "none"
+
+
+async def test_stored_highlights_are_owner_only(sessionmaker):  # noqa: F811
+    owner, clip = await _draft_clip(sessionmaker)
+    async with sessionmaker() as db:
+        stranger = User(username=f"x_{uuid.uuid4().hex[:6]}")
+        db.add(stranger)
+        await db.commit()
+        with pytest.raises(HTTPException) as get_error:
+            await clips_api.get_clip_highlights(clip.id, stranger, db)
+        assert get_error.value.status_code == 403
+        with pytest.raises(HTTPException) as post_error:
+            await clips_api.start_clip_highlights(clip.id, ClipHighlightsIn(), stranger, db)
+        assert post_error.value.status_code == 403

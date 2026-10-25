@@ -22,6 +22,7 @@ from app.schemas import (
     AudienceSimulationOut,
     CreatorPackOut,
     CreatorPlatform,
+    VideoViralityEvidenceOut,
 )
 
 tracer = trace.get_tracer(__name__)
@@ -224,8 +225,10 @@ def build_audience_simulation(
     analysis: CreatorPackOut,
     platform: CreatorPlatform,
     target_audience: str | None,
+    video_evidence: VideoViralityEvidenceOut | None = None,
+    frame_weight: float = 0.25,
 ) -> AudienceSimulationOut:
-    """Aggregate persona feedback and model a three-wave distribution cascade."""
+    """Aggregate personas, model distribution, and optionally calibrate with frame evidence."""
     grouped = {layer: [p for p in panel.personas if p.layer == layer] for layer in _LAYERS}
     missing = [layer for layer, personas in grouped.items() if not personas]
     if missing:
@@ -281,7 +284,13 @@ def build_audience_simulation(
         + 0.30 * layer_scores["adjacent"]
         + 0.20 * layer_scores["outsider"]
     )
-    virality_score = round(min(100.0, base_score * cascade_factor), 1)
+    persona_score = round(min(100.0, base_score * cascade_factor), 1)
+    effective_frame_weight = min(0.5, max(0.0, frame_weight)) if video_evidence is not None else 0.0
+    virality_score = round(
+        persona_score * (1.0 - effective_frame_weight)
+        + (video_evidence.frame_score if video_evidence is not None else 0.0) * effective_frame_weight,
+        1,
+    )
     if virality_score >= 75:
         verdict = "strong"
     elif virality_score >= 55:
@@ -308,6 +317,13 @@ def build_audience_simulation(
         inferred_niche=panel.inferred_niche,
         inferred_target_audience=panel.inferred_target_audience,
         virality_score=virality_score,
+        persona_score=persona_score,
+        scoring_version=(
+            f"persona-cascade-v2+{video_evidence.algorithm_version}"
+            if video_evidence is not None
+            else "persona-cascade-v2"
+        ),
+        video_evidence=video_evidence,
         verdict=verdict,
         cascade_depth=depth,
         cascade_summary=cascade_summary,
@@ -326,6 +342,7 @@ class GeminiAudienceSimulator:
     def __init__(self, settings: Settings):
         self.api_key = settings.gemini_api_key
         self.model = settings.creator_persona_model
+        self.frame_weight = settings.creator_virality_frame_weight
 
     @staticmethod
     def _validate_panel(
@@ -347,6 +364,7 @@ class GeminiAudienceSimulator:
         platform: CreatorPlatform,
         target_audience: str | None,
         persona_count: int,
+        video_evidence: VideoViralityEvidenceOut | None = None,
     ) -> AudienceSimulationOut:
         if not self.api_key:
             raise CreatorConfigurationError("GEMINI_API_KEY is not configured")
@@ -357,6 +375,7 @@ class GeminiAudienceSimulator:
             "creator_target_audience": target_audience or "Infer it from the video",
             "required_personas": counts,
             "video_content": _persona_context(analysis),
+            "frame_evidence": video_evidence.model_dump(mode="json") if video_evidence is not None else None,
         }
         prompt = (
             "Review this video content as an audience panel. Return exactly "
@@ -365,7 +384,9 @@ class GeminiAudienceSimulator:
             "Each persona must independently explain their likely reaction, give hook from 0-100 and all "
             "probabilities from 0-1, and recommend one concrete edit. Put interests in one comma-separated "
             "string. Action must be like, comment, save, share, or skip. Use an empty string for suggested_comment "
-            "when they would not comment. Avoid generic feedback.\n\n"
+            "when they would not comment. If frame_evidence is present, use its opening strength, sustained "
+            "scene strength, coverage, and contextual peaks when judging hook and completion; do not treat any "
+            "single isolated frame as the whole video. Avoid generic feedback.\n\n"
             f"INPUT DATA:\n{json.dumps(request_data, ensure_ascii=False)}"
         )
 
@@ -394,7 +415,14 @@ class GeminiAudienceSimulator:
                 )
                 panel = _panel_from_wire(extract_json(interaction.output_text), persona_count, counts)
                 self._validate_panel(panel, persona_count, counts)
-                result = build_audience_simulation(panel, analysis, platform, target_audience)
+                result = build_audience_simulation(
+                    panel,
+                    analysis,
+                    platform,
+                    target_audience,
+                    video_evidence,
+                    self.frame_weight,
+                )
                 span.set_attribute("creator.virality_score", result.virality_score)
                 span.set_attribute("creator.cascade_depth", result.cascade_depth)
                 return result

@@ -135,9 +135,15 @@ class StandaloneHighlightEngine:
         self,
         source: Path,
         filename: str,
+        *,
+        mode: str = "montage",
+        captions: bool = True,
+        caption_style: str = "bold",
     ) -> DirectHighlightRun:
         if not media.tools_available():
             raise RuntimeError("ffmpeg and ffprobe are required for direct highlight generation")
+        if mode not in {"single", "montage"}:
+            raise ValueError(f"unknown highlight mode {mode!r}")
 
         info = media.probe(source)
         self.root.mkdir(parents=True, exist_ok=True)
@@ -154,10 +160,15 @@ class StandaloneHighlightEngine:
         try:
             try:
                 sampled_dir = work_dir / "frames"
+                duration_seconds = max(0.001, info.duration_ms / 1000)
+                effective_fps = min(
+                    self.settings.standalone_highlight_sample_fps,
+                    self.settings.standalone_highlight_max_frames / duration_seconds,
+                )
                 sampled = media.sample_frames(
                     source,
                     sampled_dir,
-                    fps=self.settings.standalone_highlight_sample_fps,
+                    fps=effective_fps,
                     width=self.settings.frame_thumb_width,
                 )
                 sampled = [(t_ms, path) for t_ms, path in sampled if t_ms < info.duration_ms]
@@ -188,13 +199,15 @@ class StandaloneHighlightEngine:
                 # Scale the number of candidates with source length while keeping the
                 # finished montage concise. Each selected scene carries a little setup
                 # and payoff, but no scene may consume more than ten seconds.
-                candidate_count = max(1, min(6, (info.duration_ms + 29_999) // 30_000))
+                candidate_count = (
+                    1 if mode == "single" else max(1, min(6, (info.duration_ms + 29_999) // 30_000))
+                )
                 scores, windows = select_contextual_highlights(
                     scores,
                     info.duration_ms,
                     count=candidate_count,
-                    min_clip_ms=4_000,
-                    max_clip_ms=10_000,
+                    min_clip_ms=min(info.duration_ms, 10_000 if mode == "single" else 4_000),
+                    max_clip_ms=min(info.duration_ms, 25_000 if mode == "single" else 10_000),
                 )
                 if not windows:
                     raise RuntimeError("the video is too short to create a highlight montage")
@@ -206,6 +219,14 @@ class StandaloneHighlightEngine:
                 threshold = max(0.22, peak_score * 0.68)
                 significant = [window for window in windows if window.frame.score >= threshold]
                 windows = significant or [max(windows, key=lambda item: item.frame.score)]
+                if mode == "single":
+                    # Match the Android editor: retain roughly two seconds of setup
+                    # before the strongest moment, then keep the adaptive payoff.
+                    window = max(windows, key=lambda item: item.frame.score)
+                    length = window.end_ms - window.start_ms
+                    start = max(0, window.frame.t_ms - 2_000)
+                    end = min(info.duration_ms, start + length)
+                    windows = [replace(window, start_ms=start, end_ms=end)]
                 windows = sorted(windows, key=lambda item: item.start_ms)
 
                 selected_ids = {window.frame.frame_id for window in windows}
@@ -242,18 +263,23 @@ class StandaloneHighlightEngine:
                 # Caption the assembled audio once, so timestamps naturally match the
                 # montage and multiple selected source ranges do not trigger repeated
                 # model calls.
-                cues, caption_source = self._caption_cues(
-                    uncaptioned,
-                    work_dir,
-                    0,
-                    montage_duration_ms,
-                    info.has_audio,
+                cues, caption_source = (
+                    self._caption_cues(
+                        uncaptioned,
+                        work_dir,
+                        0,
+                        montage_duration_ms,
+                        info.has_audio,
+                    )
+                    if captions
+                    else ([], "none")
                 )
                 output = clips_dir / "1.mp4"
                 if cues:
                     caption_file = media.write_ass_captions(
                         [(cue.start_ms, cue.end_ms, cue.text) for cue in cues],
                         work_dir / "montage-captions.ass",
+                        style=caption_style,
                     )
                     media.burn_ass_captions(
                         uncaptioned,
@@ -268,7 +294,7 @@ class StandaloneHighlightEngine:
                 clips = [
                     DirectHighlightClip(
                         index=1,
-                        title="The highlight montage",
+                        title="The viral clip" if mode == "single" else "The highlight montage",
                         start_ms=0,
                         end_ms=montage_duration_ms,
                         score=representative.score,
