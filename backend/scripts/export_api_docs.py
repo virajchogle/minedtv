@@ -29,6 +29,7 @@ from app.schemas import (
     CreatorPackOut,
     DirectHighlightClipOut,
     DirectHighlightFrameOut,
+    DirectHighlightMomentOut,
     DirectHighlightsOut,
     EventOut,
     ExportOut,
@@ -314,7 +315,7 @@ def examples() -> dict[str, object]:
         "creator.analyze.json": creator,
         "creator.highlights.json": DirectHighlightsOut(
             run_id=uid(9300), filename="ranked-ascent.mp4", duration_ms=91_000, width=1920, height=1080,
-            frames_analyzed=46, algorithm_version="frame-virality-v3-visibility-context",
+            frames_analyzed=46, algorithm_version="frame-virality-v4-highlight-montage",
             scores=[
                 DirectHighlightFrameOut(
                     frame_id=uid(9301), t_ms=40_000, score=0.934, visual_score=0.91,
@@ -324,18 +325,31 @@ def examples() -> dict[str, object]:
                 DirectHighlightFrameOut(
                     frame_id=uid(9302), t_ms=42_000, score=0.612, visual_score=0.68,
                     novelty_score=0.44, visibility_score=0.89, scene_score=0.73,
-                    selected=False, thumbnail_url=None,
+                    selected=True,
+                    thumbnail_url=f"{API}/creator/highlights/{uid(9300)}/frames/{uid(9302)}.jpg",
                 ),
             ],
             clips=[
                 DirectHighlightClipOut(
-                    index=1, title="The viral clip", start_ms=31_000, end_ms=55_000,
-                    duration_ms=24_000, score=0.934,
+                    index=1, title="The highlight montage", start_ms=0, end_ms=18_000,
+                    duration_ms=18_000, score=0.934,
                     video_url=f"{API}/creator/highlights/{uid(9300)}/clips/1.mp4",
                     download_url=f"{API}/creator/highlights/{uid(9300)}/clips/1.mp4?download=true",
                     thumbnail_url=f"{API}/creator/highlights/{uid(9300)}/frames/{uid(9301)}.jpg",
                     width=720, height=1280, captions_burned=True, caption_count=8,
                     caption_source="gemini",
+                    moments=[
+                        DirectHighlightMomentOut(
+                            index=1, source_start_ms=8_000, source_end_ms=17_000,
+                            duration_ms=9_000, score=0.934,
+                            thumbnail_url=f"{API}/creator/highlights/{uid(9300)}/frames/{uid(9301)}.jpg",
+                        ),
+                        DirectHighlightMomentOut(
+                            index=2, source_start_ms=38_000, source_end_ms=47_000,
+                            duration_ms=9_000, score=0.612,
+                            thumbnail_url=f"{API}/creator/highlights/{uid(9300)}/frames/{uid(9302)}.jpg",
+                        ),
+                    ],
                 )
             ],
         ),

@@ -26,6 +26,7 @@
   "age_restricted": false,
   "moderation_severity": "none",
   "moderation_reason": null,
+  "moderation_violations": [],
   "created_at": "2026-10-24T18:30:00Z",
   "session_duration_ms": 2712000,
   "frame_count": 31,

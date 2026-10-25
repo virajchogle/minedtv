@@ -6,14 +6,13 @@ import shutil
 import time
 import uuid
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from app.config import Settings
 from app.ml.gemini_captions import GeminiCaptionEngine
 from app.ml.interfaces import Embedder, TranscriptChunk, Transcriber
 from app.services.frame_virality import (
-    CONTEXTUAL_ALGORITHM_VERSION,
     FrameInput,
     ScoredFrame,
     image_visibility_score,
@@ -25,6 +24,16 @@ from app.worker import media
 
 
 log = logging.getLogger(__name__)
+MONTAGE_ALGORITHM_VERSION = "frame-virality-v4-highlight-montage"
+
+
+@dataclass(frozen=True)
+class DirectHighlightMoment:
+    index: int
+    start_ms: int
+    end_ms: int
+    score: float
+    frame_id: uuid.UUID
 
 
 @dataclass(frozen=True)
@@ -40,6 +49,7 @@ class DirectHighlightClip:
     captions_burned: bool
     caption_count: int
     caption_source: str
+    moments: tuple[DirectHighlightMoment, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -54,7 +64,7 @@ class DirectHighlightRun:
 
 
 class StandaloneHighlightEngine:
-    """Samples, scores, and renders highlights from one temporary source file."""
+    """Samples once, ranks major moments, and renders a combined highlight montage."""
 
     def __init__(
         self,
@@ -175,56 +185,102 @@ class StandaloneHighlightEngine:
                         paths_by_id[frame_id] = path
 
                 scores = score_frames(inputs, [], [], prompt_embeddings(self.embedder))
+                # Scale the number of candidates with source length while keeping the
+                # finished montage concise. Each selected scene carries a little setup
+                # and payoff, but no scene may consume more than ten seconds.
+                candidate_count = max(1, min(6, (info.duration_ms + 29_999) // 30_000))
                 scores, windows = select_contextual_highlights(
                     scores,
                     info.duration_ms,
-                    count=1,
+                    count=candidate_count,
+                    min_clip_ms=4_000,
+                    max_clip_ms=10_000,
                 )
                 if not windows:
-                    raise RuntimeError("the video is too short to create a highlight clip")
+                    raise RuntimeError("the video is too short to create a highlight montage")
 
-                clips: list[DirectHighlightClip] = []
-                for index, window in enumerate(sorted(windows, key=lambda item: -item.frame.score), 1):
+                # Do not pad the montage with weak local maxima just to hit a fixed
+                # count. Always retain the best scene; include the rest only when they
+                # are materially competitive with it.
+                peak_score = max(window.frame.score for window in windows)
+                threshold = max(0.22, peak_score * 0.68)
+                significant = [window for window in windows if window.frame.score >= threshold]
+                windows = significant or [max(windows, key=lambda item: item.frame.score)]
+                windows = sorted(windows, key=lambda item: item.start_ms)
+
+                selected_ids = {window.frame.frame_id for window in windows}
+                scores = [replace(frame, selected=frame.frame_id in selected_ids) for frame in scores]
+                marked_by_id = {frame.frame_id: frame for frame in scores}
+                windows = [replace(window, frame=marked_by_id[window.frame.frame_id]) for window in windows]
+
+                segments_dir = work_dir / "segments"
+                segments_dir.mkdir()
+                segments: list[Path] = []
+                moments: list[DirectHighlightMoment] = []
+                for index, window in enumerate(windows, 1):
                     frame = window.frame
                     shutil.copyfile(paths_by_id[frame.frame_id], frames_dir / f"{frame.frame_id}.jpg")
-                    cues, caption_source = self._caption_cues(
-                        source,
-                        work_dir,
-                        window.start_ms,
-                        window.end_ms,
-                        info.has_audio,
-                    )
-                    caption_file = None
-                    if cues:
-                        caption_file = media.write_ass_captions(
-                            [(cue.start_ms, cue.end_ms, cue.text) for cue in cues],
-                            work_dir / f"captions-{index}.ass",
-                        )
+                    segment = segments_dir / f"{index:02d}.mp4"
                     media.render_mobile_clip(
                         source,
-                        clips_dir / f"{index}.mp4",
+                        segment,
                         window.start_ms,
                         window.end_ms,
-                        captions=caption_file,
                         width=self.settings.standalone_mobile_width,
                         height=self.settings.standalone_mobile_height,
                         crf=self.settings.transcode_crf,
                     )
-                    clips.append(
-                        DirectHighlightClip(
-                            index=index,
-                            title="The viral clip",
-                            start_ms=window.start_ms,
-                            end_ms=window.end_ms,
-                            score=frame.score,
-                            frame_id=frame.frame_id,
-                            width=self.settings.standalone_mobile_width,
-                            height=self.settings.standalone_mobile_height,
-                            captions_burned=bool(cues),
-                            caption_count=len(cues),
-                            caption_source=caption_source,
-                        )
+                    segments.append(segment)
+                    moments.append(
+                        DirectHighlightMoment(index, window.start_ms, window.end_ms, frame.score, frame.frame_id)
                     )
+
+                uncaptioned = work_dir / "montage-uncaptioned.mp4"
+                media.concatenate_mp4_segments(segments, uncaptioned)
+                montage_duration_ms = sum(moment.end_ms - moment.start_ms for moment in moments)
+
+                # Caption the assembled audio once, so timestamps naturally match the
+                # montage and multiple selected source ranges do not trigger repeated
+                # model calls.
+                cues, caption_source = self._caption_cues(
+                    uncaptioned,
+                    work_dir,
+                    0,
+                    montage_duration_ms,
+                    info.has_audio,
+                )
+                output = clips_dir / "1.mp4"
+                if cues:
+                    caption_file = media.write_ass_captions(
+                        [(cue.start_ms, cue.end_ms, cue.text) for cue in cues],
+                        work_dir / "montage-captions.ass",
+                    )
+                    media.burn_ass_captions(
+                        uncaptioned,
+                        output,
+                        caption_file,
+                        crf=self.settings.transcode_crf,
+                    )
+                else:
+                    shutil.move(uncaptioned, output)
+
+                representative = max(windows, key=lambda item: item.frame.score).frame
+                clips = [
+                    DirectHighlightClip(
+                        index=1,
+                        title="The highlight montage",
+                        start_ms=0,
+                        end_ms=montage_duration_ms,
+                        score=representative.score,
+                        frame_id=representative.frame_id,
+                        width=self.settings.standalone_mobile_width,
+                        height=self.settings.standalone_mobile_height,
+                        captions_burned=bool(cues),
+                        caption_count=len(cues),
+                        caption_source=caption_source,
+                        moments=tuple(moments),
+                    )
+                ]
             finally:
                 # Windows can briefly retain FFmpeg handles; cleanup must not turn a
                 # successfully rendered response into a 502.
@@ -251,4 +307,4 @@ class StandaloneHighlightEngine:
 
 
 def algorithm_version() -> str:
-    return CONTEXTUAL_ALGORITHM_VERSION
+    return MONTAGE_ALGORITHM_VERSION

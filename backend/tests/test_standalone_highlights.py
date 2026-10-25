@@ -16,7 +16,7 @@ class FakeEmbedder:
         return [[1.0, 0.0] for _ in texts[:-1]] + [[0.0, 1.0]]
 
 
-def test_direct_engine_samples_once_and_renders_ranked_clips(tmp_path, monkeypatch):
+def test_direct_engine_samples_once_and_renders_one_montage(tmp_path, monkeypatch):
     from app.services import standalone_highlights as module
 
     clear_prompt_cache()
@@ -43,6 +43,11 @@ def test_direct_engine_samples_once_and_renders_ranked_clips(tmp_path, monkeypat
     monkeypatch.setattr(module.media, "probe", lambda path: ProbeResult(10_000, 1280, 720, 30, True))
     monkeypatch.setattr(module.media, "sample_frames", sample_frames)
     monkeypatch.setattr(module.media, "render_mobile_clip", render_mobile_clip)
+    monkeypatch.setattr(
+        module.media,
+        "concatenate_mp4_segments",
+        lambda segments, out: out.write_bytes(b"montage") or out,
+    )
     monkeypatch.setattr(module, "image_visibility_score", lambda image: 1.0)
 
     settings = get_settings().model_copy(update={
@@ -56,8 +61,9 @@ def test_direct_engine_samples_once_and_renders_ranked_clips(tmp_path, monkeypat
     assert result.duration_ms == 10_000
     assert len(result.scores) == 5
     assert len(result.clips) == 1
-    assert result.clips[0].title == "The viral clip"
-    assert len(rendered) == len(result.clips)
+    assert result.clips[0].title == "The highlight montage"
+    assert len(result.clips[0].moments) == 1
+    assert len(rendered) == len(result.clips[0].moments)
     for clip in result.clips:
         assert (tmp_path / "output" / str(result.run_id) / "clips" / f"{clip.index}.mp4").is_file()
         assert (tmp_path / "output" / str(result.run_id) / "frames" / f"{clip.frame_id}.jpg").is_file()
@@ -86,14 +92,22 @@ def test_direct_engine_burns_transcribed_captions(tmp_path, monkeypatch):
     rendered = {}
 
     def extract_audio_range(src, out, start_ms, end_ms):
-        assert (start_ms, end_ms) == (0, 8000)
+        assert (start_ms, end_ms) == (0, 4000)
         out.write_bytes(b"audio")
         return out
 
     def render_mobile_clip(src, out, start_ms, end_ms, **kwargs):
-        rendered.update(kwargs)
-        rendered["caption_text"] = kwargs["captions"].read_text(encoding="utf-8-sig")
-        out.write_bytes(b"mobile")
+        out.write_bytes(b"mobile segment")
+        return out
+
+    def concatenate_mp4_segments(segments, out):
+        out.write_bytes(b"montage")
+        return out
+
+    def burn_ass_captions(src, out, captions, **kwargs):
+        rendered["captions"] = captions
+        rendered["caption_text"] = captions.read_text(encoding="utf-8-sig")
+        out.write_bytes(b"captioned montage")
         return out
 
     monkeypatch.setattr(module.media, "tools_available", lambda: True)
@@ -101,6 +115,8 @@ def test_direct_engine_burns_transcribed_captions(tmp_path, monkeypatch):
     monkeypatch.setattr(module.media, "sample_frames", sample_frames)
     monkeypatch.setattr(module.media, "extract_audio_range", extract_audio_range)
     monkeypatch.setattr(module.media, "render_mobile_clip", render_mobile_clip)
+    monkeypatch.setattr(module.media, "concatenate_mp4_segments", concatenate_mp4_segments)
+    monkeypatch.setattr(module.media, "burn_ass_captions", burn_ass_captions)
     monkeypatch.setattr(module, "image_visibility_score", lambda image: 1.0)
 
     settings = get_settings().model_copy(update={
@@ -115,3 +131,50 @@ def test_direct_engine_burns_transcribed_captions(tmp_path, monkeypatch):
     assert clip.caption_source == "transcriber"
     assert rendered["captions"].suffix == ".ass"
     assert "Plant the defuser!" in rendered["caption_text"]
+
+
+def test_montage_combines_distinct_main_moments_in_chronological_order(tmp_path, monkeypatch):
+    from app.services import standalone_highlights as module
+
+    clear_prompt_cache()
+    source = tmp_path / "source.mp4"
+    source.write_bytes(b"video")
+    peak_times = {10_000, 40_000, 74_000, 104_000}
+
+    def sample_frames(src, out_dir, **kwargs):
+        out_dir.mkdir(parents=True)
+        sampled = []
+        for t_ms in range(0, 120_000, 2000):
+            path = out_dir / f"{t_ms}.jpg"
+            path.write_bytes(b"peak" if t_ms in peak_times else b"plain")
+            sampled.append((t_ms, path))
+        return sampled
+
+    rendered_ranges = []
+
+    def render_mobile_clip(src, out, start_ms, end_ms, **kwargs):
+        rendered_ranges.append((start_ms, end_ms))
+        out.write_bytes(b"segment")
+        return out
+
+    def concatenate_mp4_segments(segments, out):
+        assert len(segments) == len(rendered_ranges)
+        out.write_bytes(b"combined")
+        return out
+
+    monkeypatch.setattr(module.media, "tools_available", lambda: True)
+    monkeypatch.setattr(module.media, "probe", lambda path: ProbeResult(120_000, 1280, 720, 30, False))
+    monkeypatch.setattr(module.media, "sample_frames", sample_frames)
+    monkeypatch.setattr(module.media, "render_mobile_clip", render_mobile_clip)
+    monkeypatch.setattr(module.media, "concatenate_mp4_segments", concatenate_mp4_segments)
+    monkeypatch.setattr(module, "image_visibility_score", lambda image: 1.0)
+
+    settings = get_settings().model_copy(update={"standalone_highlight_dir": str(tmp_path / "output")})
+    result = StandaloneHighlightEngine(settings, FakeEmbedder()).process(source, "source.mp4")
+
+    montage = result.clips[0]
+    assert len(montage.moments) >= 3
+    assert [moment.start_ms for moment in montage.moments] == sorted(moment.start_ms for moment in montage.moments)
+    assert montage.end_ms == sum(moment.end_ms - moment.start_ms for moment in montage.moments)
+    assert sum(frame.selected for frame in result.scores) == len(montage.moments)
+    assert (tmp_path / "output" / str(result.run_id) / "clips" / "1.mp4").read_bytes() == b"combined"

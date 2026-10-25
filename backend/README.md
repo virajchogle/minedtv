@@ -142,19 +142,19 @@ and speech component scores. The strongest non-overlapping peaks become draft cl
 `generation_source: "frame_virality"`, while existing pipeline and manual clips are preserved. Viral prompt
 embeddings are cached per worker process, and a repeat POST with unchanged options returns the stored result.
 
-**Standalone highlights:** `POST /creator/highlights` is the separate, direct-upload version. It accepts the
-video itself as multipart form data, samples and scores frames in one pass, then automatically selects the
-strongest peak. Absolute luminance/visible-area/contrast scoring prevents nearly black frames from winning on
-CLIP similarity alone, while an eight-second neighborhood signal favors sustained action over isolated title
-cards or cuts. The clip expands through relatively strong neighboring frames, tolerates a short score dip so
-setup/payoff is preserved, and stops at a sustained local valley (10-45 second safety bounds). It renders that
-context-aware range as a phone-compatible 720x1280 H.264/AAC MP4: a blurred 9:16 background fills the screen
-while the sharp source remains fully visible instead of being cropped. Timed speech/accessibility cues are burned
-into the result. A configured `TRANSCRIBER_BACKEND` is tried first; Gemini provides the focused short-clip fallback
-when `GEMINI_API_KEY` is set. Captioning extracts only the selected range as compact mono Opus audio, avoiding a
-second video encode and reducing the Gemini payload. If neither provider produces cues, the clip still succeeds and reports
+**Standalone montage:** `POST /creator/highlights` accepts the video itself as multipart form data, samples and
+scores frames in one pass, then selects up to six distinct major moments based on source length and signal
+strength. Absolute luminance/visible-area/contrast scoring prevents nearly black frames from winning on CLIP
+similarity alone, while an eight-second neighborhood signal favors sustained action over isolated title cards or
+cuts. Each moment expands through nearby supporting frames, preserves short score dips for setup/payoff, and is
+kept to a concise 4-10 second range. Weak local maxima are discarded instead of padding the output. The selected
+ranges are rendered chronologically and joined into one phone-compatible 720x1280 H.264/AAC montage: a blurred
+9:16 background fills the screen while the sharp source remains fully visible instead of being cropped. The
+assembled audio is transcribed once and timed speech/accessibility cues are burned into the final montage. A
+configured `TRANSCRIBER_BACKEND` is tried first; Gemini provides the compact-audio fallback when `GEMINI_API_KEY`
+is set. If neither provider produces cues, the montage still succeeds and reports
 `captions_burned: false`. The response includes playback/download URLs, output dimensions, caption count, and
-caption source. It does not create a user or session and does not need Postgres, Redis, object storage, or the
+caption source, plus every source range included in `moments`. It does not create a user or session and does not need Postgres, Redis, object storage, or the
 persona simulator.
 It does require `ffmpeg`/`ffprobe` and a real CLIP-compatible embedder for meaningful visual rankings. Direct
 outputs expire after `STANDALONE_HIGHLIGHT_TTL_S` (24 hours by default). The API container installs FFmpeg;

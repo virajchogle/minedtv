@@ -17,5 +17,6 @@
   "error": null,
   "done": false,
   "moderation_severity": "none",
-  "age_restricted": false
+  "age_restricted": false,
+  "moderation_violations": []
 }

@@ -247,6 +247,15 @@ class DirectHighlightFrameOut(_Out):
     thumbnail_url: str | None = Field(description="Present for selected peak frames")
 
 
+class DirectHighlightMomentOut(_Out):
+    index: int
+    source_start_ms: int
+    source_end_ms: int
+    duration_ms: int
+    score: float = Field(ge=0, le=1)
+    thumbnail_url: str
+
+
 class DirectHighlightClipOut(_Out):
     index: int
     title: str
@@ -262,6 +271,10 @@ class DirectHighlightClipOut(_Out):
     captions_burned: bool = Field(description="Whether timed captions are burned into the video")
     caption_count: int = Field(ge=0)
     caption_source: Literal["none", "transcriber", "gemini"]
+    moments: list[DirectHighlightMomentOut] = Field(
+        default_factory=list,
+        description="Chronological source ranges combined into this montage",
+    )
 
 
 class DirectHighlightsOut(_Out):

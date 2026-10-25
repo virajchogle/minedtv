@@ -291,3 +291,47 @@ def render_mobile_clip(
         "-movflags", "+faststart", "-shortest", str(out),
     ])
     return out
+
+
+def concatenate_mp4_segments(segments: list[Path], out: Path) -> Path:
+    """Join uniformly encoded MP4 segments without another video encode."""
+    if not segments:
+        raise ValueError("at least one montage segment is required")
+    missing = [str(path) for path in segments if not path.is_file()]
+    if missing:
+        raise MediaError(f"montage segments are missing: {', '.join(missing)}")
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    manifest = out.with_suffix(".concat.txt")
+    lines = []
+    for segment in segments:
+        # FFmpeg's concat demuxer accepts forward-slash absolute Windows paths.
+        escaped = segment.resolve().as_posix().replace("'", r"'\''")
+        lines.append(f"file '{escaped}'\n")
+    manifest.write_text("".join(lines), encoding="utf-8")
+    try:
+        _run([
+            executable("ffmpeg"), "-hide_banner", "-loglevel", "error", "-y",
+            "-f", "concat", "-safe", "0", "-i", str(manifest),
+            "-c", "copy", "-movflags", "+faststart", str(out),
+        ])
+    finally:
+        manifest.unlink(missing_ok=True)
+    return out
+
+
+def burn_ass_captions(src: Path, out: Path, captions: Path, *, crf: int = 23) -> Path:
+    """Burn ASS captions into an already formatted montage, preserving its audio."""
+    if not captions.is_file():
+        raise MediaError("caption file is missing")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    _run([
+        executable("ffmpeg"), "-hide_banner", "-loglevel", "error", "-y",
+        "-i", str(src),
+        "-vf", f"ass=filename='{_ffmpeg_filter_path(captions)}'",
+        "-map", "0:v:0", "-map", "0:a:0?",
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", str(crf),
+        "-profile:v", "main", "-level:v", "4.0", "-pix_fmt", "yuv420p",
+        "-c:a", "copy", "-movflags", "+faststart", "-shortest", str(out),
+    ])
+    return out

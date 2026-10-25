@@ -1261,6 +1261,7 @@
           "clips"
         ],
         "summary": "View",
+        "description": "Count a view. Repeat views by the same viewer within VIEW_DEDUP_MINUTES count once, and\nowners watching their own clips don't count.",
         "operationId": "view_clips__clip_id__view_post",
         "parameters": [
           {
@@ -1272,6 +1273,24 @@
               "format": "uuid",
               "title": "Clip Id"
             }
+          },
+          {
+            "name": "x-viewer-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Stable anonymous ID for a signed-out viewer (one per browser or install)",
+              "title": "X-Viewer-Id"
+            },
+            "description": "Stable anonymous ID for a signed-out viewer (one per browser or install)"
           },
           {
             "name": "x-user-id",
@@ -3816,7 +3835,7 @@
           "creator"
         ],
         "summary": "Create Direct Highlights",
-        "description": "Upload one video and render its strongest automatically contextualized highlight.\n\nThis does not create a user/session and does not require Postgres, Redis, or the persona simulator.",
+        "description": "Upload one video and render its major moments as one contextualized montage.\n\nThis does not create a user/session and does not require Postgres, Redis, or the persona simulator.",
         "operationId": "create_direct_highlights_creator_highlights_post",
         "requestBody": {
           "content": {
@@ -5573,6 +5592,14 @@
             "title": "Moderation Reason",
             "description": "One-line reason, owner-visible only"
           },
+          "moderation_violations": {
+            "items": {
+              "$ref": "#/components/schemas/ModerationViolationOut"
+            },
+            "type": "array",
+            "title": "Moderation Violations",
+            "description": "Itemized findings with where in the video each occurs"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -5813,6 +5840,14 @@
             ],
             "title": "Moderation Reason",
             "description": "One-line reason, owner-visible only"
+          },
+          "moderation_violations": {
+            "items": {
+              "$ref": "#/components/schemas/ModerationViolationOut"
+            },
+            "type": "array",
+            "title": "Moderation Violations",
+            "description": "Itemized findings with where in the video each occurs"
           },
           "created_at": {
             "type": "string",
@@ -6427,6 +6462,14 @@
               "gemini"
             ],
             "title": "Caption Source"
+          },
+          "moments": {
+            "items": {
+              "$ref": "#/components/schemas/DirectHighlightMomentOut"
+            },
+            "type": "array",
+            "title": "Moments",
+            "description": "Chronological source ranges combined into this montage"
           }
         },
         "type": "object",
@@ -6519,6 +6562,46 @@
           "thumbnail_url"
         ],
         "title": "DirectHighlightFrameOut"
+      },
+      "DirectHighlightMomentOut": {
+        "properties": {
+          "index": {
+            "type": "integer",
+            "title": "Index"
+          },
+          "source_start_ms": {
+            "type": "integer",
+            "title": "Source Start Ms"
+          },
+          "source_end_ms": {
+            "type": "integer",
+            "title": "Source End Ms"
+          },
+          "duration_ms": {
+            "type": "integer",
+            "title": "Duration Ms"
+          },
+          "score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Score"
+          },
+          "thumbnail_url": {
+            "type": "string",
+            "title": "Thumbnail Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "index",
+          "source_start_ms",
+          "source_end_ms",
+          "duration_ms",
+          "score",
+          "thumbnail_url"
+        ],
+        "title": "DirectHighlightMomentOut"
       },
       "DirectHighlightsOut": {
         "properties": {
@@ -7074,6 +7157,23 @@
             "title": "Can Act As",
             "description": "May act as other users: dev accounts, or anyone while REQUIRE_LOGIN is off",
             "default": false
+          },
+          "birth_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Birth Date"
+          },
+          "is_adult": {
+            "type": "boolean",
+            "title": "Is Adult",
+            "description": "True when birth_date puts this account at 18 or older"
           }
         },
         "type": "object",
@@ -7081,9 +7181,42 @@
           "id",
           "username",
           "email",
-          "is_dev"
+          "is_dev",
+          "birth_date",
+          "is_adult"
         ],
         "title": "MeOut"
+      },
+      "ModerationViolationOut": {
+        "properties": {
+          "category": {
+            "type": "string",
+            "title": "Category"
+          },
+          "timestamp_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timestamp Ms",
+            "description": "Where in the video this occurs; null if not a specific moment"
+          },
+          "note": {
+            "type": "string",
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "category",
+          "timestamp_ms",
+          "note"
+        ],
+        "title": "ModerationViolationOut"
       },
       "MomentOut": {
         "properties": {
@@ -7771,6 +7904,14 @@
             "type": "boolean",
             "title": "Age Restricted",
             "description": "True for 'mild' or 'severe' moderation verdicts"
+          },
+          "moderation_violations": {
+            "items": {
+              "$ref": "#/components/schemas/ModerationViolationOut"
+            },
+            "type": "array",
+            "title": "Moderation Violations",
+            "description": "Itemized findings with where in the video each occurs"
           }
         },
         "type": "object",
@@ -7885,6 +8026,13 @@
           "age_restricted": {
             "type": "boolean",
             "title": "Age Restricted"
+          },
+          "moderation_violations": {
+            "items": {
+              "$ref": "#/components/schemas/ModerationViolationOut"
+            },
+            "type": "array",
+            "title": "Moderation Violations"
           }
         },
         "type": "object",
@@ -7923,13 +8071,20 @@
             "maxLength": 200,
             "minLength": 8,
             "title": "Password"
+          },
+          "birth_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Birth Date",
+            "description": "Required so age-restricted content can be gated correctly."
           }
         },
         "type": "object",
         "required": [
           "username",
           "email",
-          "password"
+          "password",
+          "birth_date"
         ],
         "title": "SignupIn"
       },

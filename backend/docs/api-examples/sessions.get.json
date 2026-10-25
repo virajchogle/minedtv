@@ -20,5 +20,6 @@
   "created_at": "2026-10-24T17:30:00Z",
   "moderation_severity": "none",
   "moderation_reason": null,
-  "age_restricted": false
+  "age_restricted": false,
+  "moderation_violations": []
 }

@@ -24,6 +24,7 @@ from app.schemas import (
     CreatorPlatform,
     DirectHighlightClipOut,
     DirectHighlightFrameOut,
+    DirectHighlightMomentOut,
     DirectHighlightsOut,
 )
 from app.services.standalone_highlights import StandaloneHighlightEngine, algorithm_version
@@ -101,7 +102,7 @@ async def create_direct_highlights(
     request: Request,
     video: UploadFile = File(description="Video to score and cut into highlights"),
 ) -> DirectHighlightsOut:
-    """Upload one video and render its strongest automatically contextualized highlight.
+    """Upload one video and render its major moments as one contextualized montage.
 
     This does not create a user/session and does not require Postgres, Redis, or the persona simulator.
     """
@@ -116,7 +117,7 @@ async def create_direct_highlights(
             temp_path,
             video.filename or f"video{suffix}",
         )
-        selected_ids = {clip.frame_id for clip in result.clips}
+        selected_ids = {frame.frame_id for frame in result.scores if frame.selected}
         scores = [
             DirectHighlightFrameOut(
                 frame_id=frame.frame_id,
@@ -151,6 +152,21 @@ async def create_direct_highlights(
                 captions_burned=clip.captions_burned,
                 caption_count=clip.caption_count,
                 caption_source=clip.caption_source,
+                moments=[
+                    DirectHighlightMomentOut(
+                        index=moment.index,
+                        source_start_ms=moment.start_ms,
+                        source_end_ms=moment.end_ms,
+                        duration_ms=moment.end_ms - moment.start_ms,
+                        score=moment.score,
+                        thumbnail_url=_direct_asset_url(
+                            request,
+                            result.run_id,
+                            f"frames/{moment.frame_id}.jpg",
+                        ),
+                    )
+                    for moment in clip.moments
+                ],
             )
             for clip in result.clips
         ]
