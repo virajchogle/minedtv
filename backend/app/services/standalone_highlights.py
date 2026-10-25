@@ -20,11 +20,12 @@ from app.services.frame_virality import (
     score_frames,
     select_contextual_highlights,
 )
+from app.services.music_catalog import MusicCatalog, infer_music_profile
 from app.worker import media
 
 
 log = logging.getLogger(__name__)
-MONTAGE_ALGORITHM_VERSION = "frame-virality-v4-highlight-montage"
+MONTAGE_ALGORITHM_VERSION = "frame-virality-v7-public-r2-music"
 
 
 @dataclass(frozen=True)
@@ -49,6 +50,8 @@ class DirectHighlightClip:
     captions_burned: bool
     caption_count: int
     caption_source: str
+    music_mixed: bool
+    music: dict | None
     moments: tuple[DirectHighlightMoment, ...] = ()
 
 
@@ -63,6 +66,18 @@ class DirectHighlightRun:
     clips: list[DirectHighlightClip]
 
 
+@dataclass(frozen=True)
+class DirectMusicRun:
+    run_id: uuid.UUID
+    filename: str
+    duration_ms: int
+    width: int
+    height: int
+    speech_cue_count: int
+    transcript_source: str
+    music: dict
+
+
 class StandaloneHighlightEngine:
     """Samples once, ranks major moments, and renders a combined highlight montage."""
 
@@ -72,11 +87,13 @@ class StandaloneHighlightEngine:
         embedder: Embedder,
         transcriber: Transcriber | None = None,
         caption_engine: GeminiCaptionEngine | None = None,
+        music_catalog: MusicCatalog | None = None,
     ):
         self.settings = settings
         self.embedder = embedder
         self.transcriber = transcriber
         self.caption_engine = caption_engine
+        self.music_catalog = music_catalog
         self.root = Path(settings.standalone_highlight_dir).resolve()
 
     def _caption_cues(
@@ -139,6 +156,7 @@ class StandaloneHighlightEngine:
         mode: str = "montage",
         captions: bool = True,
         caption_style: str = "bold",
+        music: bool = True,
     ) -> DirectHighlightRun:
         if not media.tools_available():
             raise RuntimeError("ffmpeg and ffprobe are required for direct highlight generation")
@@ -195,7 +213,8 @@ class StandaloneHighlightEngine:
                         )
                         paths_by_id[frame_id] = path
 
-                scores = score_frames(inputs, [], [], prompt_embeddings(self.embedder))
+                prompts = prompt_embeddings(self.embedder)
+                scores = score_frames(inputs, [], [], prompts)
                 # Scale the number of candidates with source length while keeping the
                 # finished montage concise. Each selected scene carries a little setup
                 # and payoff, but no scene may consume more than ten seconds.
@@ -275,6 +294,7 @@ class StandaloneHighlightEngine:
                     else ([], "none")
                 )
                 output = clips_dir / "1.mp4"
+                rendered = work_dir / "montage-rendered.mp4" if music and self.music_catalog else output
                 if cues:
                     caption_file = media.write_ass_captions(
                         [(cue.start_ms, cue.end_ms, cue.text) for cue in cues],
@@ -283,12 +303,41 @@ class StandaloneHighlightEngine:
                     )
                     media.burn_ass_captions(
                         uncaptioned,
-                        output,
+                        rendered,
                         caption_file,
                         crf=self.settings.transcode_crf,
                     )
                 else:
-                    shutil.move(uncaptioned, output)
+                    shutil.move(uncaptioned, rendered)
+
+                selected_music = None
+                if music and self.music_catalog:
+                    try:
+                        selected_ids = {window.frame.frame_id for window in windows}
+                        spoken_text = " ".join(cue.text for cue in cues)
+                        mood, energy = infer_music_profile(
+                            inputs,
+                            selected_ids,
+                            prompts,
+                            text=f"{filename} {spoken_text}",
+                        )
+                        track = self.music_catalog.select(mood, energy, str(run_id))
+                        music_file = self.music_catalog.download(track, work_dir / f"music-{track.id}.mp3")
+                        media.mix_background_music(
+                            rendered,
+                            music_file,
+                            output,
+                            duration_ms=montage_duration_ms,
+                            volume=self.settings.highlight_music_volume,
+                            speech_volume=self.settings.highlight_music_speech_volume,
+                            speech_intervals_ms=[(cue.start_ms, cue.end_ms) for cue in cues],
+                        )
+                        selected_music = track.response(mood)
+                    except Exception:
+                        # Music is an enhancement; a missing catalog must not discard a good clip.
+                        log.warning("Background music unavailable; returning the highlight without it", exc_info=True)
+                        output.unlink(missing_ok=True)
+                        shutil.move(rendered, output)
 
                 representative = max(windows, key=lambda item: item.frame.score).frame
                 clips = [
@@ -304,6 +353,8 @@ class StandaloneHighlightEngine:
                         captions_burned=bool(cues),
                         caption_count=len(cues),
                         caption_source=caption_source,
+                        music_mixed=selected_music is not None,
+                        music=selected_music,
                         moments=tuple(moments),
                     )
                 ]
@@ -320,6 +371,94 @@ class StandaloneHighlightEngine:
                 height=info.height,
                 scores=scores,
                 clips=clips,
+            )
+        except Exception:
+            shutil.rmtree(run_dir, ignore_errors=True)
+            raise
+
+    def process_music(self, source: Path, filename: str) -> DirectMusicRun:
+        """Add context-matched music to the complete source without cutting or captioning it."""
+        if not media.tools_available():
+            raise RuntimeError("ffmpeg and ffprobe are required for adaptive music")
+        if self.music_catalog is None:
+            raise RuntimeError("the music catalog is unavailable")
+
+        info = media.probe(source)
+        self.root.mkdir(parents=True, exist_ok=True)
+        self._cleanup_expired()
+        run_id = uuid.uuid4()
+        run_dir = self.root / str(run_id)
+        clips_dir = run_dir / "clips"
+        work_dir = run_dir / "_work"
+        clips_dir.mkdir(parents=True)
+        work_dir.mkdir()
+
+        try:
+            try:
+                sampled_dir = work_dir / "frames"
+                duration_seconds = max(0.001, info.duration_ms / 1000)
+                effective_fps = min(
+                    self.settings.standalone_highlight_sample_fps,
+                    self.settings.standalone_highlight_max_frames / duration_seconds,
+                )
+                sampled = media.sample_frames(
+                    source,
+                    sampled_dir,
+                    fps=effective_fps,
+                    width=self.settings.frame_thumb_width,
+                )
+                sampled = [(t_ms, path) for t_ms, path in sampled if t_ms < info.duration_ms]
+                if not sampled:
+                    raise RuntimeError("the uploaded video did not produce any frames")
+
+                inputs: list[FrameInput] = []
+                for offset in range(0, len(sampled), self.settings.embed_batch_size):
+                    batch = sampled[offset : offset + self.settings.embed_batch_size]
+                    vectors = self.embedder.embed_images([path.read_bytes() for _, path in batch])
+                    if len(vectors) != len(batch):
+                        raise RuntimeError("embedder returned the wrong number of frame vectors")
+                    for (t_ms, _), vector in zip(batch, vectors, strict=True):
+                        inputs.append(FrameInput(uuid.uuid5(run_id, str(t_ms)), t_ms, vector))
+
+                cues, transcript_source = self._caption_cues(
+                    source,
+                    work_dir,
+                    0,
+                    info.duration_ms,
+                    info.has_audio,
+                )
+                prompts = prompt_embeddings(self.embedder)
+                spoken_text = " ".join(cue.text for cue in cues)
+                mood, energy = infer_music_profile(
+                    inputs,
+                    set(),
+                    prompts,
+                    text=f"{filename} {spoken_text}",
+                )
+                track = self.music_catalog.select(mood, energy, str(run_id))
+                music_file = self.music_catalog.download(track, work_dir / f"music-{track.id}.mp3")
+                media.mix_background_music(
+                    source,
+                    music_file,
+                    clips_dir / "1.mp4",
+                    duration_ms=info.duration_ms,
+                    volume=self.settings.highlight_music_volume,
+                    speech_volume=self.settings.highlight_music_speech_volume,
+                    speech_intervals_ms=[(cue.start_ms, cue.end_ms) for cue in cues],
+                )
+                selected_music = track.response(mood)
+            finally:
+                shutil.rmtree(work_dir, ignore_errors=True)
+
+            return DirectMusicRun(
+                run_id=run_id,
+                filename=filename,
+                duration_ms=info.duration_ms,
+                width=info.width,
+                height=info.height,
+                speech_cue_count=len(cues),
+                transcript_source=transcript_source,
+                music=selected_music,
             )
         except Exception:
             shutil.rmtree(run_dir, ignore_errors=True)

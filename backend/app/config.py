@@ -135,6 +135,10 @@ class Settings(BaseSettings):
     standalone_mobile_height: int = Field(default=1280, ge=640, le=3840, multiple_of=2)
     stored_highlight_max_minutes: int = Field(default=10, ge=1, le=90)
     stored_highlight_max_source_mb: int = Field(default=1024, ge=1)
+    # Public R2 catalog stored beside videos. Jobs fetch only the selected MP3.
+    highlight_music_catalog_url: str = "https://pub-415da819582e4b6390d0637419173960.r2.dev/music/catalog.json"
+    highlight_music_volume: float = Field(default=0.50, ge=0.0, le=1.0)
+    highlight_music_speech_volume: float = Field(default=0.30, ge=0.0, le=1.0)
     # Publish state for clips the pipeline creates. "draft" keeps new uploads private until the owner
     # publishes; "published" puts them straight in the feed (useful until the app has a publish button).
     new_clip_publish_state: Literal["draft", "ready", "published"] = "draft"

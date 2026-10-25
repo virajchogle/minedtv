@@ -271,6 +271,17 @@ class DirectHighlightMomentOut(_Out):
     thumbnail_url: str
 
 
+class HighlightMusicOut(_Out):
+    id: str
+    title: str
+    artist: str
+    mood: str
+    license: str
+    license_url: str
+    source_url: str
+    credit: str
+
+
 class DirectHighlightClipOut(_Out):
     index: int
     title: str
@@ -286,6 +297,8 @@ class DirectHighlightClipOut(_Out):
     captions_burned: bool = Field(description="Whether timed captions are burned into the video")
     caption_count: int = Field(ge=0)
     caption_source: Literal["none", "transcriber", "gemini"]
+    music_mixed: bool = Field(description="Whether selected background music is mixed into the MP4")
+    music: HighlightMusicOut | None = None
     moments: list[DirectHighlightMomentOut] = Field(
         default_factory=list,
         description="Chronological source ranges combined into this montage",
@@ -304,6 +317,20 @@ class DirectHighlightsOut(_Out):
     clips: list[DirectHighlightClipOut]
 
 
+class DirectMusicOut(_Out):
+    run_id: uuid.UUID
+    filename: str
+    duration_ms: int
+    width: int
+    height: int
+    speech_cue_count: int = Field(ge=0)
+    transcript_source: Literal["none", "transcriber", "gemini"]
+    music_mixed: bool
+    music: HighlightMusicOut
+    video_url: str
+    download_url: str
+
+
 CreatorPlatform = Literal["general", "youtube", "reddit", "instagram", "tiktok"]
 HighlightMode = Literal["single", "montage"]
 HighlightCaptionStyle = Literal["bold", "minimal", "gamer"]
@@ -318,6 +345,7 @@ class ClipHighlightsIn(BaseModel):
     captions: bool = True
     caption_style: HighlightCaptionStyle = "bold"
     hook: bool = True
+    music: bool = True
 
 
 class HighlightCaptionOut(_Out):
@@ -347,6 +375,7 @@ class ClipHighlightsOut(_Out):
     captions_enabled: bool
     caption_style: HighlightCaptionStyle
     hook_enabled: bool
+    music_enabled: bool
     algorithm_version: str | None = None
     video_url: str | None = None
     download_url: str | None = None
@@ -355,6 +384,8 @@ class ClipHighlightsOut(_Out):
     duration_ms: int | None = None
     frames_analyzed: int = Field(default=0, ge=0)
     captions_burned: bool = False
+    music_mixed: bool = False
+    music: HighlightMusicOut | None = None
     moments: list[ClipHighlightMomentOut] = Field(default_factory=list)
     captions: list[HighlightCaptionOut] = Field(default_factory=list)
     summary: str | None = None

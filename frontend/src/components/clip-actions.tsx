@@ -697,11 +697,12 @@ function MontageSection({ video }: { video: Video }) {
     captions: true,
     caption_style: "bold",
     hook: true,
+    music: true,
   });
   const job = useJob<ClipHighlightsOut>(
     () => getMontage(video.video_id, options),
     () => startMontage(video.video_id, options),
-    [video.video_id, video.start_ms, video.end_ms, options.platform, options.mode, options.captions, options.caption_style, options.hook]
+    [video.video_id, video.start_ms, video.end_ms, options.platform, options.mode, options.captions, options.caption_style, options.hook, options.music]
   );
   const result = job.state?.status === "ready" ? job.state : null;
 
@@ -800,6 +801,10 @@ function MontageSection({ video }: { video: Video }) {
         <label className="flex items-end gap-2 pb-1.5 text-[13px] text-[var(--mtv-text)]">
           <input type="checkbox" checked={options.hook} onChange={(e) => set({ hook: e.target.checked })} />
           Hook line
+        </label>
+        <label className="flex items-end gap-2 pb-1.5 text-[13px] text-[var(--mtv-text)]">
+          <input type="checkbox" checked={options.music} onChange={(e) => set({ music: e.target.checked })} />
+          Background music
         </label>
       </div>
 

@@ -375,11 +375,14 @@ When a clip is opened, call `MinedTvApi.view(clip.remoteId!!)` once. Have the li
   and hand it to TikTok or Instagram. It takes about 1 minute (the worker runs every minute).
   Exports are cached per clip range, so a second POST is instant.
 - **AI share highlight:** for Share â†’ Enhance with AI, call `POST /clips/{id}/highlights` with
-  `{"platform":"tiktok","mode":"single","captions":true,"caption_style":"bold","hook":true}`.
+  `{"platform":"tiktok","mode":"single","captions":true,"caption_style":"bold","hook":true,"music":true}`.
   Poll `GET /clips/{id}/highlights` with the same values as query parameters. Show `stage` and
   `progress` while `status == "processing"`; on `ready`, download `video_url`. The response also has
   timed `captions`, selected `moments` with human-readable `reason`, `summary`, `suggested_caption`,
-  and `hashtags` for the Review screen. `mode=montage` joins several significant scenes. Results are
+  and `hashtags` for the Review screen. `music_mixed` confirms that the MP4 contains the selected music bed;
+  `music` contains `{id,title,artist,mood,license,license_url,source_url,credit}` for credits/details. Display
+  `credit` anywhere the selected music is used. Send the same `music` value
+  when polling so the cache key matches. `mode=montage` joins several significant scenes. Results are
   cached per clip range and options. No source re-upload is needed.
 - **Stable media URLs:** thumbnails, segments and exports now use a fixed public R2 URL, so Coil and
   ExoPlayer can cache them.

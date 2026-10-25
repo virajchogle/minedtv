@@ -377,6 +377,7 @@ export interface HighlightOptions {
   captions: boolean;
   caption_style: HighlightCaptionStyle;
   hook: boolean;
+  music: boolean;
 }
 
 export interface ClipHighlightsOut {
@@ -390,6 +391,18 @@ export interface ClipHighlightsOut {
   width: number | null;
   height: number | null;
   duration_ms: number | null;
+  music_enabled: boolean;
+  music_mixed: boolean;
+  music: {
+    id: string;
+    title: string;
+    artist: string;
+    mood: string;
+    license: string;
+    license_url: string;
+    source_url: string;
+    credit: string;
+  } | null;
   moments: { source_start_ms: number; source_end_ms: number; score: number; reason: string }[];
   captions: { start_ms: number; end_ms: number; text: string; kind: "hook" | "speech" | "moment" }[];
   summary: string | null;
