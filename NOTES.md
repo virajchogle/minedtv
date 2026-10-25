@@ -29,7 +29,8 @@ Who owns what, and where each open piece plugs into the backend. Update this as 
 - Local stack: `cd backend && docker-compose up -d --build`. Stub models need no GPU.
 - Tests: `cd backend && .venv/bin/pytest`
 - Contracts and plug-in steps: "Plugging in real models" in [`backend/README.md`](backend/README.md)
-- Deploying needs `backend/.env.prod` (only on Viraj's machine): `PROJECT_ID=minedtv-78e0 ./deploy/cloudrun.sh`
+- **Deploys are automatic.** A push to `main` that touches `frontend/` deploys the web app (`.github/workflows/deploy-web.yml`). A push that touches `backend/` runs the tests, then migrates the database, deploys the API and updates the worker (`.github/workflows/deploy-backend.yml`). Both can also be started by hand from the repo's Actions tab.
+- Changing backend settings (`backend/.env.prod`, only on Viraj's machine) still needs a manual `PROJECT_ID=minedtv-78e0 ./deploy/cloudrun.sh`.
 
 ## Demo day
 
