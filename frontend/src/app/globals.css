@@ -199,6 +199,7 @@ body::before {
   --mtv-red: #ff4d5e;
   --mtv-green: #3ddc84;
   --mtv-shimmer: #2a2a2a;
+  --neon-accent: 203 255 61;
 }
 
 /* ── Marquee: continuous-scroll track for the Explore clip wall ─────────── */

@@ -1,20 +1,20 @@
 "use client";
 
 /**
- * Creator dashboard: how your clips are doing over a period, and how each one scores with
- * the virality panel. Every number is real: views are counted per day on the server, and
- * likes, comments and follows by when they happened. Days are UTC.
+ * Creator dashboard: four tiles on one screen. Click a tile to open the
+ * full module. Every number is real: views are counted per day on the server,
+ * and likes, comments and follows by when they happened. Days are UTC.
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { motion, useSpring, useTransform } from "framer-motion";
-import { AlertTriangle, ArrowDownRight, ArrowUpRight, Loader2, Minus, Youtube } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Loader2, Youtube } from "lucide-react";
 
 import { AudienceFlowSankey } from "@/components/audience-flow-sankey";
 import { PublishBadge } from "@/components/clip-actions";
 import { ChooseUserNotice, useCurrentUser } from "@/components/current-user";
 import { DailyEngagementChart } from "@/components/daily-engagement-chart";
+import { HoverBeam } from "@/components/dashboard-tile";
 import { ForecastModule } from "@/components/forecast-module";
 import { SiteNav } from "@/components/hero/site-nav";
 import { IncomeForecastChart } from "@/components/income-forecast-chart";
@@ -26,13 +26,7 @@ import type { AnalyticsOut, AnalyticsTotals, ClipAnalytics } from "@/lib/minedtv
 import { cn } from "@/lib/utils";
 
 type Metric = keyof AnalyticsTotals;
-
-const METRICS: { id: Metric; label: string }[] = [
-  { id: "views", label: "Views" },
-  { id: "likes", label: "Likes" },
-  { id: "comments", label: "Comments" },
-  { id: "new_followers", label: "New followers" },
-];
+type Panel = "income" | "engagement" | "forecast" | "audience";
 
 const RANGES = [7, 30, 90] as const;
 
@@ -44,15 +38,22 @@ const dayLabel = (iso: string, withYear = false) =>
     ...(withYear ? { year: "numeric" } : {}),
   });
 
+const PANEL_LABEL: Record<Panel, string> = {
+  income: "Expected income",
+  engagement: "Daily",
+  forecast: "Forecast",
+  audience: "Audience",
+};
+
 export default function DashboardPage() {
   const me = useCurrentUser();
   const [days, setDays] = useState<number>(30);
   const [metric, setMetric] = useState<Metric>("views");
   const [data, setData] = useState<AnalyticsOut | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState<Panel | null>(null);
   const meId = me?.id ?? null;
 
-  // Fetch when the user or the range changes; results for a stale request are dropped.
   const load = useCallback(() => {
     if (!meId) return () => {};
     let cancelled = false;
@@ -67,10 +68,8 @@ export default function DashboardPage() {
 
   useEffect(() => load(), [load]);
 
-  // Showing the previous range's numbers (dimmed) until the new ones arrive.
   const loading = Boolean(meId) && !error && data?.days !== days;
 
-  // Keep polling while a virality check is still running somewhere.
   const checking = data?.clips.some((c) => c.virality?.status === "processing") ?? false;
   useEffect(() => {
     if (!checking) return;
@@ -78,27 +77,48 @@ export default function DashboardPage() {
     return () => clearInterval(timer);
   }, [checking, load]);
 
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
   return (
-    <div className="min-h-screen bg-[var(--mtv-bg)] px-4 pb-16 pt-28 text-[var(--mtv-text)] sm:px-8 sm:pt-32">
+    <div className="flex h-[100dvh] flex-col overflow-hidden bg-[var(--mtv-bg)] px-3 pb-3 pt-20 text-[var(--mtv-text)] sm:px-5 [--neon-accent:203_255_61]">
       <SiteNav />
-      <div className="mx-auto max-w-7xl space-y-8">
-        <ScreenTitle>Dashboard</ScreenTitle>
+      <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col gap-3">
+        <header className="flex shrink-0 flex-wrap items-center justify-between gap-3">
+          {open ? (
+            <button
+              type="button"
+              onClick={() => setOpen(null)}
+              className="inline-flex items-center gap-2 text-lg font-bold tracking-tight hover:text-[var(--mtv-gold)]"
+            >
+              <ArrowLeft className="h-5 w-5" />
+              {PANEL_LABEL[open]}
+            </button>
+          ) : (
+            <ScreenTitle className="[&>h1]:text-2xl [&>h1]:sm:text-3xl">Dashboard</ScreenTitle>
+          )}
+          <div className="flex items-center gap-3">
+            <PillRow>
+              {RANGES.map((d) => (
+                <Pill key={d} selected={days === d} onClick={() => setDays(d)}>
+                  Last {d} days
+                </Pill>
+              ))}
+            </PillRow>
+            {loading && <Loader2 className="h-4 w-4 animate-spin text-[var(--mtv-text-2)]" aria-label="Loading" />}
+          </div>
+        </header>
 
         {!me ? (
           <ChooseUserNotice action="see your dashboard" />
         ) : (
           <>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <PillRow>
-                {RANGES.map((d) => (
-                  <Pill key={d} selected={days === d} onClick={() => setDays(d)}>
-                    Last {d} days
-                  </Pill>
-                ))}
-              </PillRow>
-              {loading && <Loader2 className="h-4 w-4 animate-spin text-[var(--mtv-text-2)]" aria-label="Loading" />}
-            </div>
-
             {error && (
               <p className="flex items-start gap-2 rounded-lg border border-[var(--mtv-red)]/40 bg-[var(--mtv-red)]/10 p-3 text-sm text-[var(--mtv-red)]">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -107,102 +127,50 @@ export default function DashboardPage() {
             )}
 
             {data && (
-              // Refetches keep the last render, dimmed, instead of flashing a skeleton.
-              <div className={cn("space-y-8 transition-opacity", loading && "opacity-60")}>
-                <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                  {METRICS.map((m) => (
-                    <StatTile
-                      key={m.id}
-                      label={m.label}
-                      value={data.period[m.id]}
-                      previous={data.previous_period[m.id]}
-                      days={data.days}
-                      selected={metric === m.id}
-                      onClick={() => setMetric(m.id)}
-                    />
-                  ))}
-                </div>
-
-                <div className="grid gap-6 xl:grid-cols-2">
-                  <IncomeForecastChart clips={data.clips} daily={data.daily} />
-                  <DailyEngagementChart data={data} highlight={metric} />
-                </div>
-
-                <ForecastModule clips={data.clips} />
-
-                <AudienceFlowSankey clips={data.clips} />
-
-                <ClipsTable clips={data.clips} days={data.days} />
-
-                <p className="text-xs text-[var(--mtv-text-2)]">
-                  All time: {data.lifetime.views.toLocaleString()} views · {data.lifetime.likes.toLocaleString()} likes ·{" "}
-                  {data.lifetime.comments.toLocaleString()} comments · {data.follower_count.toLocaleString()} followers.{" "}
-                  {data.tracking_since
-                    ? `Daily views are tracked since ${dayLabel(data.tracking_since, true)}; earlier views only count in all-time totals.`
-                    : "Daily views start counting from the next view; earlier views only count in all-time totals."}
-                </p>
+              <div className={cn("flex min-h-0 flex-1 flex-col", loading && "opacity-60")}>
+                {open === null ? (
+                  <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-auto md:grid-cols-2 md:grid-rows-2 md:overflow-hidden">
+                    <HoverBeam as="button" onClick={() => setOpen("income")}>
+                      <IncomeForecastChart clips={data.clips} daily={data.daily} compact />
+                    </HoverBeam>
+                    <HoverBeam as="button" onClick={() => setOpen("engagement")}>
+                      <DailyEngagementChart data={data} highlight={metric} compact />
+                    </HoverBeam>
+                    <HoverBeam as="button" onClick={() => setOpen("forecast")}>
+                      <ForecastModule clips={data.clips} compact />
+                    </HoverBeam>
+                    <HoverBeam as="button" onClick={() => setOpen("audience")}>
+                      <AudienceFlowSankey clips={data.clips} compact />
+                    </HoverBeam>
+                  </div>
+                ) : (
+                  <div className="min-h-0 flex-1 overflow-auto">
+                    {open === "income" && <IncomeForecastChart clips={data.clips} daily={data.daily} />}
+                    {open === "engagement" && (
+                      <DailyEngagementChart data={data} highlight={metric} onHighlight={setMetric} />
+                    )}
+                    {open === "forecast" && (
+                      <div className="space-y-6">
+                        <ForecastModule clips={data.clips} />
+                        <ClipsTable clips={data.clips} days={data.days} />
+                      </div>
+                    )}
+                    {open === "audience" && <AudienceFlowSankey clips={data.clips} />}
+                    <p className="mt-4 text-xs text-[var(--mtv-text-2)]">
+                      All time: {data.lifetime.views.toLocaleString()} views · {data.lifetime.likes.toLocaleString()} likes ·{" "}
+                      {data.lifetime.comments.toLocaleString()} comments · {data.follower_count.toLocaleString()} followers.{" "}
+                      {data.tracking_since
+                        ? `Daily views are tracked since ${dayLabel(data.tracking_since, true)}; earlier views only count in all-time totals.`
+                        : "Daily views start counting from the next view; earlier views only count in all-time totals."}
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </>
         )}
       </div>
     </div>
-  );
-}
-
-function AnimatedNumber({ value }: { value: number }) {
-  const spring = useSpring(0, { stiffness: 90, damping: 20 });
-  const display = useTransform(spring, (v) => Math.round(v).toLocaleString());
-  useEffect(() => void spring.set(value), [value, spring]);
-  return <motion.span>{display}</motion.span>;
-}
-
-function StatTile({
-  label,
-  value,
-  previous,
-  days,
-  selected,
-  onClick,
-}: {
-  label: string;
-  value: number;
-  previous: number;
-  days: number;
-  selected: boolean;
-  onClick: () => void;
-}) {
-  const change = value - previous;
-  const Icon = change > 0 ? ArrowUpRight : change < 0 ? ArrowDownRight : Minus;
-  return (
-    <motion.button
-      type="button"
-      onClick={onClick}
-      aria-pressed={selected}
-      whileHover={{ y: -3 }}
-      transition={{ type: "spring", stiffness: 400, damping: 25 }}
-      className={cn(
-        "space-y-1 rounded-2xl border bg-[var(--mtv-surface)] p-4 text-left transition-[border-color,box-shadow]",
-        selected
-          ? "border-[var(--mtv-gold)]/60 shadow-[0_0_24px_-6px_var(--mtv-gold)]"
-          : "border-[var(--mtv-divider)] hover:border-[var(--mtv-gold)]/40 hover:shadow-[0_0_20px_-8px_var(--mtv-gold)]"
-      )}
-    >
-      <p className="text-sm text-[var(--mtv-text-2)]">{label}</p>
-      <p className="text-3xl font-semibold tabular-nums">
-        <AnimatedNumber value={value} />
-      </p>
-      <p
-        className={cn(
-          "inline-flex items-center gap-1 text-[12px]",
-          change > 0 ? "text-[var(--mtv-green)]" : change < 0 ? "text-[var(--mtv-red)]" : "text-[var(--mtv-text-2)]"
-        )}
-      >
-        <Icon className="h-3 w-3" aria-hidden />
-        {change === 0 ? "No change" : `${change > 0 ? "+" : ""}${change.toLocaleString()}`}
-        <span className="text-[var(--mtv-text-2)]">vs previous {days} days</span>
-      </p>
-    </motion.button>
   );
 }
 

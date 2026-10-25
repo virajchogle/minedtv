@@ -9,13 +9,13 @@
  * daily series, never independent hardcoded states.
  */
 
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Info, TrendingUp } from "lucide-react";
 
 import { ScoreRange, VerdictBadge } from "@/components/virality-report";
+import { GlowChart } from "@/components/ui/glow-chart";
 import { Pill, PillRow } from "@/components/ui/pill";
-import { EChartsBase, TOOLTIP_STYLE, type EChartsOption } from "@/components/ui/echarts-base";
 import {
   HORIZONS,
   RPM_PRESETS,
@@ -31,15 +31,7 @@ import { clipViralityScore, formatDuration, verdictFor } from "@/lib/api";
 import type { ClipAnalytics } from "@/lib/minedtv-types";
 import { cn } from "@/lib/utils";
 
-/** Reads a CSS custom property's resolved color, client-side only — ECharts
- * draws to canvas and can't follow a live `var(--x)` reference the way SVG/CSS can. */
-function useCssVar(name: string, fallback: string): string {
-  const [value] = useState(() => {
-    if (typeof document === "undefined") return fallback;
-    return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
-  });
-  return value;
-}
+const COMPACT_HORIZONS = [15, 30, 60, 90] as const;
 
 type ChartMode = "cumulative_earnings" | "daily_earnings" | "views";
 
@@ -52,7 +44,7 @@ const CHART_MODES: { id: ChartMode; label: string }[] = [
 const usd = (n: number) => `$${n.toLocaleString(undefined, { maximumFractionDigits: n < 10 ? 2 : 0 })}`;
 const compactNum = (n: number) => new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(n);
 
-export function ForecastModule({ clips }: { clips: ClipAnalytics[] }) {
+export function ForecastModule({ clips, compact = false }: { clips: ClipAnalytics[]; compact?: boolean }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [rpm, setRpm] = useState(TIKTOK_RPM);
   const [horizon, setHorizon] = useState<(typeof HORIZONS)[number]>(90);
@@ -91,6 +83,28 @@ export function ForecastModule({ clips }: { clips: ClipAnalytics[] }) {
     scenario,
   });
   const summary = summarize(result, horizon);
+
+  if (compact) {
+    return (
+      <section className="flex h-full min-h-0 flex-col p-4">
+        <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-[var(--mtv-gold)]">Forecast</p>
+        <p className="mt-1 text-3xl font-semibold tracking-tight text-white">{usd(summary.totalEarnings)}</p>
+        <p className="text-xs text-white/50">Expected at {horizon} days · {selected.clip.title ?? "clip"}</p>
+        <div className="mt-3 min-h-0 flex-1">
+          <ForecastRangeChart
+            existingViews={selected.clip.view_count}
+            viralityScore={score}
+            daysSincePublish={daysSincePublish}
+            rpm={rpm}
+            mode="cumulative_earnings"
+            highlightHorizon={horizon}
+            compact
+          />
+        </div>
+        <p className="mt-2 text-[11px] text-white/40">Click to open · bars grow in</p>
+      </section>
+    );
+  }
 
   return (
     <section className="space-y-5 rounded-2xl border border-[var(--mtv-gold)]/25 bg-[var(--mtv-surface)] p-4 sm:p-6">
@@ -276,11 +290,8 @@ function valueOf(d: ForecastDay, mode: ChartMode): number {
 }
 
 /**
- * Box-and-whisker, one box per forecast horizon: the whisker spans
- * conservative -> breakout at that horizon, the box line marks "expected" —
- * three real runs of the same forecast() engine (lib/forecast.ts), not a
- * single scenario's line. Replaces a third line chart with a shape that
- * actually shows the range of outcomes, per horizon, at a glance.
+ * Grouped bars per horizon: conservative / expected / breakout from the same
+ * forecast() engine. Easier to read than a box plot — taller bar = more.
  */
 function ForecastRangeChart({
   existingViews,
@@ -289,6 +300,7 @@ function ForecastRangeChart({
   rpm,
   mode,
   highlightHorizon,
+  compact = false,
 }: {
   existingViews: number;
   viralityScore: number | null;
@@ -296,83 +308,57 @@ function ForecastRangeChart({
   rpm: number;
   mode: ChartMode;
   highlightHorizon: number;
+  compact?: boolean;
 }) {
-  const gold = useCssVar("--mtv-gold", "#cbff3d");
-  const divider = useCssVar("--mtv-divider", "rgba(255,255,255,0.12)");
-  const text2 = useCssVar("--mtv-text-2", "rgba(255,255,255,0.6)");
+  const ticks = compact ? COMPACT_HORIZONS : HORIZONS;
 
-  const boxData = useMemo(() => {
+  const series = useMemo(() => {
     const base: Omit<ForecastInput, "scenario"> = { existingViews, viralityScore, daysSincePublish, rpm };
-    const byScenario = SCENARIOS.reduce((acc, s) => {
-      acc[s.id] = forecast({ ...base, scenario: s.id });
-      return acc;
-    }, {} as Record<Scenario, ReturnType<typeof forecast>>);
-
-    return HORIZONS.map((h) => {
-      const vals = SCENARIOS.map((s) => valueOf(byScenario[s.id].days[h - 1], mode)).sort((a, b) => a - b);
-      const [min, median, max] = vals;
-      return { horizon: h, box: [min, min, median, max, max] };
+    const colors: Record<Scenario, string> = {
+      expected: "#cbff3d",
+      conservative: "#94a3b8",
+      breakout: "#fbbf24",
+    };
+    return SCENARIOS.map((s) => {
+      const days = forecast({ ...base, scenario: s.id }).days;
+      return {
+        name: s.label,
+        color: colors[s.id],
+        muted: s.id !== "expected",
+        data: ticks.map((h) => ({
+          x: `${h}d`,
+          y: valueOf(days[h - 1], mode),
+        })),
+      };
     });
-  }, [existingViews, viralityScore, daysSincePublish, rpm, mode]);
+  }, [existingViews, viralityScore, daysSincePublish, rpm, mode, ticks]);
 
-  const fmt = useCallback((n: number) => (mode === "views" ? compactNum(n) : usd(n)), [mode]);
-
-  const option: EChartsOption = useMemo(
-    () => ({
-      grid: { left: 64, right: 20, top: 24, bottom: 36 },
-      tooltip: {
-        trigger: "item",
-        ...TOOLTIP_STYLE,
-        formatter: (params) => {
-          const p = params as { name?: string; data?: number[] };
-          const [min, , median, , max] = p.data ?? [0, 0, 0, 0, 0];
-          return [
-            `<div style="font-weight:600;margin-bottom:4px">At ${p.name}</div>`,
-            `Breakout: ${fmt(max)}`,
-            `Expected: ${fmt(median)}`,
-            `Conservative: ${fmt(min)}`,
-          ].join("<br/>");
-        },
-      },
-      xAxis: {
-        type: "category",
-        data: boxData.map((b) => `${b.horizon}d`),
-        axisLine: { lineStyle: { color: divider } },
-        axisTick: { show: false },
-        axisLabel: { color: text2, fontSize: 13 },
-      },
-      yAxis: {
-        type: "value",
-        splitLine: { lineStyle: { color: divider, type: "dashed" } },
-        axisLabel: { color: text2, fontSize: 12, formatter: (v: number) => fmt(v) },
-      },
-      series: [
-        {
-          type: "boxplot",
-          data: boxData.map((b) => ({
-            value: b.box,
-            itemStyle: {
-              color: b.horizon === highlightHorizon ? `${gold}33` : "rgba(255,255,255,0.04)",
-              borderColor: gold,
-              borderWidth: b.horizon === highlightHorizon ? 2.5 : 1.5,
-            },
-          })),
-          boxWidth: ["35%", "55%"],
-          animationDuration: 700,
-          animationEasing: "cubicOut",
-        },
-      ],
-    }),
-    [boxData, divider, text2, gold, highlightHorizon, fmt]
-  );
+  const fmt = (n: number, context: "axis" | "tooltip") => {
+    if (mode === "views") return compactNum(n);
+    return context === "axis" && n >= 10 ? usd(n) : usd(n);
+  };
 
   return (
     <div>
-      <EChartsBase option={option} height={260} />
-      <p className="mt-1 text-[11px] text-[var(--mtv-text-2)]">
-        Each box spans conservative -&gt; breakout at that horizon; the line through it marks the expected scenario.
-        Highlighted box = your selected horizon.
-      </p>
+      <GlowChart
+        type="bar"
+        color="#cbff3d"
+        data={series}
+        label={mode === "views" ? "Predicted views by horizon" : "Predicted earnings by horizon"}
+        height={compact ? 160 : 260}
+        axis={!compact}
+        grid={!compact}
+        tooltip={!compact}
+        legend={!compact}
+        yFormat={fmt}
+        animate
+      />
+      {!compact && (
+        <p className="mt-1 text-[11px] text-[var(--mtv-text-2)]">
+          Each group is a time horizon. Three bars: conservative, expected, breakout.
+          Selected horizon is {highlightHorizon} days.
+        </p>
+      )}
     </div>
   );
 }

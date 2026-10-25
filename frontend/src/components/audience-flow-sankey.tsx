@@ -10,6 +10,7 @@
 import { useMemo, useState } from "react";
 
 import { EChartsBase, TOOLTIP_STYLE, type EChartsOption } from "@/components/ui/echarts-base";
+import { GlowChart } from "@/components/ui/glow-chart";
 import type { ClipAnalytics } from "@/lib/minedtv-types";
 
 const OUTCOME_LIKED = "Liked";
@@ -31,7 +32,7 @@ function useCssVar(name: string, fallback: string): string {
   return value;
 }
 
-export function AudienceFlowSankey({ clips }: { clips: ClipAnalytics[] }) {
+export function AudienceFlowSankey({ clips, compact = false }: { clips: ClipAnalytics[]; compact?: boolean }) {
   const divider = useCssVar("--mtv-divider", "rgba(255,255,255,0.12)");
   const text = useCssVar("--mtv-text", "#fff");
 
@@ -101,10 +102,50 @@ export function AudienceFlowSankey({ clips }: { clips: ClipAnalytics[] }) {
     [nodes, links, divider, text]
   );
 
+  const outcomes = useMemo(() => {
+    let liked = 0;
+    let commented = 0;
+    let viewedOnly = 0;
+    for (const link of links) {
+      if (link.target === OUTCOME_LIKED) liked += link.value;
+      else if (link.target === OUTCOME_COMMENTED) commented += link.value;
+      else viewedOnly += link.value;
+    }
+    return [
+      { x: "Liked", y: liked },
+      { x: "Commented", y: commented },
+      { x: "Viewed only", y: viewedOnly },
+    ];
+  }, [links]);
+
   if (links.length === 0) {
     return (
-      <section className="rounded-2xl border border-dashed border-[var(--mtv-divider)] p-6 text-center text-sm text-[var(--mtv-text-2)]">
+      <section className="flex h-full items-center justify-center rounded-2xl border border-dashed border-[var(--mtv-divider)] p-6 text-center text-sm text-[var(--mtv-text-2)]">
         No views yet in this range — Audience Flow fills in once clips start getting watched.
+      </section>
+    );
+  }
+
+  if (compact) {
+    return (
+      <section className="flex h-full min-h-0 flex-col p-4">
+        <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-[var(--mtv-gold)]">Audience</p>
+        <p className="mt-1 text-3xl font-semibold tracking-tight text-white">{totalViews.toLocaleString()}</p>
+        <p className="text-xs text-white/50">Period views by what people did</p>
+        <div className="mt-3 min-h-0 flex-1">
+          <GlowChart
+            type="bar"
+            color="#cbff3d"
+            data={outcomes}
+            label="Period views by outcome"
+            height={160}
+            axis={false}
+            grid={false}
+            tooltip={false}
+            animate
+          />
+        </div>
+        <p className="mt-2 text-[11px] text-white/40">Click to open the flow</p>
       </section>
     );
   }
