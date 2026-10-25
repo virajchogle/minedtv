@@ -319,6 +319,7 @@ export interface ViralitySummary {
   status: JobStatus;
   score: number | null;
   verdict: "weak" | "mixed" | "promising" | "strong" | null;
+  score_samples: number[];
 }
 
 export interface ClipAnalytics {

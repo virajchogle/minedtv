@@ -16,6 +16,7 @@
 
 import type {
   AnalyticsOut,
+  ClipAnalytics,
   ClipCreatorPackOut,
   ClipDetailOut,
   ClipOut,
@@ -1010,6 +1011,25 @@ export async function fetchAnalytics(days: number): Promise<AnalyticsOut> {
   const me = getCurrentUser();
   if (!me) throw new Error("Pick a user first.");
   return request<AnalyticsOut>(`/users/${me.id}/analytics?days=${days}`);
+}
+
+
+/** Middle value of a list of scores (the virality headline when there are several panels). */
+export function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+/**
+ * A clip's virality score, median of the panel samples when there are several,
+ * else the single score, else null if it's never been checked.
+ */
+export function clipViralityScore(c: ClipAnalytics): number | null {
+  const v = c.virality;
+  if (!v) return null;
+  if (v.score_samples?.length) return median(v.score_samples);
+  return v.score ?? null;
 }
 
 /** Verdict cut-offs on the 0–100 virality score (same as the backend). */

@@ -10,7 +10,7 @@
 import { useState } from "react";
 import { ArrowDownRight, ArrowUpRight, Minus, TrendingUp } from "lucide-react";
 
-import { VERDICT_CUTOFFS, formatTimestamp } from "@/lib/api";
+import { VERDICT_CUTOFFS, formatTimestamp, median } from "@/lib/api";
 import type { ClipViralityOut } from "@/lib/minedtv-types";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +36,34 @@ export function VerdictBadge({ verdict, score, className }: { verdict: Verdict; 
 }
 
 /** 0–100 track with the verdict cut-offs and the score as a dot. */
+
+/** 0-100 track with the verdict cut-offs, the panels' range as a band and the median as a dot. */
+export function ScoreRange({ scores, compact = false }: { scores: number[]; compact?: boolean }) {
+  const mid = median(scores);
+  const lo = Math.min(...scores);
+  const hi = Math.max(...scores);
+  const cuts = [VERDICT_CUTOFFS.mixed, VERDICT_CUTOFFS.promising, VERDICT_CUTOFFS.strong];
+  return (
+    <div className={compact ? "relative w-full h-3" : "relative w-full h-5"} role="img" aria-label={`Median ${Math.round(mid)} out of 100, range ${Math.round(lo)} to ${Math.round(hi)}`}>
+      <div className="absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-[var(--mtv-surface-high)]" />
+      {cuts.map((c) => (
+        <div key={c} className="absolute top-0 h-full w-px bg-[var(--mtv-divider)]" style={{ left: `${c}%` }} />
+      ))}
+      {hi > lo && (
+        <div
+          className="absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-[var(--mtv-gold)]/35"
+          style={{ left: `${lo}%`, width: `${hi - lo}%` }}
+        />
+      )}
+      <div
+        className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--mtv-gold)] ring-2 ring-[var(--mtv-surface)]"
+        style={{ left: `${mid}%` }}
+      />
+    </div>
+  );
+}
+
+
 export function ScoreMeter({ score, compact = false }: { score: number; compact?: boolean }) {
   return (
     <div className={cn("relative w-full", compact ? "h-3" : "h-5")} role="img" aria-label={`${Math.round(score)} out of 100`}>
