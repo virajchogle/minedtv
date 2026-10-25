@@ -400,7 +400,12 @@ async def step_finalize(ctx: Ctx) -> None:
         duration_ms = s.duration_ms or 0
         await db.execute(delete(Clip).where(Clip.session_id == s.id, Clip.kind == "auto"))
         events = (await db.execute(select(Event.t_ms, Event.type, Event.score).where(Event.session_id == s.id))).all()
-        windows = pick_highlight_windows([tuple(e) for e in events], duration_ms, st.clip_window_ms, st.auto_clip_count)
+        # A reel is already a finished edit: keep it whole instead of cutting highlights out of it.
+        windows = (
+            []
+            if s.is_reel
+            else pick_highlight_windows([tuple(e) for e in events], duration_ms, st.clip_window_ms, st.auto_clip_count)
+        )
         base_title = s.title or s.game or "Session"
         if windows:
             for start, end, t, typ in windows:
@@ -510,9 +515,18 @@ async def run_pipeline(session_id: uuid.UUID | str, *, resume: bool = False, dep
                 (await ctx.session(db)).status = SessionStatus.READY
                 await db.commit()
             if deps.settings.auto_frame_highlights:
-                from app.worker.frame_highlights import auto_highlights_after_upload
+                from app.worker.frame_highlights import auto_highlights_after_upload, run_frame_highlights
 
-                await auto_highlights_after_upload(session_id, deps)
+                async with deps.sessionmaker() as db:
+                    is_reel = (await ctx.session(db)).is_reel
+                if is_reel:
+                    # Score it (for virality and Reels ranking) but keep the whole-video clip.
+                    try:
+                        await run_frame_highlights(session_id, deps, make_clips=False)
+                    except Exception:  # noqa: BLE001 - the reel is already usable
+                        log.warning("reel frame scoring failed", exc_info=True)
+                else:
+                    await auto_highlights_after_upload(session_id, deps)
             log.info("pipeline ready", extra={"secs": round(time.monotonic() - t_all, 2)})
             return SessionStatus.READY
         except ContentPolicyViolation as e:

@@ -130,6 +130,12 @@ class Session(Base):
     height: Mapped[int | None] = mapped_column(Integer)
     fps: Mapped[float | None] = mapped_column(Float)
     has_audio: Mapped[bool | None] = mapped_column(Boolean)
+    # A reel: a short vertical edit posted back from the app. It becomes one whole-video clip
+    # instead of being cut into highlights, and can credit the clip it was made from.
+    is_reel: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    reel_of_clip_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("clips.id", ondelete="SET NULL", use_alter=True, name="fk_sessions_reel_of_clip_id")
+    )
     last_step: Mapped[str | None] = mapped_column(String(32))  # last pipeline step that completed
     failed_step: Mapped[str | None] = mapped_column(String(32))
     error: Mapped[str | None] = mapped_column(Text)

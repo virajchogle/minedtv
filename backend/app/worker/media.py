@@ -55,6 +55,27 @@ def _parse_rate(rate: str | None) -> float:
     return float(num) / float(den or 1)
 
 
+def _rotation(video: dict) -> int:
+    """Clockwise display rotation in degrees (0/90/180/270) from the display matrix or the old rotate tag."""
+    for side in video.get("side_data_list") or []:
+        if "rotation" in side:
+            return round(float(side["rotation"])) % 360
+    try:
+        return int(float((video.get("tags") or {}).get("rotate", 0))) % 360
+    except ValueError:
+        return 0
+
+
+def scale_short_side(cap: int) -> str:
+    """ffmpeg scale filter capping the *short* side at `cap` (never upscaling, even dimensions), so
+    a 720 rung is 1280x720 for landscape and 720x1280 for vertical video. ffmpeg auto-rotates
+    before filters, so iw/ih are the display size here."""
+    return (
+        f"scale='if(gt(ih,iw),trunc(min({cap},iw)/2)*2,-2)'"
+        f":'if(gt(ih,iw),-2,trunc(min({cap},ih)/2)*2)'"
+    )
+
+
 def probe(path: str | Path) -> ProbeResult:
     out = json.loads(
         _run([executable("ffprobe"), "-v", "error", "-print_format", "json", "-show_streams", "-show_format", str(path)], timeout=120)
@@ -66,10 +87,14 @@ def probe(path: str | Path) -> ProbeResult:
     duration = float(out.get("format", {}).get("duration") or video.get("duration") or 0)
     if duration <= 0:
         raise MediaError("could not determine duration")
+    width, height = int(video.get("width") or 0), int(video.get("height") or 0)
+    if _rotation(video) % 180 == 90:
+        # Phones store portrait video as landscape plus a rotation flag; report what viewers see.
+        width, height = height, width
     return ProbeResult(
         duration_ms=int(duration * 1000),
-        width=int(video.get("width") or 0),
-        height=int(video.get("height") or 0),
+        width=width,
+        height=height,
         fps=round(_parse_rate(video.get("avg_frame_rate")) or _parse_rate(video.get("r_frame_rate")), 3),
         has_audio=any(s.get("codec_type") == "audio" for s in streams),
     )
@@ -96,7 +121,7 @@ def transcode_hls(
         args += ["-map", "0:a:0"]
     args += [
         # Never upscale; keep dimensions even for H.264.
-        "-vf", f"scale=-2:trunc(min({height}\\,ih)/2)*2",
+        "-vf", scale_short_side(height),
         "-c:v", "libx264", "-preset", "veryfast", "-crf", str(crf), "-pix_fmt", "yuv420p",
         "-profile:v", "high",
         # Keyframe exactly every segment_s seconds so every segment starts on one.
@@ -190,7 +215,7 @@ def render_clip(
         "-ss", f"{start_ms / 1000:.3f}", "-i", str(src),
         "-t", f"{(end_ms - start_ms) / 1000:.3f}",
         "-map", "0:v:0", "-map", "0:a:0?",
-        "-vf", f"scale=-2:trunc(min({height}\\,ih)/2)*2",
+        "-vf", scale_short_side(height),
         "-c:v", "libx264", "-preset", "veryfast", "-crf", str(crf), "-pix_fmt", "yuv420p",
         "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", str(out),
     ])

@@ -5,6 +5,7 @@ import uuid
 from app.api.deps import UrlBuilder
 from app.db.models import Clip, Session, User
 from app.schemas import ClipOut, SessionOut, UserOut
+from app.services.formats import clip_format
 from app.services.storage import get_storage
 
 
@@ -35,6 +36,10 @@ def clip_out(
         start_ms=clip.start_ms,
         end_ms=clip.end_ms,
         duration_ms=clip.end_ms - clip.start_ms,
+        width=session.width,
+        height=session.height,
+        format=clip_format(session.width, session.height, clip.end_ms - clip.start_ms),
+        reel_of=session.reel_of_clip_id,
         thumbnail_url=url_or_none(clip.thumbnail_key or session.poster_key),
         playlist_url=urls.clip_playlist(clip.id),
         status=clip.status,
@@ -65,6 +70,8 @@ def session_out(session: Session, user: User, urls: UrlBuilder) -> SessionOut:
         duration_ms=session.duration_ms,
         width=session.width,
         height=session.height,
+        is_reel=session.is_reel,
+        reel_of=session.reel_of_clip_id,
         status=session.status,
         last_step=session.last_step,
         failed_step=session.failed_step,

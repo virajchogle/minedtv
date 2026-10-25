@@ -105,6 +105,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "highlight_max_minutes": st.stored_highlight_max_minutes,
                 "highlight_max_source_mb": st.stored_highlight_max_source_mb,
                 "highlight_max_sampled_frames": st.standalone_highlight_max_frames,
+                "short_max_duration_s": st.short_max_duration_s,
             },
         }
 

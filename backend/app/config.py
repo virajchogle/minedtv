@@ -138,6 +138,8 @@ class Settings(BaseSettings):
     # Publish state for clips the pipeline creates. "draft" keeps new uploads private until the owner
     # publishes; "published" puts them straight in the feed (useful until the app has a publish button).
     new_clip_publish_state: Literal["draft", "ready", "published"] = "draft"
+    # A clip is a "short" (Reels tab) when it's vertical and at most this long; everything else is "long".
+    short_max_duration_s: int = Field(default=60, ge=5, le=600)
     upload_concurrency: int = 8
     # Uploads over these limits are refused (size) or fail at the probe step (length), so one huge
     # file can't run the worker into its job timeout.

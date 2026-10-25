@@ -9,7 +9,17 @@ from app.api.clips import _check_visible
 from app.api.deps import CurrentUser, Db, OptionalUser, Urls
 from app.api.feed import base_clip_query, clip_page, decode_cursor, encode_cursor
 from app.db.models import Clip, Comment, Follow, User
-from app.schemas import CommentCreate, CommentOut, CommentsPage, FeedOut, FollowOut, UserOut, UsersPage
+from app.schemas import (
+    ClipFormat,
+    CommentCreate,
+    CommentOut,
+    CommentsPage,
+    FeedOut,
+    FeedSort,
+    FollowOut,
+    UserOut,
+    UsersPage,
+)
 from app.services import social
 
 router = APIRouter(tags=["social"])
@@ -182,7 +192,10 @@ async def following_feed(
     urls: Urls,
     cursor: str | None = None,
     limit: int = Query(default=20, ge=1, le=100),
+    format: ClipFormat | None = Query(default=None, description="short (Reels) or long; omit for both"),
+    sort: FeedSort = Query(default="new", description="new = newest first; top = ranked by engagement and virality"),
 ) -> FeedOut:
-    """Published clips from people you follow, newest first."""
+    """Published clips from people you follow, newest first (or ranked with sort=top)."""
     followees = select(Follow.followee_id).where(Follow.follower_id == me.id)
-    return await clip_page(db, base_clip_query().where(Clip.user_id.in_(followees)), limit, cursor, urls, me)
+    stmt = base_clip_query().where(Clip.user_id.in_(followees))
+    return await clip_page(db, stmt, limit, cursor, urls, me, format, sort)

@@ -73,6 +73,11 @@ class UploadCreate(BaseModel):
     title: str | None = Field(default=None, examples=["Ranked on Bind"])
     started_at: datetime | None = Field(default=None, description="When the recording started, if the client knows")
     size_bytes: int | None = Field(default=None, ge=0)
+    as_reel: bool = Field(
+        default=False,
+        description="A finished short edit: kept as one whole-video clip (not cut into highlights) and shown in Reels",
+    )
+    reel_of: uuid.UUID | None = Field(default=None, description="The clip this reel was made from (yours or a published one)")
 
 
 class UploadOut(_Out):
@@ -109,6 +114,10 @@ class ModerationViolationOut(_Out):
     note: str
 
 
+ClipFormat = Literal["short", "long"]
+FeedSort = Literal["new", "top"]
+
+
 class SessionOut(_Out):
     id: uuid.UUID
     user: UserOut
@@ -118,6 +127,8 @@ class SessionOut(_Out):
     duration_ms: int | None
     width: int | None
     height: int | None
+    is_reel: bool = False
+    reel_of: uuid.UUID | None = None
     status: SessionStatusLiteral
     last_step: str | None
     failed_step: str | None
@@ -167,6 +178,10 @@ class ClipOut(_Out):
     start_ms: int
     end_ms: int
     duration_ms: int
+    width: int | None = Field(default=None, description="Display width (rotation applied); null until processed")
+    height: int | None = Field(default=None, description="Display height (rotation applied)")
+    format: ClipFormat = Field(default="long", description="short = vertical and at most short_max_duration_s (see /config)")
+    reel_of: uuid.UUID | None = Field(default=None, description="For reels: the clip it was made from")
     thumbnail_url: str | None
     playlist_url: str
     status: str
@@ -440,6 +455,9 @@ class SearchResult(_Out):
     game: str | None
     title: str | None
     user: UserOut
+    width: int | None = None
+    height: int | None = None
+    format: ClipFormat = "long"
     other_moments_ms: list[int] = Field(default_factory=list, description="Further good matches in the same session")
     moments: list[MomentOut] = Field(default_factory=list, description="Best moment first, then the others, with details")
 

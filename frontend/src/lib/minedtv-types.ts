@@ -51,6 +51,13 @@ export interface ClipOut {
   start_ms: number;
   end_ms: number;
   duration_ms: number;
+  /** Display size (rotation applied); null until processed. */
+  width?: number | null;
+  height?: number | null;
+  /** short = vertical and at most /config limits.short_max_duration_s long. */
+  format?: "short" | "long";
+  /** For reels: the clip it was made from. */
+  reel_of?: string | null;
   thumbnail_url: string | null;
   playlist_url: string;
   status: UpstreamStatus;

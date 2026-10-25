@@ -464,6 +464,33 @@ transcription and highlights):
 4. Poll `GET /sessions/{session_id}` (or stream `/sessions/{id}/status?api_key=...`) until
    `status == "ready"`. That's usually 1–2 minutes, since the worker starts within a minute.
 
+## 12. Reels (shorts)
+
+Home shows long clips; the Reels tab shows only short vertical ones.
+
+- **Every clip** (feed, following, user clips, clip detail) now has `width`, `height` (display size,
+  phone rotation applied), `format` (`"short"` | `"long"`) and `reel_of` (the clip a reel was made
+  from, or null). Search results carry `width`, `height` and `format` too.
+- **The rule:** `short` = taller than wide and at most `limits.short_max_duration_s` long (60 s;
+  read it from `GET /config` rather than hard-coding it). Everything else is `long`.
+- **Feeds:** add `format=short` or `format=long` to `GET /feed`, `GET /feed/following` and
+  `GET /users/{id}/clips`. The filter runs in SQL before paging, so pages stay full. Omitting it
+  returns everything, as before.
+- **Ranked Reels:** add `sort=top` to the same three endpoints to rank by likes, comments, views and
+  the clip's virality peak, decayed by age. Cursor paging works the same way (pass `next_cursor`
+  back), but a `sort=top` cursor is only valid with `sort=top`.
+  - Reels tab: `GET /feed?format=short&sort=top&limit=10`
+  - Home: `GET /feed?format=long&limit=20`
+  - Profile Reels: `GET /users/{id}/clips?format=short`
+- **Search:** `GET /search?q=...&format=short` (also a `format` form field on `/search/image`).
+- **Posting an AI-enhanced reel back:** the upload flow from section 11, with
+  `"as_reel": true` and optionally `"reel_of": "<source clip id>"` in `POST /uploads`.
+  A reel is kept as one whole-video clip (not cut into highlights), still scored for virality, and
+  starts private like every upload, so publish it with `POST /clips/{id}/publish`. `reel_of` must be
+  your own clip or a published one, or the request gets a 404.
+- Vertical uploads stay vertical end to end: the 720p rendition of a 9:16 video is 720x1280, and
+  moderation and 18+ gating apply to reels like any other clip.
+
 ## Troubleshooting
 
 | Symptom | Cause |
