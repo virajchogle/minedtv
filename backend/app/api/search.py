@@ -9,7 +9,7 @@ from app.api.deps import OptionalUser, UrlBuilder, Urls
 from app.config import get_settings
 from app.db.session import get_sessionmaker
 from app.ml.registry import get_embedder
-from app.schemas import MomentOut, SearchOut, SearchResult, UserOut
+from app.schemas import ClipFormat, MomentOut, SearchOut, SearchResult, UserOut
 from app.services.redis import get_redis
 from app.services.search import Filters, Resolved, SearchService
 from app.services.serialize import url_or_none
@@ -40,6 +40,9 @@ def _out(r: Resolved, urls: UrlBuilder) -> SearchResult:
         game=r.game,
         title=r.title,
         user=UserOut(**r.user),
+        width=r.width,
+        height=r.height,
+        format=r.format,
         other_moments_ms=r.other_moments_ms,
         moments=[
             MomentOut(
@@ -66,6 +69,7 @@ async def search(
     from_: Annotated[datetime | None, Query(alias="from")] = None,
     to: datetime | None = None,
     limit: int = Query(default=20, ge=1, le=50),
+    format: ClipFormat | None = Query(default=None, description="Only short (Reels) or only long results"),
     nocache: bool = Query(default=False, description="Skip the 5-minute result cache (for load testing)"),
 ) -> SearchOut:
     """Hybrid semantic search: visual frames + speech (semantic and keyword) + highlight events, fused with RRF.
@@ -77,7 +81,7 @@ async def search(
     t0 = time.monotonic()
     # Searching your own clips (user_id == your X-User-Id) includes drafts and "ready" clips.
     own = me is not None and user_id == me.id
-    results, cached = await _service(cache=not nocache).search_text(q, Filters(game, user_id, from_, to, own), limit)
+    results, cached = await _service(cache=not nocache).search_text(q, Filters(game, user_id, from_, to, own, format), limit)
     return SearchOut(
         query=q, results=[_out(r, urls) for r in results], took_ms=round((time.monotonic() - t0) * 1000), cached=cached
     )
@@ -91,6 +95,7 @@ async def search_image(
     game: str | None = Form(default=None),
     user_id: uuid.UUID | None = Form(default=None),
     limit: int = Form(default=20, ge=1, le=50),
+    format: ClipFormat | None = Form(default=None),
 ) -> SearchOut:
     """Find the moments that look most like an uploaded screenshot."""
     data = await image.read(MAX_IMAGE_BYTES + 1)
@@ -100,7 +105,7 @@ async def search_image(
         raise HTTPException(422, "Empty image")
     t0 = time.monotonic()
     own = me is not None and user_id == me.id
-    results = await _service(cache=False).search_image(data, Filters(game, user_id, include_unpublished=own), limit)
+    results = await _service(cache=False).search_image(data, Filters(game, user_id, include_unpublished=own, fmt=format), limit)
     return SearchOut(
         query=f"image:{image.filename or 'upload'}",
         results=[_out(r, urls) for r in results],

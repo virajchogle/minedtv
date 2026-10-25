@@ -8,7 +8,7 @@ from fastapi.concurrency import run_in_threadpool
 
 from app.api.deps import CurrentUser, Db, Urls
 from app.config import get_settings
-from app.db.models import Session, SessionStatus
+from app.db.models import Clip, Session, SessionStatus
 from app.schemas import SessionOut, UploadCreate, UploadOut
 from app.services.serialize import session_out
 from app.services.storage import get_storage
@@ -29,6 +29,11 @@ async def create_upload(body: UploadCreate, user: CurrentUser, db: Db) -> Upload
     max_mb = get_settings().max_upload_mb
     if body.size_bytes and body.size_bytes > max_mb * 1024 * 1024:
         raise HTTPException(413, f"File is {body.size_bytes / 1024**2:.0f} MB; the limit is {max_mb} MB")
+    if body.reel_of is not None:
+        source = await db.get(Clip, body.reel_of)
+        # Credit your own clip, or anyone's published one; never reveal someone's private clip.
+        if source is None or (source.user_id != user.id and source.publish_state != "published"):
+            raise HTTPException(404, "reel_of: clip not found")
     session_id = uuid.uuid4()
     prefix = f"sessions/{session_id}"
     source_key = f"{prefix}/source{ext}"
@@ -42,6 +47,8 @@ async def create_upload(body: UploadCreate, user: CurrentUser, db: Db) -> Upload
             storage_prefix=prefix,
             source_key=source_key,
             status=SessionStatus.UPLOADING,
+            is_reel=body.as_reel or body.reel_of is not None,
+            reel_of_clip_id=body.reel_of,
         )
     )
     await db.commit()

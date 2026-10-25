@@ -15,7 +15,7 @@ export function missingKeyResponse(): Response {
   return Response.json(
     {
       detail:
-        "MINEDTV_API_KEY is not set on the server, so the deployed MinedTV API cannot be reached. Add it to frontend/.env.local and restart the dev server.",
+        "MINEDTV_API_KEY is not set on the server, so the deployed MinedIt API cannot be reached. Add it to frontend/.env.local and restart the dev server.",
     },
     { status: 503 }
   );
@@ -24,7 +24,7 @@ export function missingKeyResponse(): Response {
 export function unreachableResponse(error: unknown): Response {
   return Response.json(
     {
-      detail: `Could not reach the MinedTV API at ${UPSTREAM}: ${
+      detail: `Could not reach the MinedIt API at ${UPSTREAM}: ${
         error instanceof Error ? error.message : "network error"
       }`,
     },

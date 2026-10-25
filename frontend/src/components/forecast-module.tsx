@@ -13,7 +13,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Info, TrendingUp } from "lucide-react";
 
-import { ScoreRange, VerdictBadge } from "@/components/virality-report";
+import { ScoreMeter, VerdictBadge } from "@/components/virality-report";
 import { GlowChart } from "@/components/ui/glow-chart";
 import { Pill, PillRow } from "@/components/ui/pill";
 import {
@@ -168,7 +168,7 @@ export function ForecastModule({ clips, compact = false }: { clips: ClipAnalytic
           {score != null ? (
             <div className="max-w-xs">
               <VerdictBadge verdict={verdictFor(score)} score={score} className="mb-1" />
-              <ScoreRange scores={selected.virality?.score_samples?.length ? selected.virality.score_samples : [score]} compact />
+              <ScoreMeter score={score} compact />
             </div>
           ) : (
             <p className="flex items-center gap-1 text-[11px] text-[var(--mtv-text-2)]">

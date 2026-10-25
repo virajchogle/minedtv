@@ -3,7 +3,8 @@
 /**
  * Creator dashboard: four tiles on one screen. Click a tile to open the
  * full module. Every number is real: views are counted per day on the server,
- * and likes, comments and follows by when they happened. Days are UTC.
+ * and likes, comments and follows by when they happened, scored by the frame
+ * virality scorer. Days are UTC.
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -20,8 +21,8 @@ import { SiteNav } from "@/components/hero/site-nav";
 import { IncomeForecastChart } from "@/components/income-forecast-chart";
 import { Pill, PillRow } from "@/components/ui/pill";
 import { ScreenTitle } from "@/components/ui/screen-header";
-import { ScoreRange, VerdictBadge } from "@/components/virality-report";
-import { clipViralityScore, fetchAnalytics, median, verdictFor } from "@/lib/api";
+import { ScoreMeter, VerdictBadge } from "@/components/virality-report";
+import { clipViralityScore, fetchAnalytics } from "@/lib/api";
 import type { AnalyticsOut, AnalyticsTotals, ClipAnalytics } from "@/lib/minedtv-types";
 import { cn } from "@/lib/utils";
 
@@ -70,7 +71,8 @@ export default function DashboardPage() {
 
   const loading = Boolean(meId) && !error && data?.days !== days;
 
-  const checking = data?.clips.some((c) => c.virality?.status === "processing") ?? false;
+  // Keep polling while an upload is still being scored.
+  const checking = data?.clips.some((c) => c.virality.status === "processing") ?? false;
   useEffect(() => {
     if (!checking) return;
     const timer = setInterval(() => void load(), 15_000);
@@ -101,7 +103,7 @@ export default function DashboardPage() {
               {PANEL_LABEL[open]}
             </button>
           ) : (
-            <ScreenTitle className="[&>h1]:text-2xl [&>h1]:sm:text-3xl">Dashboard</ScreenTitle>
+            <ScreenTitle className="[&_h1]:text-2xl [&_h1]:sm:text-3xl">Dashboard</ScreenTitle>
           )}
           <div className="flex items-center gap-3">
             <PillRow>
@@ -211,14 +213,14 @@ function ClipsTable({ clips, days }: { clips: ClipAnalytics[]; days: number }) {
         </p>
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-[var(--mtv-divider)]">
-          <table className="w-full min-w-[640px] text-left text-[13px]">
+          <table className="w-full min-w-[640px] table-fixed text-left text-[13px]">
             <thead className="bg-[var(--mtv-surface)] text-xs text-[var(--mtv-text-2)]">
               <tr>
                 <th className="px-4 py-2 font-normal">Clip</th>
-                <th className="px-3 py-2 text-right font-normal">Views</th>
-                <th className="px-3 py-2 text-right font-normal">Likes</th>
-                <th className="px-3 py-2 text-right font-normal">Comments</th>
-                <th className="w-56 px-4 py-2 font-normal">YouTube virality</th>
+                <th className="w-20 px-3 py-2 text-right font-normal">Views</th>
+                <th className="w-20 px-3 py-2 text-right font-normal">Likes</th>
+                <th className="w-24 px-3 py-2 text-right font-normal">Comments</th>
+                <th className="w-56 px-4 py-2 font-normal">Virality</th>
               </tr>
             </thead>
             <tbody>
@@ -228,8 +230,8 @@ function ClipsTable({ clips, days }: { clips: ClipAnalytics[]; days: number }) {
             </tbody>
           </table>
           <p className="border-t border-[var(--mtv-divider)] bg-[var(--mtv-surface)] px-4 py-2 text-[11px] text-[var(--mtv-text-2)]">
-            Views, likes and comments are for the last {days} days. Virality runs when you publish a clip; the dot is the
-            median of the audience panels and the band their range.
+            Views, likes and comments are for the last {days} days. Virality scores every moment of an upload
+            when it&apos;s processed; a clip&apos;s score is its strongest moments, compared with the rest of its upload.
           </p>
         </div>
       )}
@@ -239,11 +241,6 @@ function ClipsTable({ clips, days }: { clips: ClipAnalytics[]; days: number }) {
 
 function ClipRow({ row }: { row: ClipAnalytics }) {
   const { clip, virality } = row;
-  const scores = virality?.score_samples?.length
-    ? virality.score_samples
-    : virality?.score != null
-      ? [virality.score]
-      : [];
   return (
     <tr className="border-t border-[var(--mtv-divider)] align-middle">
       <td className="px-4 py-2.5">
@@ -271,10 +268,10 @@ function ClipRow({ row }: { row: ClipAnalytics }) {
       <td className="px-3 py-2.5 text-right tabular-nums">{row.period_likes.toLocaleString()}</td>
       <td className="px-3 py-2.5 text-right tabular-nums">{row.period_comments.toLocaleString()}</td>
       <td className="px-4 py-2.5">
-        {scores.length > 0 ? (
+        {virality.score != null && virality.verdict ? (
           <div className="space-y-1">
-            <VerdictBadge verdict={verdictFor(median(scores))} score={median(scores)} />
-            <ScoreRange scores={scores} compact />
+            <VerdictBadge verdict={virality.verdict} score={virality.score} />
+            <ScoreMeter score={virality.score} compact />
           </div>
         ) : virality.status === "processing" ? (
           <span className="inline-flex items-center gap-1.5 text-xs text-[var(--mtv-text-2)]">
@@ -283,7 +280,7 @@ function ClipRow({ row }: { row: ClipAnalytics }) {
         ) : virality.status === "failed" ? (
           <span className="text-xs text-[var(--mtv-red)]">Check failed</span>
         ) : (
-          <span className="text-xs text-[var(--mtv-text-2)]">{clip.publish_state === "published" ? "Not checked" : "Runs on publish"}</span>
+          <span className="text-xs text-[var(--mtv-text-2)]">Not scored yet</span>
         )}
       </td>
     </tr>

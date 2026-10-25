@@ -1,5 +1,5 @@
 /**
- * MinedTV client — adapter over the deployed team API.
+ * MinedIt client — adapter over the deployed team API.
  *
  * The UI was built against a videos/moments/scope contract; the deployed
  * service speaks sessions, clips, HLS playlists and millisecond offsets. This
@@ -20,11 +20,14 @@ import type {
   ClipCreatorPackOut,
   ClipDetailOut,
   ClipOut,
+  ClipHighlightsOut,
   ClipViralityOut,
+  CommentOut,
+  CommentsPage,
   CountsOut,
-  CreatorPlatform,
   ExportOut,
   FeedOut,
+  HighlightOptions,
   MeOut,
   ModerationSeverity,
   ModerationViolationOut,
@@ -208,7 +211,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers, cache: "no-store" });
   } catch {
-    throw new Error("Could not reach the MinedTV API.");
+    throw new Error("Could not reach the MinedIt API.");
   }
   if (!response.ok) {
     let message = `${response.status} ${response.statusText}`;
@@ -623,8 +626,26 @@ export const reindexVideo = (sessionId: string) =>
     method: "POST",
   });
 
+/**
+ * A random ID kept per browser, so the API can count a signed-out viewer's repeat views once.
+ * Without it every web visitor would look like one viewer: they all reach the API via our proxy.
+ */
+function viewerId(): string {
+  try {
+    let id = window.localStorage.getItem("minedtv-viewer");
+    if (!id) {
+      id = crypto.randomUUID();
+      window.localStorage.setItem("minedtv-viewer", id);
+    }
+    return id;
+  } catch {
+    return "no-storage";
+  }
+}
+
+/** Counts once per viewer per clip every 30 minutes; owners' own views don't count. */
 export const recordView = (clipId: string) =>
-  request<unknown>(`/clips/${clipId}/view`, { method: "POST" }).catch(() => {
+  request<unknown>(`/clips/${clipId}/view`, { method: "POST", headers: { "X-Viewer-Id": viewerId() } }).catch(() => {
     /* view counting must never interrupt playback */
   });
 
@@ -785,7 +806,7 @@ async function authRequest<T>(action: string, body?: unknown): Promise<T> {
       cache: "no-store",
     });
   } catch {
-    throw new Error("Could not reach the MinedTV API.");
+    throw new Error("Could not reach the MinedIt API.");
   }
   if (!response.ok) {
     let message = `${response.status} ${response.statusText}`;
@@ -895,32 +916,12 @@ export const startCreatorPack = (clipId: string) =>
 export const getCreatorPack = (clipId: string) =>
   request<ClipCreatorPackOut>(`/clips/${clipId}/creator-pack`);
 
-export interface ViralityOptions {
-  platform: CreatorPlatform;
-  target_audience?: string | null;
-  persona_count?: number | null;
-}
+/** The clip's virality from the frame scorer (owner only). */
+export const getVirality = (clipId: string) => request<ClipViralityOut>(`/clips/${clipId}/virality`);
 
-function viralityQuery(o: ViralityOptions): string {
-  const params = new URLSearchParams({ platform: o.platform });
-  if (o.target_audience) params.set("target_audience", o.target_audience);
-  if (o.persona_count) params.set("persona_count", String(o.persona_count));
-  return params.toString();
-}
-
-/** Synthetic audience panel, for clips you own. Publishing starts one for YouTube automatically. */
-export const startVirality = (clipId: string, o: ViralityOptions) =>
-  request<ClipViralityOut>(`/clips/${clipId}/virality`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      platform: o.platform,
-      target_audience: o.target_audience || null,
-      persona_count: o.persona_count || null,
-    }),
-  });
-export const getVirality = (clipId: string, o: ViralityOptions) =>
-  request<ClipViralityOut>(`/clips/${clipId}/virality?${viralityQuery(o)}`);
+/** Scores the clip's upload if it predates the frame scorer; leaves its clips alone. */
+export const scoreVirality = (clipId: string) =>
+  request<ClipViralityOut>(`/clips/${clipId}/virality`, { method: "POST" });
 
 // ── YouTube posting ──────────────────────────────────────────────────────────
 
@@ -939,13 +940,69 @@ export const getYouTubeUploads = (clipId: string) =>
 /** Title, description and tags default to the clip's AI creator pack. */
 export const postToYouTube = (
   clipId: string,
-  body: { privacy: YouTubePrivacy; title?: string | null; description?: string | null; tags?: string[] | null }
+  body: {
+    privacy: YouTubePrivacy;
+    title?: string | null;
+    description?: string | null;
+    tags?: string[] | null;
+    /** Post this finished render instead of the plain clip. */
+    montage?: HighlightOptions | null;
+  }
 ) =>
   request<YouTubeUploadOut>(`/clips/${clipId}/youtube`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+
+// ── AI share renders (montage / single highlight) ──────────────────────────
+
+function highlightQuery(o: HighlightOptions): string {
+  return new URLSearchParams({
+    platform: o.platform,
+    mode: o.mode,
+    captions: String(o.captions),
+    caption_style: o.caption_style,
+    hook: String(o.hook),
+  }).toString();
+}
+
+/** Starts (or reuses) the render for these options. Poll getMontage with the same options. */
+export const startMontage = (clipId: string, o: HighlightOptions) =>
+  request<ClipHighlightsOut>(`/clips/${clipId}/highlights`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(o),
+  });
+
+export const getMontage = (clipId: string, o: HighlightOptions) =>
+  request<ClipHighlightsOut>(`/clips/${clipId}/highlights?${highlightQuery(o)}`);
+
+// ── comments and related clips ───────────────────────────────────────────────
+
+export const fetchComments = (clipId: string, cursor?: string | null) =>
+  request<CommentsPage>(
+    `/clips/${clipId}/comments?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`
+  );
+
+/** A comment, or a reply when parentId is set (replies attach to the top-level comment). */
+export const postComment = (clipId: string, body: string, parentId?: string | null) =>
+  request<CommentOut>(`/clips/${clipId}/comments`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ body, parent_id: parentId ?? null }),
+  });
+
+export const deleteComment = (commentId: string) =>
+  request<void>(`/comments/${commentId}`, { method: "DELETE" });
+
+/** Other published clips of the same game, newest first. */
+export async function fetchRelated(game: string, excludeId: string, limit = 8): Promise<Video[]> {
+  const feed = await request<FeedOut>(`/feed?limit=${limit + 1}&game=${encodeURIComponent(game)}`);
+  return (Array.isArray(feed?.items) ? feed.items.map(clipToVideo) : [])
+    .filter((v) => v.video_id !== excludeId)
+    .slice(0, limit);
+}
 
 // ── creator analytics ────────────────────────────────────────────────────────
 
@@ -956,29 +1013,18 @@ export async function fetchAnalytics(days: number): Promise<AnalyticsOut> {
   return request<AnalyticsOut>(`/users/${me.id}/analytics?days=${days}`);
 }
 
-/** Middle value of a list of scores (the virality headline when there are several panels). */
-export function median(values: number[]): number {
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-}
-
 /**
- * A clip's virality score, median of the panel samples when there are several,
- * else the single score, else null if it's never been checked. Defensively
- * guards `virality` itself and `score_samples` in case either is missing or
- * malformed in a response — the backend's own schema guarantees them, but
- * this is a client/server boundary and crashing the whole dashboard over one
- * clip's bad data is worse than reporting that clip as unscored.
+ * A clip's virality score, or null if it's never been checked. Defensively
+ * guards `virality` itself in case it's missing from a response — the
+ * backend's own schema guarantees it, but this is a client/server boundary
+ * and crashing the whole dashboard over one clip's bad data is worse than
+ * reporting that clip as unscored.
  */
 export function clipViralityScore(c: ClipAnalytics): number | null {
-  const v = c.virality;
-  if (!v) return null;
-  if (v.score_samples?.length) return median(v.score_samples);
-  return v.score ?? null;
+  return c.virality?.score ?? null;
 }
 
-/** The engine's verdict cut-offs on the 0–100 virality score. */
+/** Verdict cut-offs on the 0–100 virality score (same as the backend). */
 export const VERDICT_CUTOFFS = { mixed: 35, promising: 55, strong: 75 } as const;
 
 export function verdictFor(score: number): "weak" | "mixed" | "promising" | "strong" {

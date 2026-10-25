@@ -33,7 +33,7 @@ async def lifespan(app: FastAPI):
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     app = FastAPI(
-        title="MinedTV API",
+        title="MinedIt API",
         version="0.1.0",
         description="Gaming clips with semantic search. Clips are time ranges over stored sessions.",
         lifespan=lifespan,
@@ -98,7 +98,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "accounts": bool(st.auth_secret),
                 "require_login": st.require_login,
             },
-            "limits": {"max_upload_mb": st.max_upload_mb, "max_video_minutes": st.max_video_minutes},
+            "limits": {
+                "max_upload_mb": st.max_upload_mb,
+                "max_video_minutes": st.max_video_minutes,
+                "creator_max_upload_mb": st.creator_max_upload_mb,
+                "highlight_max_minutes": st.stored_highlight_max_minutes,
+                "highlight_max_source_mb": st.stored_highlight_max_source_mb,
+                "highlight_max_sampled_frames": st.standalone_highlight_max_frames,
+                "short_max_duration_s": st.short_max_duration_s,
+            },
         }
 
     @app.get("/health", response_model=HealthOut, tags=["health"])

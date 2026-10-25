@@ -2,11 +2,11 @@
 
 /**
  * My Library — the acting user's own clips: My videos (private; uploads land
- * here), Published (public on MinedTV) and On YouTube (posted from MinedTV).
+ * here), Published (public on MinedIt) and On YouTube (posted from MinedIt).
  * Search here is scoped to your clips and includes private ones.
  */
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { AlertTriangle, CheckCircle2, Loader2, RefreshCw, Upload, X } from "lucide-react";
@@ -26,9 +26,9 @@ type Bucket = "all" | "mine" | "published" | "youtube";
 
 const BUCKETS: { id: Bucket; label: string; hint?: string }[] = [
   { id: "all", label: "All" },
-  { id: "mine", label: "My videos", hint: "Private: only you can see these. Publish one to put it on MinedTV." },
-  { id: "published", label: "Published", hint: "Public on MinedTV. Open one to post it to YouTube." },
-  { id: "youtube", label: "On YouTube", hint: "Posted to YouTube from MinedTV." },
+  { id: "mine", label: "My videos", hint: "Private: only you can see these. Publish one to put it on MinedIt." },
+  { id: "published", label: "Published", hint: "Public on MinedIt. Open one to post it to YouTube." },
+  { id: "youtube", label: "On YouTube", hint: "Posted to YouTube from MinedIt." },
 ];
 
 const inBucket = (video: Video, bucket: Bucket) =>
@@ -113,11 +113,6 @@ function Library() {
     return () => clearInterval(timer);
   }, [processing.length, load]);
 
-  const games = useMemo(
-    () => [...new Set(allClips.map((v) => v.game).filter((g): g is string => Boolean(g)))].sort(),
-    [allClips]
-  );
-
   const openResult = (result: SearchResult) => {
     router.push(`/video/${result.video_id}?t=${Math.floor(result.seek_seconds)}`);
   };
@@ -137,8 +132,11 @@ function Library() {
               Upload
             </Link>
           }
+          eyebrow="My library"
+          accent="clips."
+          subtitle="Private until you publish. Search them the way you'd describe them."
         >
-          My Library
+          Your
         </ScreenTitle>
 
         <YouTubeConnectBanner />
@@ -150,8 +148,6 @@ function Library() {
             <SearchPanel
               scope="gallery"
               mine
-              games={games}
-              allowImage
               placeholder={`Search ${me.username}'s clips, including private ones…`}
               large
               scopeLabel={<span>Searching your clips · {counts.all} total</span>}

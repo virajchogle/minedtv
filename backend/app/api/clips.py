@@ -2,8 +2,9 @@ import asyncio
 import json
 import logging
 import uuid
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, Header, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import PlainTextResponse
 from sqlalchemy import delete, func, select
@@ -26,7 +27,8 @@ from app.db.models import (
 from app.schemas import (
     ClipCreate,
     ClipCreatorPackOut,
-    ClipViralityIn,
+    ClipHighlightsIn,
+    ClipHighlightsOut,
     ClipViralityOut,
     ClipDetailOut,
     ClipOut,
@@ -42,12 +44,17 @@ from app.services.playlist import build_playlist, validate_clip_range
 from app.services.queries import nearest_frame_key
 from app.services.redis import get_redis
 from app.services.serialize import clip_out
+from app.services.clip_virality import clip_virality
 from app.services.social import comment_counts, notify
 from app.services.storage import get_storage
 from app.worker.creator_pack import pack_key, pack_status_key
-from app.worker.enqueue import enqueue_creator_pack, enqueue_export, enqueue_virality
+from app.worker.enqueue import enqueue_clip_highlights, enqueue_creator_pack, enqueue_export, enqueue_frame_highlights
 from app.worker.export import export_key, status_key
-from app.worker.virality import virality_key, virality_status_key
+from app.worker.clip_highlights import (
+    highlight_result_key,
+    highlight_status_key,
+    status_payload as highlight_status_payload,
+)
 
 router = APIRouter(prefix="/clips", tags=["clips"])
 log = logging.getLogger(__name__)
@@ -251,11 +258,36 @@ async def unlike(clip_id: uuid.UUID, user: CurrentUser, db: Db) -> CountsOut:
     return await _counts(db, clip, user)
 
 
+def _viewer_key(request: Request, me: User | None, viewer_id: str | None) -> str:
+    """Who's watching, for de-duplicating views: the user, else the client's anonymous viewer ID,
+    else its IP address (the first X-Forwarded-For hop on Cloud Run)."""
+    if me is not None:
+        return f"user:{me.id}"
+    if viewer_id:
+        return f"anon:{viewer_id.strip()[:64]}"
+    forwarded = request.headers.get("x-forwarded-for", "")
+    ip = forwarded.split(",")[0].strip() or (request.client.host if request.client else "unknown")
+    return f"ip:{ip}"
+
+
 @router.post("/{clip_id}/view", response_model=CountsOut)
-async def view(clip_id: uuid.UUID, db: Db, me: OptionalUser) -> CountsOut:
+async def view(
+    clip_id: uuid.UUID,
+    request: Request,
+    db: Db,
+    me: OptionalUser,
+    x_viewer_id: Annotated[
+        str | None, Header(description="Stable anonymous ID for a signed-out viewer (one per browser or install)")
+    ] = None,
+) -> CountsOut:
+    """Count a view. Repeat views by the same viewer within VIEW_DEDUP_MINUTES count once, and
+    owners watching their own clips don't count."""
     clip, _, _ = await _load(db, clip_id)
     _check_visible(clip, me)
-    await counters.incr_view(clip.id)
+    if me is None or me.id != clip.user_id:
+        await counters.incr_view(
+            clip.id, _viewer_key(request, me, x_viewer_id), get_settings().view_dedup_minutes * 60
+        )
     return await _counts(db, clip, me)
 
 
@@ -343,6 +375,131 @@ async def start_creator_pack(clip_id: uuid.UUID, user: CurrentUser, db: Db) -> C
     return state.model_copy(update={"status": "processing", "error": None})
 
 
+def _highlight_base(clip: Clip, options: ClipHighlightsIn) -> dict:
+    return {
+        "clip_id": clip.id,
+        "start_ms": clip.start_ms,
+        "end_ms": clip.end_ms,
+        "platform": options.platform,
+        "mode": options.mode,
+        "captions_enabled": options.captions,
+        "caption_style": options.caption_style,
+        "hook_enabled": options.hook,
+    }
+
+
+async def _highlight_state(clip: Clip, options: ClipHighlightsIn) -> ClipHighlightsOut:
+    base = _highlight_base(clip, options)
+    storage = get_storage()
+    result_key = highlight_result_key(clip.id, clip.start_ms, clip.end_ms, options)
+    if await asyncio.to_thread(storage.exists, result_key):
+        manifest = json.loads(await asyncio.to_thread(storage.get_bytes, result_key))
+        video_url = storage.url_for(manifest["video_key"])
+        return ClipHighlightsOut(
+            **base,
+            status="ready",
+            stage="rendering",
+            progress=1.0,
+            error=None,
+            algorithm_version=manifest.get("algorithm_version"),
+            video_url=video_url,
+            download_url=video_url,
+            width=manifest.get("width"),
+            height=manifest.get("height"),
+            duration_ms=manifest.get("duration_ms"),
+            frames_analyzed=manifest.get("frames_analyzed", 0),
+            captions_burned=manifest.get("captions_burned", False),
+            moments=manifest.get("moments", []),
+            captions=manifest.get("captions", []),
+            summary=manifest.get("summary"),
+            suggested_caption=manifest.get("suggested_caption"),
+            hashtags=manifest.get("hashtags", []),
+        )
+
+    raw = await get_redis().get(highlight_status_key(clip.id, clip.start_ms, clip.end_ms, options))
+    if raw is None:
+        return ClipHighlightsOut(**base, status="none", stage="queued", progress=0.0)
+    if isinstance(raw, bytes):
+        raw = raw.decode("utf-8", errors="replace")
+    try:
+        state = json.loads(raw)
+    except (TypeError, ValueError):
+        state = {
+            "status": "failed" if str(raw).startswith("failed") else "processing",
+            "stage": "queued",
+            "progress": 0.0,
+            "error": str(raw).partition(":")[2] or None,
+        }
+    return ClipHighlightsOut(**base, **state)
+
+
+@router.post("/{clip_id}/highlights", response_model=ClipHighlightsOut, status_code=202)
+async def start_clip_highlights(
+    clip_id: uuid.UUID,
+    body: ClipHighlightsIn,
+    user: CurrentUser,
+    db: Db,
+) -> ClipHighlightsOut:
+    """Start or reuse an asynchronous AI-share render for a stored clip. Owner only."""
+    clip = await _load_owned(db, clip_id, user)
+    settings = get_settings()
+    if clip.end_ms - clip.start_ms > settings.stored_highlight_max_minutes * 60_000:
+        raise HTTPException(422, f"Clip exceeds the {settings.stored_highlight_max_minutes}-minute highlight limit")
+    cached_pack = pack_key(clip.id, clip.start_ms, clip.end_ms)
+    if not settings.gemini_api_key and not await asyncio.to_thread(get_storage().exists, cached_pack):
+        raise HTTPException(503, "Stored highlights are not configured (GEMINI_API_KEY missing)")
+    state = await _highlight_state(clip, body)
+    if state.status in ("ready", "processing"):
+        return state
+    skey = highlight_status_key(clip.id, clip.start_ms, clip.end_ms, body)
+    redis = get_redis()
+    queued = highlight_status_payload("processing", "queued", 0.0)
+    if state.status == "none":
+        claimed = await redis.set(skey, queued, ex=24 * 3600, nx=True)
+        if not claimed:
+            return await _highlight_state(clip, body)
+    else:
+        # A POST after failure is an explicit retry for the same cached options.
+        await redis.set(skey, queued, ex=24 * 3600)
+    try:
+        await run_in_threadpool(enqueue_clip_highlights, clip.id, body.model_dump(mode="json"))
+    except Exception as exc:
+        log.exception("Could not enqueue stored highlight", extra={"clip_id": str(clip.id)})
+        await redis.set(
+            skey,
+            highlight_status_payload("failed", "queued", 0.0, f"{type(exc).__name__}: {exc}"[:500]),
+            ex=24 * 3600,
+        )
+        raise HTTPException(503, "Could not queue highlight generation") from exc
+    return state.model_copy(update={"status": "processing", "stage": "queued", "progress": 0.0, "error": None})
+
+
+@router.get("/{clip_id}/highlights", response_model=ClipHighlightsOut)
+async def get_clip_highlights(
+    clip_id: uuid.UUID,
+    user: CurrentUser,
+    db: Db,
+    platform: str = "tiktok",
+    mode: str = "single",
+    captions: bool = True,
+    caption_style: str = "bold",
+    hook: bool = True,
+) -> ClipHighlightsOut:
+    """Poll the stored-clip AI-share job using the same options supplied to POST."""
+    clip = await _load_owned(db, clip_id, user)
+    try:
+        options = ClipHighlightsIn(
+            platform=platform,
+            mode=mode,
+            captions=captions,
+            caption_style=caption_style,
+            hook=hook,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return await _highlight_state(clip, options)
+
+
 # ---------------------------------------------------------------- publish state
 
 
@@ -360,17 +517,8 @@ async def _set_state(clip_id: uuid.UUID, state: str, user: User, db, urls) -> Cl
 
 @router.post("/{clip_id}/publish", response_model=ClipOut)
 async def publish_clip(clip_id: uuid.UUID, user: CurrentUser, db: Db, urls: Urls) -> ClipOut:
-    """Make the clip public: it appears in the feed, search and the owner's profile. Also starts
-    the YouTube virality check, which writes the clip's AI creator pack (title, description, tags)
-    on the way, so both are ready for posting."""
-    out = await _set_state(clip_id, "published", user, db, urls)
-    if get_settings().gemini_api_key:
-        clip, _, _ = await _load(db, clip_id)
-        try:
-            await _start_virality(clip, ClipViralityIn(platform="youtube"))
-        except Exception:  # noqa: BLE001 - publishing must not fail because the follow-up job couldn't queue
-            log.warning("could not start virality after publish", exc_info=True, extra={"clip_id": str(clip_id)})
-    return out
+    """Make the clip public: it appears in the feed, search and the owner's profile."""
+    return await _set_state(clip_id, "published", user, db, urls)
 
 
 @router.post("/{clip_id}/unpublish", response_model=ClipOut)
@@ -385,31 +533,7 @@ async def mark_ready(clip_id: uuid.UUID, user: CurrentUser, db: Db, urls: Urls) 
     return await _set_state(clip_id, "ready", user, db, urls)
 
 
-# ---------------------------------------------------------------- virality
-
-
-def _virality_args(clip: Clip, body: ClipViralityIn) -> tuple:
-    # Default persona count spelled out, so "not sent" and "sent the default" share one result.
-    persona_count = body.persona_count or get_settings().creator_persona_count
-    return (clip.id, clip.start_ms, clip.end_ms, body.platform, body.target_audience, persona_count)
-
-
-async def _virality_state(clip: Clip, body: ClipViralityIn) -> ClipViralityOut:
-    from app.schemas import AudienceSimulationOut
-
-    args = _virality_args(clip, body)
-    base = dict(clip_id=clip.id, platform=body.platform, start_ms=clip.start_ms, end_ms=clip.end_ms)
-    storage = get_storage()
-    key = virality_key(*args)
-    if await asyncio.to_thread(storage.exists, key):
-        result = AudienceSimulationOut.model_validate_json(await asyncio.to_thread(storage.get_bytes, key))
-        return ClipViralityOut(**base, status="ready", result=result)
-    raw = await get_redis().get(virality_status_key(*args))
-    if raw is None:
-        return ClipViralityOut(**base, status="none")
-    if raw.startswith("failed"):
-        return ClipViralityOut(**base, status="failed", error=raw.partition(":")[2] or None)
-    return ClipViralityOut(**base, status="processing")
+# ---------------------------------------------------------------- virality (frame scorer)
 
 
 async def _load_owned(db, clip_id: uuid.UUID, user: User) -> Clip:
@@ -419,39 +543,24 @@ async def _load_owned(db, clip_id: uuid.UUID, user: User) -> Clip:
     return clip
 
 
-async def _start_virality(clip: Clip, body: ClipViralityIn) -> ClipViralityOut:
-    if not get_settings().gemini_api_key:
-        raise HTTPException(503, "Virality checks are not configured (GEMINI_API_KEY missing)")
-    state = await _virality_state(clip, body)
-    if state.status in ("ready", "processing"):
-        return state
-    args = _virality_args(clip, body)
-    await get_redis().set(virality_status_key(*args), "processing", ex=6 * 3600)
-    await run_in_threadpool(enqueue_virality, clip.id, *args[3:])
-    return state.model_copy(update={"status": "processing", "error": None})
+@router.get("/{clip_id}/virality", response_model=ClipViralityOut)
+async def get_virality(clip_id: uuid.UUID, user: CurrentUser, db: Db) -> ClipViralityOut:
+    """The clip's virality score (0–100), verdict, signal breakdown and per-frame curve, from the
+    frame scorer that runs on every upload. Owner only."""
+    clip = await _load_owned(db, clip_id, user)
+    return await clip_virality(db, clip)
 
 
 @router.post("/{clip_id}/virality", response_model=ClipViralityOut, status_code=202)
-async def start_virality(clip_id: uuid.UUID, body: ClipViralityIn, user: CurrentUser, db: Db) -> ClipViralityOut:
-    """Run the synthetic audience panel on a clip you own (any publish state; publishing starts one
-    automatically for YouTube). Builds the clip's creator pack first if needed; takes a few minutes.
-    Poll GET with the same options."""
+async def score_virality(clip_id: uuid.UUID, user: CurrentUser, db: Db) -> ClipViralityOut:
+    """Score the clip's upload if it hasn't been (uploads from before the frame scorer). Leaves
+    every clip as it is; takes a few seconds. Poll GET until status is 'ready'."""
     clip = await _load_owned(db, clip_id, user)
-    return await _start_virality(clip, body)
-
-
-@router.get("/{clip_id}/virality", response_model=ClipViralityOut)
-async def get_virality(
-    clip_id: uuid.UUID,
-    user: CurrentUser,
-    db: Db,
-    platform: str = "general",
-    target_audience: str | None = None,
-    persona_count: int | None = None,
-) -> ClipViralityOut:
-    """Status/result of the virality check for these options (same values you POSTed)."""
-    body = ClipViralityIn(platform=platform, target_audience=target_audience, persona_count=persona_count)
-    clip, _, _ = await _load(db, clip_id)
-    if clip.user_id != user.id:
-        raise HTTPException(403, "Not your clip")
-    return await _virality_state(clip, body)
+    state = await clip_virality(db, clip)
+    if state.status in ("ready", "processing"):
+        return state
+    st = get_settings()
+    await run_in_threadpool(
+        enqueue_frame_highlights, clip.session_id, st.frame_highlight_count, st.frame_highlight_duration_ms, False
+    )
+    return state.model_copy(update={"status": "processing", "error": None})

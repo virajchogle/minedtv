@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ImageIcon, Loader2, Search, X } from "lucide-react";
+import { Loader2, Search, X } from "lucide-react";
 
 import { ResultCard } from "@/components/result-card";
 import { Input } from "@/components/ui/input";
 import {
-  searchByImage,
   searchVideos,
   type MatchBucket,
   type SearchResponse,
@@ -35,10 +34,6 @@ interface SearchPanelProps {
   large?: boolean;
   /** Only the current user's clips (includes their drafts). */
   mine?: boolean;
-  /** Offer game filter chips built from these game names. */
-  games?: string[];
-  /** Offer "search by screenshot". */
-  allowImage?: boolean;
 }
 
 export function SearchPanel({
@@ -51,12 +46,8 @@ export function SearchPanel({
   disabledMessage,
   large = false,
   mine = false,
-  games = [],
-  allowImage = false,
 }: SearchPanelProps) {
   const [query, setQuery] = useState("");
-  const [game, setGame] = useState<string | null>(null);
-  const imageInput = useRef<HTMLInputElement>(null);
   const [response, setResponse] = useState<SearchResponse | null>(null);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -96,7 +87,6 @@ export function SearchPanel({
         videoId,
         signal: controller.signal,
         mine,
-        game,
       });
       if (controller.signal.aborted) return;
       setResponse(result);
@@ -109,25 +99,6 @@ export function SearchPanel({
     }
   };
 
-  const runImage = async (file: File) => {
-    if (disabled) return;
-    inFlight.current?.abort();
-    const controller = new AbortController();
-    inFlight.current = controller;
-    setSearching(true);
-    setError(null);
-    setQuery("");
-    try {
-      const result = await searchByImage(file, { mine, game });
-      if (!controller.signal.aborted) setResponse(result);
-    } catch (caught) {
-      if (controller.signal.aborted) return;
-      setError(caught instanceof Error ? caught.message : "Screenshot search failed");
-      setResponse(null);
-    } finally {
-      if (!controller.signal.aborted) setSearching(false);
-    }
-  };
 
   const bucketSummary = response
     ? (Object.entries(response.bucket_counts) as [MatchBucket, number][])
@@ -197,60 +168,6 @@ export function SearchPanel({
           )}
         </div>
 
-        {(games.length > 0 || allowImage) && (
-          <div className="flex flex-wrap items-center gap-1.5">
-            {games.length > 0 && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => setGame(null)}
-                  className={cn(
-                    "rounded-full border px-2.5 py-0.5 text-[11px]",
-                    game === null ? "border-primary bg-primary/15 text-primary" : "border-border text-muted-foreground"
-                  )}
-                >
-                  All games
-                </button>
-                {games.map((g) => (
-                  <button
-                    key={g}
-                    type="button"
-                    onClick={() => setGame(game === g ? null : g)}
-                    className={cn(
-                      "rounded-full border px-2.5 py-0.5 text-[11px]",
-                      game === g ? "border-primary bg-primary/15 text-primary" : "border-border text-muted-foreground"
-                    )}
-                  >
-                    {g}
-                  </button>
-                ))}
-              </>
-            )}
-            {allowImage && (
-              <>
-                <button
-                  type="button"
-                  disabled={disabled}
-                  onClick={() => imageInput.current?.click()}
-                  className="ml-auto inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-0.5 text-[11px] text-muted-foreground hover:text-foreground disabled:opacity-40"
-                >
-                  <ImageIcon className="h-3 w-3" /> Search by screenshot
-                </button>
-                <input
-                  ref={imageInput}
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp"
-                  className="hidden"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    event.target.value = "";
-                    if (file) void runImage(file);
-                  }}
-                />
-              </>
-            )}
-          </div>
-        )}
 
         {disabled && disabledMessage && (
           <p className="text-xs text-muted-foreground">{disabledMessage}</p>
@@ -332,12 +249,6 @@ export function SearchPanel({
         </div>
       )}
 
-      {!searching && !response && !error && (
-        <p className={cn("text-xs text-muted-foreground", disabled && "opacity-60")}>
-          Ask in plain language, for example “knife kill”, “the clutch on Bind” or “when my
-          friend screamed”.
-        </p>
-      )}
     </section>
   );
 }

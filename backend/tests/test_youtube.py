@@ -136,3 +136,34 @@ async def test_post_to_youtube_failure_is_recorded(sessionmaker, video, tmp_path
         assert row.status == "failed" and "quotaExceeded" in row.error
         note = await db.scalar(select(Notification).where(Notification.clip_id == clip.id, Notification.type == "youtube_posted"))
         assert note.data["status"] == "failed"
+
+
+async def test_post_montage_uploads_the_rendered_file(sessionmaker, video, tmp_path):  # noqa: F811
+    from app.worker.export import export_key
+    from app.worker.youtube_post import post_to_youtube
+
+    settings = yt_settings()
+    storage = LocalStorage(tmp_path / "storage")
+    clip, up, deps = await _ready_clip_with_account(sessionmaker, storage, video, settings)
+    montage_key = f"highlights/{clip.id}/montage.mp4"
+    storage.put_bytes(montage_key, b"\0" * 4321, "video/mp4")
+    async with sessionmaker() as db:
+        row = await db.get(YouTubeUpload, up.id)
+        row.kind, row.source_key = "montage", montage_key
+        await db.commit()
+
+    sizes: list[int] = []
+    calls: list = []
+    client = fake_google(calls)
+    original = client._transport.handler
+
+    def recording(request: httpx.Request) -> httpx.Response:
+        if request.method == "PUT":
+            sizes.append(int(request.headers["content-length"]))
+        return original(request)
+
+    client._transport.handler = recording
+    async with client as http:
+        assert await post_to_youtube(up.id, deps, http=http) == "dQw4w9WgXcQ"
+    assert sizes == [4321]  # the montage file, not the clip
+    assert not storage.exists(export_key(clip.id, clip.start_ms, clip.end_ms))  # no plain export was made

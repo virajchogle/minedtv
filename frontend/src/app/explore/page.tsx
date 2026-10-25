@@ -3,8 +3,8 @@
 /**
  * Explore — every published clip on the platform.
  *
- * The search bar searches all published clips (game filter + screenshot
- * search). Below it: browse by game, the clip grid and the marquee, all from
+ * The search bar searches all published clips. Below it: browse by game, the
+ * clip grid and the marquee, all from
  * the live feed. Drafts never appear here; they live in My Library.
  */
 
@@ -81,6 +81,7 @@ export default function ExplorePage() {
                 Upload
               </Link>
             }
+            accent="clips."
           >
             Explore
           </ScreenTitle>
@@ -92,8 +93,6 @@ export default function ExplorePage() {
             </div>
             <SearchPanel
               scope="gallery"
-              games={games.map(([g]) => g)}
-              allowImage
               placeholder="Search clips, moments, what was said…"
               scopeLabel={
                 <span>

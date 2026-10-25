@@ -6,7 +6,7 @@
  * that one, so there's nothing to port faithfully. This reuses the type
  * system from the portfolio-site CSS you pasted instead: Archivo Black for
  * the oversized wordmark, JetBrains Mono for the meta row, same black/lime
- * MinedTV palette as the rest of the app.
+ * MinedIt palette as the rest of the app.
  */
 
 import Link from "next/link";
@@ -23,7 +23,7 @@ export function Footer() {
     <footer className="border-t border-white/5 bg-[#050505]">
       <div className="mx-auto max-w-6xl px-6 py-16">
         <p className="font-display select-none text-[18vw] leading-[0.8] tracking-tight text-white/95 sm:text-[11vw]">
-          Mined<span className="text-[var(--mtv-gold)]">TV</span>
+          Mined<span className="text-[var(--mtv-gold)]">It</span>
         </p>
 
         <div className="mt-10 flex flex-col items-start justify-between gap-8 border-t border-white/10 pt-8 sm:flex-row sm:items-end">
@@ -35,7 +35,7 @@ export function Footer() {
             ))}
           </nav>
           <p className="font-mono text-xs text-white/30">
-            © {new Date().getFullYear()} MinedTV — semantic video moment retrieval.
+            © {new Date().getFullYear()} MinedIt — semantic video moment retrieval.
           </p>
         </div>
       </div>

@@ -1,20 +1,17 @@
 "use client";
 
 /**
- * The virality check's result, read top to bottom:
- *  - the headline: median score across the persona panels, its range, and the verdict;
- *  - how far it spreads: each audience layer's score against the bar it has to clear;
- *  - simulated engagement rates;
- *  - what the panel agreed on, and each persona's own reaction.
- *
- * One panel is noisy, so the backend runs several on the same AI analysis and keeps every
- * score (`score_samples`); older results have just the one.
+ * A clip's virality from the frame scorer: every sampled frame of the upload is scored 0–100
+ * from data saved at upload (what the frame looks like, how much changes, detected events,
+ * excited speech, readability), and the clip gets the average of its strongest frames.
+ * Scores are relative to the rest of the same upload.
  */
 
-import { ArrowDownRight, ArrowUpRight, Check, Minus, TrendingUp, X } from "lucide-react";
+import { useState } from "react";
+import { ArrowDownRight, ArrowUpRight, Minus, TrendingUp } from "lucide-react";
 
-import { VERDICT_CUTOFFS, median, verdictFor } from "@/lib/api";
-import type { AudienceSimulation } from "@/lib/minedtv-types";
+import { VERDICT_CUTOFFS, formatTimestamp } from "@/lib/api";
+import type { ClipViralityOut } from "@/lib/minedtv-types";
 import { cn } from "@/lib/utils";
 
 type Verdict = "weak" | "mixed" | "promising" | "strong";
@@ -38,188 +35,145 @@ export function VerdictBadge({ verdict, score, className }: { verdict: Verdict; 
   );
 }
 
-/** Scores from every panel, or just the report's own for one-panel results. */
-export function scoresOf(result: Pick<AudienceSimulation, "virality_score" | "score_samples">): number[] {
-  return result.score_samples?.length ? result.score_samples : [result.virality_score];
-}
-
-/** 0–100 track with the verdict cut-offs, the panels' range as a band and the median as a dot. */
-export function ScoreRange({ scores, compact = false }: { scores: number[]; compact?: boolean }) {
-  const mid = median(scores);
-  const lo = Math.min(...scores);
-  const hi = Math.max(...scores);
-  const cuts = [VERDICT_CUTOFFS.mixed, VERDICT_CUTOFFS.promising, VERDICT_CUTOFFS.strong];
+/** 0–100 track with the verdict cut-offs and the score as a dot. */
+export function ScoreMeter({ score, compact = false }: { score: number; compact?: boolean }) {
   return (
-    <div className={cn("relative w-full", compact ? "h-3" : "h-5")} role="img" aria-label={`Median ${Math.round(mid)} out of 100, range ${Math.round(lo)} to ${Math.round(hi)}`}>
+    <div className={cn("relative w-full", compact ? "h-3" : "h-5")} role="img" aria-label={`${Math.round(score)} out of 100`}>
       <div className="absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-[var(--mtv-surface-high)]" />
-      {cuts.map((c) => (
+      <div
+        className="absolute left-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-[var(--mtv-gold)]/40"
+        style={{ width: `${score}%` }}
+      />
+      {[VERDICT_CUTOFFS.mixed, VERDICT_CUTOFFS.promising, VERDICT_CUTOFFS.strong].map((c) => (
         <div key={c} className="absolute top-0 h-full w-px bg-[var(--mtv-divider)]" style={{ left: `${c}%` }} />
       ))}
-      {hi > lo && (
-        <div
-          className="absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-[var(--mtv-gold)]/35"
-          style={{ left: `${lo}%`, width: `${hi - lo}%` }}
-        />
-      )}
       <div
         className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--mtv-gold)] ring-2 ring-[var(--mtv-surface)]"
-        style={{ left: `${mid}%` }}
+        style={{ left: `${score}%` }}
       />
     </div>
   );
 }
 
-const LAYER_LABEL: Record<string, string> = { target: "Target audience", adjacent: "Adjacent", outsider: "Outsiders" };
-
-const ACTION_LABEL: Record<string, string> = {
-  skip: "Skips",
-  watch: "Watches",
-  like: "Likes",
-  comment: "Comments",
-  save: "Saves",
-  share: "Shares",
-};
+const SIGNALS: { key: keyof NonNullable<ClipViralityOut["components"]>; label: string; hint: string }[] = [
+  { key: "visual", label: "Looks like a highlight", hint: "Action, skill or payoff, compared with the rest of the upload" },
+  { key: "scene", label: "Sustained moment", hint: "Strength held across the surrounding scene" },
+  { key: "novelty", label: "Something changes", hint: "Visual change between neighbouring frames" },
+  { key: "event", label: "Detected events", hint: "Kills, clutches and other detected moments nearby" },
+  { key: "speech", label: "Excited reactions", hint: "Hype or reaction speech nearby" },
+  { key: "visibility", label: "Easy to see", hint: "Brightness, contrast and visible area" },
+];
 
 function Heading({ children }: { children: React.ReactNode }) {
   return <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--mtv-text-2)]">{children}</p>;
 }
 
-/** A thin horizontal bar on a 0–100 scale, value at the tip. */
-function Bar({ label, value, marker, detail }: { label: string; value: number; marker?: number; detail?: React.ReactNode }) {
+const H = 120;
+
+/** Score of every sampled frame across the clip; the peak is marked. Hover for exact values. */
+function HypeCurve({ v }: { v: ClipViralityOut }) {
+  const [hover, setHover] = useState<number | null>(null);
+  const duration = Math.max(1, v.end_ms - v.start_ms);
+  const pts = v.curve;
+  if (pts.length < 2) return null;
+  const x = (ms: number) => (ms / duration) * 100;
+  const y = (s: number) => H - (s / 100) * (H - 8) - 4;
+  const line = pts.map((p, i) => `${i ? "L" : "M"}${x(p.offset_ms)},${y(p.score)}`).join("");
+  const area = `${line}L${x(pts[pts.length - 1].offset_ms)},${H}L${x(pts[0].offset_ms)},${H}Z`;
+  const h = hover != null ? pts[hover] : null;
+
+  const onMove = (event: React.PointerEvent<SVGSVGElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const ms = ((event.clientX - rect.left) / rect.width) * duration;
+    let best = 0;
+    pts.forEach((p, i) => {
+      if (Math.abs(p.offset_ms - ms) < Math.abs(pts[best].offset_ms - ms)) best = i;
+    });
+    setHover(best);
+  };
+
   return (
-    <div className="grid grid-cols-[7.5rem_1fr_2.5rem] items-center gap-3 text-[13px]">
-      <span className="truncate text-[var(--mtv-text-2)]">{label}</span>
-      <div className="relative h-2.5 rounded-full bg-[var(--mtv-surface-high)]">
-        <div className="h-full rounded-full bg-[var(--mtv-gold)]" style={{ width: `${Math.max(1, Math.min(100, value))}%` }} />
-        {marker != null && (
-          <div className="absolute -top-1 h-[18px] w-0.5 rounded bg-[var(--mtv-text)]" style={{ left: `${marker}%` }} title={`Needs ${Math.round(marker)}`} />
+    <div className="relative">
+      <svg
+        viewBox={`0 0 100 ${H}`}
+        preserveAspectRatio="none"
+        className="block h-[120px] w-full"
+        role="img"
+        aria-label="Virality of each moment across the clip"
+        onPointerMove={onMove}
+        onPointerLeave={() => setHover(null)}
+      >
+        {[VERDICT_CUTOFFS.mixed, VERDICT_CUTOFFS.promising, VERDICT_CUTOFFS.strong].map((c) => (
+          <line key={c} x1={0} x2={100} y1={y(c)} y2={y(c)} stroke="var(--mtv-divider)" strokeWidth={1} vectorEffect="non-scaling-stroke" />
+        ))}
+        <path d={area} fill="var(--mtv-gold)" fillOpacity={0.1} />
+        <path d={line} fill="none" stroke="var(--mtv-gold)" strokeWidth={2} vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+        {v.peak_offset_ms != null && (
+          <line x1={x(v.peak_offset_ms)} x2={x(v.peak_offset_ms)} y1={0} y2={H} stroke="var(--mtv-text)" strokeWidth={1} vectorEffect="non-scaling-stroke" opacity={0.5} />
         )}
+        {h && <line x1={x(h.offset_ms)} x2={x(h.offset_ms)} y1={0} y2={H} stroke="var(--mtv-text-2)" strokeWidth={1} vectorEffect="non-scaling-stroke" />}
+      </svg>
+      {h && (
+        <div
+          className="pointer-events-none absolute top-1 rounded-lg border border-[var(--mtv-divider)] bg-black/90 px-2 py-1 text-xs"
+          style={{ left: `clamp(0px, calc(${x(h.offset_ms)}% - 40px), calc(100% - 90px))` }}
+        >
+          <span className="font-semibold">{Math.round(h.score)}</span>
+          <span className="text-[var(--mtv-text-2)]"> at {formatTimestamp(h.offset_ms / 1000)}</span>
+        </div>
+      )}
+      <div className="mt-1 flex justify-between text-[11px] text-[var(--mtv-text-2)]">
+        <span>0:00</span>
+        {v.peak_offset_ms != null && <span>Peak at {formatTimestamp(v.peak_offset_ms / 1000)}</span>}
+        <span>{formatTimestamp(duration / 1000)}</span>
       </div>
-      <span className="text-right font-semibold tabular-nums">{Math.round(value)}</span>
-      {detail && <span className="col-start-2 col-end-4 -mt-1.5 text-[11px] text-[var(--mtv-text-2)]">{detail}</span>}
     </div>
   );
 }
 
-export function ViralityReport({ result }: { result: AudienceSimulation }) {
-  const scores = scoresOf(result);
-  const mid = median(scores);
-  const lo = Math.min(...scores);
-  const hi = Math.max(...scores);
-  const m = result.metrics;
-
+export function ViralityReport({ v }: { v: ClipViralityOut }) {
+  if (v.score == null || !v.verdict) return null;
   return (
     <div className="space-y-6 pt-1">
-      {/* Headline */}
       <div className="space-y-3">
         <div className="flex flex-wrap items-end gap-x-4 gap-y-1">
           <p className="text-5xl font-bold leading-none">
-            {Math.round(mid)}
+            {Math.round(v.score)}
             <span className="ml-1 text-base font-normal text-[var(--mtv-text-2)]">/100</span>
           </p>
-          <VerdictBadge verdict={verdictFor(mid)} className="pb-1 text-sm" />
+          <VerdictBadge verdict={v.verdict} className="pb-1 text-sm" />
         </div>
-        <ScoreRange scores={scores} />
-        <div className="flex justify-between text-[11px] text-[var(--mtv-text-2)]">
-          <span>
-            {scores.length > 1
-              ? `Median of ${scores.length} audience panels · range ${Math.round(lo)}–${Math.round(hi)}`
-              : "One audience panel"}
-          </span>
-          <span>weak · mixed {VERDICT_CUTOFFS.mixed} · promising {VERDICT_CUTOFFS.promising} · strong {VERDICT_CUTOFFS.strong}</span>
-        </div>
-        <p className="text-[13px] text-[var(--mtv-text-2)]">
-          Audience: <span className="text-[var(--mtv-text)]">{result.inferred_target_audience || result.inferred_niche}</span>
+        <ScoreMeter score={v.score} />
+        <p className="text-[11px] text-[var(--mtv-text-2)]">
+          weak · mixed {VERDICT_CUTOFFS.mixed} · promising {VERDICT_CUTOFFS.promising} · strong {VERDICT_CUTOFFS.strong}.
+          Average of the clip&apos;s strongest moments, compared with the rest of this upload.
         </p>
       </div>
 
-      {/* Spread */}
-      <div className="space-y-3">
-        <Heading>How far it spreads</Heading>
-        <p className="text-[13px]">{result.cascade_summary}</p>
+      <div className="space-y-2">
+        <Heading>Moment by moment</Heading>
+        <HypeCurve v={v} />
+      </div>
+
+      {v.components && (
         <div className="space-y-3">
-          {result.layers.map((l) => (
-            <Bar
-              key={l.layer}
-              label={LAYER_LABEL[l.layer] ?? l.layer}
-              value={l.score}
-              marker={l.threshold}
-              detail={
-                <span className="inline-flex items-center gap-1">
-                  {l.cleared_threshold ? <Check className="h-3 w-3 text-[var(--mtv-green)]" aria-hidden /> : <X className="h-3 w-3" aria-hidden />}
-                  {l.cleared_threshold ? "Broke through" : "Didn't break through"} · needs {Math.round(l.threshold)} · {l.persona_count}{" "}
-                  {l.persona_count === 1 ? "persona" : "personas"}
-                </span>
-              }
-            />
-          ))}
-        </div>
-      </div>
-
-      {/* Engagement */}
-      <div className="space-y-3">
-        <Heading>Simulated engagement</Heading>
-        <div className="space-y-2">
-          {(
-            [
-              ["Watch", m.simulated_watch_rate],
-              ["Watch to the end", m.simulated_completion_rate],
-              ["Like", m.simulated_like_rate],
-              ["Comment", m.simulated_comment_rate],
-              ["Save", m.simulated_save_rate],
-              ["Share", m.simulated_share_rate],
-            ] as const
-          ).map(([label, value]) => (
-            <Bar key={label} label={label} value={value} />
-          ))}
-        </div>
-        <p className="text-[11px] text-[var(--mtv-text-2)]">Percent of the simulated audience.</p>
-      </div>
-
-      {/* Consensus */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        {(
-          [
-            ["What works", result.consensus_strengths],
-            ["Risks", result.consensus_risks],
-            ["Try changing", result.recommended_changes],
-          ] as const
-        ).map(([label, items]) =>
-          items.length > 0 ? (
-            <div key={label} className="space-y-1.5">
-              <Heading>{label}</Heading>
-              <ul className="list-disc space-y-1 pl-4 text-[13px]">
-                {items.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            </div>
-          ) : null
-        )}
-      </div>
-
-      {/* Personas */}
-      <div className="space-y-3">
-        <Heading>What the personas said</Heading>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {result.persona_reviews.map((p) => (
-            <div key={p.name} className="space-y-1.5 rounded-xl bg-[var(--mtv-surface-high)] p-3">
-              <div className="flex items-baseline justify-between gap-2">
-                <p className="truncate text-[13px] font-semibold">{p.name}</p>
-                <span className="shrink-0 text-[11px] text-[var(--mtv-text-2)]">{LAYER_LABEL[p.layer] ?? p.layer}</span>
+          <Heading>What drives the score</Heading>
+          <div className="space-y-2">
+            {SIGNALS.map((s) => (
+              <div key={s.key} className="grid grid-cols-[9.5rem_1fr_2.5rem] items-center gap-3 text-[13px]" title={s.hint}>
+                <span className="truncate text-[var(--mtv-text-2)]">{s.label}</span>
+                <div className="h-2.5 rounded-full bg-[var(--mtv-surface-high)]">
+                  <div
+                    className="h-full rounded-full bg-[var(--mtv-gold)]"
+                    style={{ width: `${Math.max(1, Math.min(100, v.components![s.key]))}%` }}
+                  />
+                </div>
+                <span className="text-right font-semibold tabular-nums">{Math.round(v.components![s.key])}</span>
               </div>
-              <p className="text-[11px] text-[var(--mtv-text-2)]">
-                Hook <span className="font-semibold text-[var(--mtv-text)]">{p.hook_score}</span> ·{" "}
-                {ACTION_LABEL[p.primary_action] ?? p.primary_action}
-              </p>
-              {p.reaction && <p className="text-[13px]">“{p.reaction}”</p>}
-              {p.friction && <p className="text-[11px] text-[var(--mtv-text-2)]">Friction: {p.friction}</p>}
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
-
-      <p className="text-[11px] text-[var(--mtv-text-2)]">{result.disclaimer}</p>
+      )}
     </div>
   );
 }

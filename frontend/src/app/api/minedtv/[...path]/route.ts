@@ -1,5 +1,5 @@
 /**
- * Server-side proxy to the deployed MinedTV API.
+ * Server-side proxy to the deployed MinedIt API.
  *
  * The service requires an `X-API-Key` on every route. That key is a shared
  * secret, so it must never be sent to the browser: it lives in
@@ -24,7 +24,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /** Request headers worth forwarding. Hop-by-hop and auth headers are dropped. */
-const FORWARD_REQUEST_HEADERS = ["content-type", "accept", "x-user-id"];
+const FORWARD_REQUEST_HEADERS = ["content-type", "accept", "x-user-id", "x-viewer-id"];
 const FORWARD_RESPONSE_HEADERS = ["content-type", "cache-control", "etag"];
 
 async function proxy(request: NextRequest, path: string[]) {

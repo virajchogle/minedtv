@@ -1,4 +1,4 @@
-# Connecting the MinedTv Android app
+# Connecting the MinedIt Android app
 
 Drop-in code for [rishikesh-web/MinedTv](https://github.com/rishikesh-web/MinedTv). It fits the app's existing
 `Clip`, `SearchRepository` and `AppServices` so the screens don't change. Networking uses
@@ -374,10 +374,17 @@ When a clip is opened, call `MinedTvApi.view(clip.remoteId!!)` once. Have the li
   `GET /clips/{id}/export` every ~5 s until `status == "ready"`, then download `url` (a plain MP4)
   and hand it to TikTok or Instagram. It takes about 1 minute (the worker runs every minute).
   Exports are cached per clip range, so a second POST is instant.
+- **AI share highlight:** for Share â†’ Enhance with AI, call `POST /clips/{id}/highlights` with
+  `{"platform":"tiktok","mode":"single","captions":true,"caption_style":"bold","hook":true}`.
+  Poll `GET /clips/{id}/highlights` with the same values as query parameters. Show `stage` and
+  `progress` while `status == "processing"`; on `ready`, download `video_url`. The response also has
+  timed `captions`, selected `moments` with human-readable `reason`, `summary`, `suggested_caption`,
+  and `hashtags` for the Review screen. `mode=montage` joins several significant scenes. Results are
+  cached per clip range and options. No source re-upload is needed.
 - **Stable media URLs:** thumbnails, segments and exports now use a fixed public R2 URL, so Coil and
   ExoPlayer can cache them.
 
-## 8. My videos, publishing and the virality check
+## 8. My videos, publishing and virality
 
 The flow is **upload → My videos (private) → Publish → Post to YouTube**. A clip's `publish_state` is
 `draft` (private, "My videos") or `published` (public). `ready` is a legacy private state: treat it like
@@ -386,23 +393,25 @@ The flow is **upload → My videos (private) → Publish → Post to YouTube**. 
 - The feed, search and other users' profiles only show `published` clips. **New uploads start as
   `draft`, so add a Publish button** that calls `POST /clips/{id}/publish` (owner's `X-User-Id`).
   `POST /clips/{id}/unpublish` takes it back to private.
-- **Publishing also starts the virality check** for YouTube (it writes the AI creator pack on the way).
-  Show its result by polling `GET /clips/{id}/virality?platform=youtube` until `status == "ready"`.
 - On the user's own profile, `GET /users/{me}/clips?state=draft|ready|published|unpublished|all`
   (with `X-User-Id: {me}`) gives the buckets; `unpublished` = My videos. Each clip has `youtube_url`
   once it's been posted to YouTube. Anyone else only ever gets published clips.
 - "Search your clips" (library scope) should pass `user_id={me}`. That search includes the user's own
   private clips; global search never does.
-- **Virality check by hand** (any clip you own, other platforms or audiences): `POST /clips/{id}/virality`
-  with `{"platform": "tiktok", "target_audience": "...", "persona_count": 9}`, then poll
-  `GET /clips/{id}/virality?platform=tiktok&...` with the same options until `status == "ready"`.
-  `result` has `virality_score` (0–100), `verdict` and the persona panel. It takes a few minutes
-  (export + Gemini + persona panel). Each check now runs 3 panels and keeps every score in
-  `result.score_samples`: show the median and the range, so the dashboard's extra
-  `/creator/simulate-analysis` calls aren't needed any more.
+- **Virality (Nihal's frame scorer; the persona panel is gone):** every upload is scored moment by
+  moment when it's processed, and its auto-clips are cut at the highest-scoring peaks. `GET
+  /clips/{id}/virality` (owner only, no query options) returns `score` (0–100), `verdict`
+  (weak/mixed/promising/strong), `peak_offset_ms`, `components` (visual, scene, novelty, event, speech,
+  visibility, each 0–100) and `curve` (`[{offset_ms, score}]` for a "moment by moment" chart). Scores are
+  relative to the rest of the same upload. If `status` is `none` (uploads from before this), `POST
+  /clips/{id}/virality` scores it in a few seconds without touching any clips; poll GET. Remove the old
+  platform/persona options, `result`, `score_samples` and the extra `/creator/simulate-analysis` panels.
+- **Views:** `POST /clips/{id}/view` now counts once per viewer per clip every 30 minutes, and owners'
+  own views don't count. Send `X-Viewer-Id: <random UUID kept per install>` when no user is picked, or
+  every signed-out phone behind the same network counts as one viewer.
 - **Analytics:** `GET /users/{me}/analytics?days=30` (owner only) returns real per-day `views`, `likes`,
   `comments`, `new_followers` (UTC days, zero-filled), `period` vs `previous_period` totals, and each clip's
-  period stats plus `virality {status, score, verdict, score_samples}`. Use it for the dashboard's charts
+  period stats plus `virality {status, score, verdict}`. Use it for the dashboard's charts
   instead of the demo data.
 - **AI creator pack:** `POST /clips/{id}/creator-pack` returns titles, caption, hashtags and YouTube
   metadata for the clip. Poll `GET` the same way.
@@ -454,6 +463,33 @@ transcription and highlights):
 3. `POST /uploads/{session_id}/complete`.
 4. Poll `GET /sessions/{session_id}` (or stream `/sessions/{id}/status?api_key=...`) until
    `status == "ready"`. That's usually 1–2 minutes, since the worker starts within a minute.
+
+## 12. Reels (shorts)
+
+Home shows long clips; the Reels tab shows only short vertical ones.
+
+- **Every clip** (feed, following, user clips, clip detail) now has `width`, `height` (display size,
+  phone rotation applied), `format` (`"short"` | `"long"`) and `reel_of` (the clip a reel was made
+  from, or null). Search results carry `width`, `height` and `format` too.
+- **The rule:** `short` = taller than wide and at most `limits.short_max_duration_s` long (60 s;
+  read it from `GET /config` rather than hard-coding it). Everything else is `long`.
+- **Feeds:** add `format=short` or `format=long` to `GET /feed`, `GET /feed/following` and
+  `GET /users/{id}/clips`. The filter runs in SQL before paging, so pages stay full. Omitting it
+  returns everything, as before.
+- **Ranked Reels:** add `sort=top` to the same three endpoints to rank by likes, comments, views and
+  the clip's virality peak, decayed by age. Cursor paging works the same way (pass `next_cursor`
+  back), but a `sort=top` cursor is only valid with `sort=top`.
+  - Reels tab: `GET /feed?format=short&sort=top&limit=10`
+  - Home: `GET /feed?format=long&limit=20`
+  - Profile Reels: `GET /users/{id}/clips?format=short`
+- **Search:** `GET /search?q=...&format=short` (also a `format` form field on `/search/image`).
+- **Posting an AI-enhanced reel back:** the upload flow from section 11, with
+  `"as_reel": true` and optionally `"reel_of": "<source clip id>"` in `POST /uploads`.
+  A reel is kept as one whole-video clip (not cut into highlights), still scored for virality, and
+  starts private like every upload, so publish it with `POST /clips/{id}/publish`. `reel_of` must be
+  your own clip or a published one, or the request gets a 404.
+- Vertical uploads stay vertical end to end: the 720p rendition of a 9:16 video is 720x1280, and
+  moderation and 18+ gating apply to reels like any other clip.
 
 ## Troubleshooting
 

@@ -26,6 +26,7 @@ from app.db.models import (
     Clip,
     Event,
     Frame,
+    FrameHighlightRun,
     NotificationType,
     Segment,
     Session,
@@ -35,6 +36,7 @@ from app.db.models import (
 from app.db.session import get_sessionmaker
 from app.log import bind
 from app.ml.interfaces import DetectedEvent, Embedder, HighlightDetector, Transcriber, TranscriptChunk
+from app.services.frame_virality import image_visibility_score
 from app.ml.moderation import ContentPolicyViolation, get_moderator
 from app.services.queries import nearest_frame_key
 from app.services.social import notify
@@ -193,6 +195,9 @@ async def step_frames(ctx: Ctx) -> None:
 
     await asyncio.to_thread(ctx.deps.storage.delete_prefix, f"{prefix}/frames/")
     async with ctx.deps.sessionmaker() as db:
+        # New frames invalidate any on-demand frame score run. Score rows cascade when
+        # their old frame rows are replaced; deleting the run makes the API report none.
+        await db.execute(delete(FrameHighlightRun).where(FrameHighlightRun.session_id == ctx.session_id))
         await db.execute(delete(Frame).where(Frame.session_id == ctx.session_id))
         await db.commit()
 
@@ -200,6 +205,9 @@ async def step_frames(ctx: Ctx) -> None:
         batch = frames[i : i + st.embed_batch_size]
         images = [p.read_bytes() for _, p in batch]
         vectors = await asyncio.to_thread(ctx.deps.embedder.embed_images, images)
+        visibility_scores = await asyncio.gather(
+            *(asyncio.to_thread(image_visibility_score, image) for image in images)
+        )
         keys = [f"{prefix}/frames/{t:09d}.jpg" for t, _ in batch]
         await asyncio.to_thread(
             _upload_many, ctx.deps.storage, [(k, p, "image/jpeg") for k, (_, p) in zip(keys, batch, strict=True)], st.upload_concurrency
@@ -208,8 +216,16 @@ async def step_frames(ctx: Ctx) -> None:
             await db.execute(
                 insert(Frame),
                 [
-                    dict(session_id=ctx.session_id, t_ms=t, thumbnail_key=k, embedding=v)
-                    for (t, _), k, v in zip(batch, keys, vectors, strict=True)
+                    dict(
+                        session_id=ctx.session_id,
+                        t_ms=t,
+                        thumbnail_key=k,
+                        embedding=v,
+                        visibility_score=visibility,
+                    )
+                    for (t, _), k, v, visibility in zip(
+                        batch, keys, vectors, visibility_scores, strict=True
+                    )
                 ],
             )
             await db.commit()
@@ -384,7 +400,12 @@ async def step_finalize(ctx: Ctx) -> None:
         duration_ms = s.duration_ms or 0
         await db.execute(delete(Clip).where(Clip.session_id == s.id, Clip.kind == "auto"))
         events = (await db.execute(select(Event.t_ms, Event.type, Event.score).where(Event.session_id == s.id))).all()
-        windows = pick_highlight_windows([tuple(e) for e in events], duration_ms, st.clip_window_ms, st.auto_clip_count)
+        # A reel is already a finished edit: keep it whole instead of cutting highlights out of it.
+        windows = (
+            []
+            if s.is_reel
+            else pick_highlight_windows([tuple(e) for e in events], duration_ms, st.clip_window_ms, st.auto_clip_count)
+        )
         base_title = s.title or s.game or "Session"
         if windows:
             for start, end, t, typ in windows:
@@ -398,6 +419,7 @@ async def step_finalize(ctx: Ctx) -> None:
                         thumbnail_key=await nearest_frame_key(db, s.id, t) or s.poster_key,
                         status="ready",
                         kind="auto",
+                        generation_source="pipeline",
                         publish_state=st.new_clip_publish_state,
                         published_at=func.now() if st.new_clip_publish_state == "published" else None,
                         age_restricted=s.age_restricted,
@@ -415,6 +437,7 @@ async def step_finalize(ctx: Ctx) -> None:
                     thumbnail_key=s.poster_key,
                     status="ready",
                     kind="auto",
+                    generation_source="pipeline",
                     publish_state=st.new_clip_publish_state,
                     published_at=func.now() if st.new_clip_publish_state == "published" else None,
                     age_restricted=s.age_restricted,
@@ -491,6 +514,19 @@ async def run_pipeline(session_id: uuid.UUID | str, *, resume: bool = False, dep
             async with deps.sessionmaker() as db:
                 (await ctx.session(db)).status = SessionStatus.READY
                 await db.commit()
+            if deps.settings.auto_frame_highlights:
+                from app.worker.frame_highlights import auto_highlights_after_upload, run_frame_highlights
+
+                async with deps.sessionmaker() as db:
+                    is_reel = (await ctx.session(db)).is_reel
+                if is_reel:
+                    # Score it (for virality and Reels ranking) but keep the whole-video clip.
+                    try:
+                        await run_frame_highlights(session_id, deps, make_clips=False)
+                    except Exception:  # noqa: BLE001 - the reel is already usable
+                        log.warning("reel frame scoring failed", exc_info=True)
+                else:
+                    await auto_highlights_after_upload(session_id, deps)
             log.info("pipeline ready", extra={"secs": round(time.monotonic() - t_all, 2)})
             return SessionStatus.READY
         except ContentPolicyViolation as e:

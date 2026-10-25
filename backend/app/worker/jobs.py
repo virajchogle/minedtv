@@ -61,18 +61,35 @@ def creator_pack(clip_id: str) -> str:
     return asyncio.run(main())
 
 
-def virality(clip_id: str, platform: str = "general", target_audience: str | None = None, persona_count: int | None = None) -> str:
+def frame_highlights(session_id: str, requested_count: int, clip_duration_ms: int, make_clips: bool = True) -> str:
     from app.db.session import get_engine
-    from app.services.redis import get_redis
+    from app.worker.frame_highlights import run_frame_highlights
     from app.worker.pipeline import Deps
-    from app.worker.virality import run_virality
 
     settings = get_settings()
     setup_logging(settings.log_level, settings.log_json)
 
     async def main() -> str:
         try:
-            return await run_virality(clip_id, Deps.default(), platform, target_audience, persona_count, get_redis())
+            return await run_frame_highlights(session_id, Deps.default(), requested_count, clip_duration_ms, make_clips)
+        finally:
+            await get_engine().dispose()
+
+    return asyncio.run(main())
+
+
+def clip_highlights(clip_id: str, options: dict) -> str:
+    from app.db.session import get_engine
+    from app.services.redis import get_redis
+    from app.worker.clip_highlights import run_clip_highlights
+    from app.worker.pipeline import Deps
+
+    settings = get_settings()
+    setup_logging(settings.log_level, settings.log_json)
+
+    async def main() -> str:
+        try:
+            return await run_clip_highlights(clip_id, Deps.default(), options, get_redis())
         finally:
             await get_engine().dispose()
             await get_redis().aclose()

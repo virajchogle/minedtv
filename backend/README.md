@@ -1,4 +1,4 @@
-# MinedTV backend
+# MinedIt backend
 
 Stores, processes and serves gameplay recordings with plain-language search ("the clutch on Bind", "when my friend screamed") that jumps to the exact second.
 
@@ -73,7 +73,7 @@ Full spec: [`docs/openapi.json`](docs/openapi.json), or `/docs` on a running ser
 
 **API key:** when `API_KEYS` is set (it is in production), send `X-API-Key: <key>` on every request. Browser `EventSource` can't set headers, so `?api_key=<key>` also works. `/health`, `/docs` and `*.m3u8` playlists don't need it, so video players can fetch playlists directly. Get the key from whoever holds `.env.prod`. Don't commit it into a public repo; it's a speed bump against random traffic, not real auth.
 
-**Publish states:** a clip is `draft` (private, "My videos") or `published` (in the feed, search and other people's view of a profile). `ready` is a legacy private state kept for older clients. Unpublished clips are visible only to their owner: `GET /clips/{id}` returns 404 to anyone else, and `GET /users/{id}/clips?state=draft|ready|published|unpublished|all` is for the owner. Searching with `user_id` set to yourself includes your unpublished clips. `POST /clips/{id}/publish` also starts a YouTube virality check (which writes the creator pack on the way); virality checks run on any clip you own. Clip responses carry `youtube_url` once the clip has been posted to YouTube (`POST /clips/{id}/youtube`, for published clips). Clips the pipeline creates start as `NEW_CLIP_PUBLISH_STATE` (default `draft`). HLS playlists stay reachable by clip ID (players can't send headers), so treat an unpublished clip's ID as private.
+**Publish states:** a clip is `draft` (private, "My videos") or `published` (in the feed, search and other people's view of a profile). `ready` is a legacy private state kept for older clients. Unpublished clips are visible only to their owner: `GET /clips/{id}` returns 404 to anyone else, and `GET /users/{id}/clips?state=draft|ready|published|unpublished|all` is for the owner. Searching with `user_id` set to yourself includes your unpublished clips. Clip responses carry `youtube_url` once the clip has been posted to YouTube (`POST /clips/{id}/youtube`, for published clips). Clips the pipeline creates start as `NEW_CLIP_PUBLISH_STATE` (default `draft`). HLS playlists stay reachable by clip ID (players can't send headers), so treat an unpublished clip's ID as private.
 
 **Social:** comments allow one level of replies (replying to a reply attaches to its top-level comment) and are limited to 1000 characters. Only clips you can see can be commented on, so drafts are owner-only. Deleting a comment deletes its replies. Counts (comments, followers, following) are computed from the rows on each read, so they can't drift. **Notifications** are written in the same transaction as the action that causes them:
 - a like on your clip, written once per person per clip
@@ -106,6 +106,7 @@ For TikTok and Reels, use the MP4 export plus the phone's share sheet instead: t
 | GET | `/sessions/{id}` | `sessions.get.json`, `sessions.get.failed.json` |
 | GET | `/sessions/{id}/status` (SSE `status` events, closes when `done`) | `sessions.status.sse.txt` |
 | POST | `/sessions/{id}/reprocess` (resumes from the failed step) | `sessions.reprocess.json` |
+| POST/GET | `/sessions/{id}/frame-highlights` (owner only; POST starts, GET polls) | `sessions.frame-highlights.json` |
 | GET | `/sessions/{id}/playlist.m3u8?start_ms=&end_ms=` | |
 | GET | `/feed?cursor=&limit=&game=` | `feed.json` |
 | GET | `/clips/{id}` (with events + transcript in range) | `clips.get.json` |
@@ -115,7 +116,7 @@ For TikTok and Reels, use the MP4 export plus the phone's share sheet instead: t
 | POST/GET | `/clips/{id}/export` (MP4 for TikTok/Reels; POST starts it, GET polls until `ready`) | `clips.export.*.json` |
 | POST | `/clips/{id}/publish` · `/unpublish` · `/mark-ready` (owner only) | `clips.publish.json` |
 | POST/GET | `/clips/{id}/creator-pack` (Gemini titles, captions, YouTube metadata for an uploaded clip) | |
-| POST/GET | `/clips/{id}/virality` (synthetic audience panel; **unpublished clips only**, owner only) | |
+| GET/POST | `/clips/{id}/virality` (frame-scorer score, verdict, signals and per-moment curve; owner only. POST scores an upload from before auto-scoring) | |
 | GET/POST | `/clips/{id}/comments` (top-level newest first, each with replies; POST `{body, parent_id?}`) · DELETE `/comments/{id}` (author or clip owner) | `comments.list.json` |
 | GET | `/users/{id}` (profile: follower/following counts, published clip count, `followed_by_me`, `follows_me`) | `users.profile.json` |
 | POST/DELETE | `/users/{id}/follow` · GET `/users/{id}/followers` · `/users/{id}/following` · GET `/feed/following` | `users.follow.json` |
@@ -127,9 +128,40 @@ For TikTok and Reels, use the MP4 export plus the phone's share sheet instead: t
 | GET | `/search?q=&game=&user_id=&from=&to=&limit=` | `search.json` |
 | POST | `/search/image` (multipart `image`, optional `game`, `user_id`, `limit`) | `search.image.json` |
 | POST | `/creator/analyze` (multipart `video`) | Gemini-generated transcript, summary, captions, and platform metadata |
+| POST | `/creator/highlights` (multipart `video`) | `creator.highlights.json` |
 | POST | `/creator/simulate` (multipart `video`, `platform`, optional `target_audience`, `persona_count`) | `creator.simulate.json` |
 | POST | `/creator/simulate-analysis` (JSON with an `/creator/analyze` result plus persona options) | `creator.simulate.json` |
 | GET | `/health` | `health.json` |
+
+**Frame highlights:** this runs automatically when an upload finishes processing (`AUTO_FRAME_HIGHLIGHTS`,
+default on): its clips replace the pipeline's event-based ones, which are kept only if the scorer can't cut
+any. A clip's virality (`/clips/{id}/virality`) is the average of its strongest frame scores. To re-run by
+hand after a session is ready, POST `/sessions/{id}/frame-highlights` with an optional
+`{"count": 3, "clip_duration_ms": 30000}` body, then poll GET until `status` is `ready`. The worker reuses
+the sampled frame embeddings, visibility measurements, detector events, and transcript already produced by
+the upload pipeline; it does not decode or upload the video again. Legacy frames calculate and persist their
+visibility the first time they are scored. Each frame gets visual, novelty, visibility, sustained-scene, event,
+and speech component scores. The strongest non-overlapping peaks become draft clips with
+`generation_source: "frame_virality"`, while existing pipeline and manual clips are preserved. Viral prompt
+embeddings are cached per worker process, and a repeat POST with unchanged options returns the stored result.
+
+**Standalone montage:** `POST /creator/highlights` accepts the video itself as multipart form data, samples and
+scores frames in one pass, then selects up to six distinct major moments based on source length and signal
+strength. Absolute luminance/visible-area/contrast scoring prevents nearly black frames from winning on CLIP
+similarity alone, while an eight-second neighborhood signal favors sustained action over isolated title cards or
+cuts. Each moment expands through nearby supporting frames, preserves short score dips for setup/payoff, and is
+kept to a concise 4-10 second range. Weak local maxima are discarded instead of padding the output. The selected
+ranges are rendered chronologically and joined into one phone-compatible 720x1280 H.264/AAC montage: a blurred
+9:16 background fills the screen while the sharp source remains fully visible instead of being cropped. The
+assembled audio is transcribed once and timed speech/accessibility cues are burned into the final montage. A
+configured `TRANSCRIBER_BACKEND` is tried first; Gemini provides the compact-audio fallback when `GEMINI_API_KEY`
+is set. If neither provider produces cues, the montage still succeeds and reports
+`captions_burned: false`. The response includes playback/download URLs, output dimensions, caption count, and
+caption source, plus every source range included in `moments`. It does not create a user or session and does not need Postgres, Redis, object storage, or the
+persona simulator.
+It does require `ffmpeg`/`ffprobe` and a real CLIP-compatible embedder for meaningful visual rankings. Direct
+outputs expire after `STANDALONE_HIGHLIGHT_TTL_S` (24 hours by default). The API container installs FFmpeg;
+local Windows setups can point `FFMPEG_BINARY` and `FFPROBE_BINARY` at project-local executables.
 
 **Playback:** hand `playlist_url` to ExoPlayer/Media3 (Android), AVPlayer (iOS) or hls.js (web). Playback is segment-granular. The playlist starts at the segment containing `start_ms`, with `EXT-X-START` set to the exact offset. Segment URLs are presigned GETs valid for an hour, or plain public URLs if `STORAGE_PUBLIC_BASE_URL` is set. Re-fetch the playlist if a player sits open longer than that.
 

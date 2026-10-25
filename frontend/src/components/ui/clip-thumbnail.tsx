@@ -5,7 +5,7 @@ import { Play } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
- * Gold/dark clip thumbnail per the MinedTv UI spec — 16:9, radius 14 (10
+ * Gold/dark clip thumbnail per the MinedIt UI spec — 16:9, radius 14 (10
  * compact), centred play button, bottom-right duration badge. Used wherever
  * real clip data is rendered on /explore; no fabricated game chip, since the
  * backend doesn't tag clips with a game.

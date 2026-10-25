@@ -2,12 +2,11 @@
 
 /**
  * Everything you can do with a clip beyond watching it:
- *  - publish state (owner): private (My videos) → published on MinedTV, which
- *    also starts the virality check and the AI creator pack
+ *  - publish state (owner): private (My videos) → published on MinedIt
  *  - post to YouTube (owner, published clips)
  *  - like (anyone acting as a user)
  *  - owner only: MP4 export for TikTok/Reels, the AI creator pack (titles,
- *    caption, hashtags, YouTube metadata) and the virality check
+ *    caption, hashtags, YouTube metadata) and the virality score (frame scorer)
  *
  * The last three are background jobs on the backend: start with POST, then
  * poll GET until `ready`. Existing results are loaded on mount.
@@ -16,6 +15,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
+  Clapperboard,
   Check,
   Copy,
   Download,
@@ -30,7 +30,8 @@ import {
   Youtube,
 } from "lucide-react";
 
-import { ChooseUserNotice, useCurrentUser } from "@/components/current-user";
+import { useCurrentUser } from "@/components/current-user";
+import { ShareMenu } from "@/components/share-menu";
 import { ViralityReport } from "@/components/virality-report";
 import {
   disconnectYouTube,
@@ -38,6 +39,7 @@ import {
   getYouTubeConnectUrl,
   getYouTubeStatus,
   getYouTubeUploads,
+  getMontage,
   getExport,
   getVirality,
   postToYouTube,
@@ -45,17 +47,21 @@ import {
   setLiked,
   startCreatorPack,
   startExport,
-  startVirality,
+  startMontage,
+  scoreVirality,
   unpublishClip,
   type PublishState,
   type Video,
-  type ViralityOptions,
 } from "@/lib/api";
 import type {
   ClipCreatorPackOut,
+  ClipHighlightsOut,
   ClipViralityOut,
   CreatorPlatform,
   ExportOut,
+  HighlightCaptionStyle,
+  HighlightMode,
+  HighlightOptions,
   JobStatus,
   YouTubePrivacy,
   YouTubeStatusOut,
@@ -71,13 +77,13 @@ const STATE_COPY: Record<PublishState, { label: string; tone: string; hint: stri
   draft: {
     label: "Private",
     tone: "border-white/25 bg-white/10 text-white/80",
-    hint: "In My videos: only you can see it. Publishing puts it on MinedTV and runs the virality check.",
+    hint: "In My videos: only you can see it. Publish to put it on MinedIt.",
   },
   // Legacy state from before publish-then-post; shown exactly like a private clip.
   ready: {
     label: "Private",
     tone: "border-white/25 bg-white/10 text-white/80",
-    hint: "In My videos: only you can see it. Publishing puts it on MinedTV and runs the virality check.",
+    hint: "In My videos: only you can see it. Publish to put it on MinedIt.",
   },
   published: {
     label: "Published",
@@ -111,11 +117,12 @@ function Panel({
   children: React.ReactNode;
   aside?: React.ReactNode;
 }) {
+  // Sections are separated by a rule, not boxed: the side column reads as one surface.
   return (
-    <section className="space-y-3 rounded-2xl border border-[var(--mtv-divider)] bg-[var(--mtv-surface)] p-4">
+    <section className="space-y-3 border-t border-[var(--mtv-divider)] pt-5 first:border-t-0 first:pt-0">
       <div className="flex items-center justify-between gap-3">
-        <h3 className="flex items-center gap-2 text-sm font-semibold">
-          <Icon className="h-4 w-4 text-[var(--mtv-gold)]" />
+        <h3 className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.2em] text-[var(--mtv-text-2)]">
+          <Icon className="h-3.5 w-3.5" />
           {title}
         </h3>
         {aside}
@@ -180,7 +187,7 @@ function CopyButton({ text }: { text: string }) {
 }
 
 /**
- * A backend job (export / creator pack / virality): loads the current state,
+ * A backend job (export / creator pack / virality scoring): loads the current state,
  * starts it on demand and polls while it's processing.
  */
 function useJob<T extends { status: JobStatus; error: string | null }>(
@@ -444,90 +451,38 @@ function CreatorPackSection({ video }: { video: Video }) {
   );
 }
 
-const PLATFORMS: CreatorPlatform[] = ["youtube", "tiktok", "instagram", "reddit", "general"];
 
 
 function ViralitySection({ video }: { video: Video }) {
-  const [options, setOptions] = useState<ViralityOptions>({ platform: "youtube", target_audience: "", persona_count: 9 });
-  const [submitted, setSubmitted] = useState<ViralityOptions>(options);
   const job = useJob<ClipViralityOut>(
-    () => getVirality(video.video_id, submitted),
-    () => startVirality(video.video_id, submitted),
-    [video.video_id, video.start_ms, video.end_ms, video.publish_state, submitted.platform, submitted.target_audience, submitted.persona_count]
+    () => getVirality(video.video_id),
+    () => scoreVirality(video.video_id),
+    [video.video_id, video.start_ms, video.end_ms]
   );
-  const result = job.state?.status === "ready" ? job.state.result : null;
-
-  // Changing the options switches to their own result; "Run check" then starts it.
-  const startAfterSwitch = useRef(false);
-  const runJob = job.run;
-  useEffect(() => {
-    if (startAfterSwitch.current) {
-      startAfterSwitch.current = false;
-      void runJob();
-    }
-  }, [submitted, runJob]);
-
-  const onRun = () => {
-    const next = { ...options, target_audience: options.target_audience?.trim() || null };
-    if (JSON.stringify(next) === JSON.stringify(submitted)) void job.run();
-    else {
-      startAfterSwitch.current = true;
-      setSubmitted(next);
-    }
-  };
-
+  const v = job.state;
   return (
-    <Panel icon={TrendingUp} title="Virality check" aside={<span className="text-[11px] text-[var(--mtv-text-2)]">runs on publish</span>}>
-      <p className="text-xs text-[var(--mtv-text-2)]">
-        A synthetic audience panel reacts to this clip. Publishing runs it for YouTube automatically; run it here
-        for other platforms or audiences. It&apos;s a creative testing aid, not a forecast. Takes a few minutes.
-      </p>
-      <div className="flex flex-wrap items-end gap-2">
-        <label className="space-y-1 text-[11px] text-[var(--mtv-text-2)]">
-          Platform
-          <select
-            value={options.platform}
-            onChange={(e) => setOptions({ ...options, platform: e.target.value as CreatorPlatform })}
-            className="block rounded-lg border border-[var(--mtv-divider)] bg-[var(--mtv-surface-high)] px-2 py-1.5 text-[13px] text-[var(--mtv-text)]"
-          >
-            {PLATFORMS.map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="min-w-[12rem] flex-1 space-y-1 text-[11px] text-[var(--mtv-text-2)]">
-          Target audience (optional)
-          <input
-            value={options.target_audience ?? ""}
-            onChange={(e) => setOptions({ ...options, target_audience: e.target.value })}
-            placeholder="e.g. competitive Valorant players"
-            className="block w-full rounded-lg border border-[var(--mtv-divider)] bg-[var(--mtv-surface-high)] px-2 py-1.5 text-[13px] text-[var(--mtv-text)]"
-          />
-        </label>
-        <label className="space-y-1 text-[11px] text-[var(--mtv-text-2)]">
-          Personas
-          <input
-            type="number"
-            min={3}
-            max={15}
-            value={options.persona_count ?? 9}
-            onChange={(e) => setOptions({ ...options, persona_count: Number(e.target.value) || 9 })}
-            className="block w-16 rounded-lg border border-[var(--mtv-divider)] bg-[var(--mtv-surface-high)] px-2 py-1.5 text-[13px] text-[var(--mtv-text)]"
-          />
-        </label>
-        <ActionButton variant="gold" busy={job.busy} onClick={onRun}>
-          {job.busy ? "Simulating…" : "Run check"}
-        </ActionButton>
-      </div>
-
-      {result && <ViralityReport result={result} />}
+    <Panel icon={TrendingUp} title="Virality">
+      {v?.status === "ready" ? (
+        <ViralityReport v={v} />
+      ) : job.busy ? (
+        <p className="flex items-center gap-2 text-xs text-[var(--mtv-text-2)]">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Scoring every moment of this upload… a few seconds.
+        </p>
+      ) : (
+        <>
+          <p className="text-xs text-[var(--mtv-text-2)]">
+            Uploads are scored automatically. This one is from before that, so score it now; it doesn&apos;t
+            change any of your clips.
+          </p>
+          <ActionButton variant="gold" onClick={() => void job.run()}>
+            Score this upload
+          </ActionButton>
+        </>
+      )}
       <ErrorLine message={job.error} />
     </Panel>
   );
 }
-
 
 const PRIVACY: { value: YouTubePrivacy; label: string }[] = [
   { value: "private", label: "Private" },
@@ -641,7 +596,7 @@ function YouTubeSection({ video }: { video: Video }) {
       {status?.configured && !status.connected && (
         <>
           <p className="text-xs text-[var(--mtv-text-2)]">
-            Connect your channel once; clips then upload straight from MinedTV.
+            Connect your channel once; clips then upload straight from MinedIt.
           </p>
           <ActionButton variant="gold" busy={phase === "connecting"} onClick={() => void connect()}>
             <Youtube className="h-3.5 w-3.5" /> Connect YouTube
@@ -653,7 +608,7 @@ function YouTubeSection({ video }: { video: Video }) {
           <p className="text-xs text-[var(--mtv-text-2)]">
             {postable
               ? "Uploads this clip with the title, description and tags from its AI creator pack (written first if it doesn't exist yet)."
-              : "Publish it on MinedTV first."}{" "}
+              : "Publish it on MinedIt first."}{" "}
             Until Google approves the app, YouTube keeps uploads private.
           </p>
           {postable && (
@@ -710,24 +665,238 @@ function YouTubeSection({ video }: { video: Video }) {
 
 // ── the panel ────────────────────────────────────────────────────────────────
 
-export function ClipActions({ video, onChange }: { video: Video; onChange: (v: Video) => void }) {
+const MONTAGE_STAGE: Record<ClipHighlightsOut["stage"], string> = {
+  queued: "Queued",
+  exporting: "Preparing the clip",
+  analyzing: "Finding the best moments",
+  selecting: "Picking the cuts",
+  captioning: "Writing captions",
+  rendering: "Rendering",
+};
+
+const MONTAGE_CUTS: { value: HighlightMode; label: string; hint: string }[] = [
+  { value: "montage", label: "Montage", hint: "The best moments cut together, framed for the platform, with captions." },
+  { value: "single", label: "Best moment", hint: "Just the single strongest moment, framed for the platform, with captions." },
+];
+
+const MONTAGE_FORMATS: { value: CreatorPlatform; label: string }[] = [
+  { value: "youtube", label: "YouTube Shorts" },
+  { value: "tiktok", label: "TikTok" },
+  { value: "instagram", label: "Reels" },
+];
+
+/**
+ * An AI edit of the clip (the backend's /highlights render): a montage of the best moments or the
+ * single best one, framed for a platform, with burned-in captions and a hook. Once it's rendered
+ * it can be downloaded or posted straight to YouTube.
+ */
+function MontageSection({ video }: { video: Video }) {
+  const [options, setOptions] = useState<HighlightOptions>({
+    platform: "youtube",
+    mode: "montage",
+    captions: true,
+    caption_style: "bold",
+    hook: true,
+  });
+  const job = useJob<ClipHighlightsOut>(
+    () => getMontage(video.video_id, options),
+    () => startMontage(video.video_id, options),
+    [video.video_id, video.start_ms, video.end_ms, options.platform, options.mode, options.captions, options.caption_style, options.hook]
+  );
+  const result = job.state?.status === "ready" ? job.state : null;
+
+  const [youtube, setYoutube] = useState<YouTubeStatusOut | null>(null);
+  const [posting, setPosting] = useState(false);
+  const [post, setPost] = useState<YouTubeUploadOut | null>(null);
+  const [postError, setPostError] = useState<string | null>(null);
+  useEffect(() => {
+    getYouTubeStatus().then(setYoutube, () => setYoutube(null));
+  }, []);
+
+  // Follow the YouTube post until it's done.
+  const postInFlight = post?.status === "queued" || post?.status === "uploading";
+  useEffect(() => {
+    if (!postInFlight || !post) return;
+    const timer = setTimeout(() => {
+      getYouTubeUploads(video.video_id).then((list) => {
+        const latest = list.find((u) => u.id === post.id);
+        if (latest) setPost(latest);
+      }, () => undefined);
+    }, POLL_MS);
+    return () => clearTimeout(timer);
+  }, [postInFlight, post, video.video_id]);
+
+  const postToChannel = async () => {
+    setPosting(true);
+    setPostError(null);
+    try {
+      setPost(await postToYouTube(video.video_id, { privacy: "private", montage: options }));
+    } catch (e) {
+      setPostError(e instanceof Error ? e.message : "Could not post to YouTube");
+    } finally {
+      setPosting(false);
+    }
+  };
+
+  const connect = async () => {
+    try {
+      window.location.href = await getYouTubeConnectUrl();
+    } catch (e) {
+      setPostError(e instanceof Error ? e.message : "Could not start the YouTube connection");
+    }
+  };
+
+  const set = (patch: Partial<HighlightOptions>) => setOptions((o) => ({ ...o, ...patch }));
+  const select =
+    "block rounded-lg border border-[var(--mtv-divider)] bg-[var(--mtv-surface-high)] px-2 py-1.5 text-[13px] text-[var(--mtv-text)]";
+  const vertical = result?.width && result?.height ? result.height > result.width : true;
+
+  return (
+    <Panel icon={Clapperboard} title="Montage & best moment">
+      <div className="grid grid-cols-2 gap-1 rounded-lg bg-[var(--mtv-surface-high)] p-1">
+        {MONTAGE_CUTS.map((c) => (
+          <button
+            key={c.value}
+            type="button"
+            onClick={() => set({ mode: c.value })}
+            className={cn(
+              "rounded-md px-2 py-1.5 text-[13px] font-semibold transition-colors",
+              options.mode === c.value ? "bg-[var(--mtv-gold)] text-black" : "text-[var(--mtv-text-2)] hover:text-[var(--mtv-text)]"
+            )}
+          >
+            {c.label}
+          </button>
+        ))}
+      </div>
+      <p className="text-xs text-[var(--mtv-text-2)]">{MONTAGE_CUTS.find((c) => c.value === options.mode)?.hint}</p>
+      <div className="grid grid-cols-2 gap-2 text-[11px] text-[var(--mtv-text-2)]">
+        <label className="space-y-1">
+          For
+          <select value={options.platform} onChange={(e) => set({ platform: e.target.value as CreatorPlatform })} className={select}>
+            {MONTAGE_FORMATS.map((f) => (
+              <option key={f.value} value={f.value}>
+                {f.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="space-y-1">
+          Captions
+          <select
+            value={options.captions ? options.caption_style : "off"}
+            onChange={(e) =>
+              e.target.value === "off"
+                ? set({ captions: false })
+                : set({ captions: true, caption_style: e.target.value as HighlightCaptionStyle })
+            }
+            className={select}
+          >
+            <option value="bold">Bold</option>
+            <option value="gamer">Gamer</option>
+            <option value="minimal">Minimal</option>
+            <option value="off">Off</option>
+          </select>
+        </label>
+        <label className="flex items-end gap-2 pb-1.5 text-[13px] text-[var(--mtv-text)]">
+          <input type="checkbox" checked={options.hook} onChange={(e) => set({ hook: e.target.checked })} />
+          Hook line
+        </label>
+      </div>
+
+      {!result && (
+        <ActionButton variant="gold" busy={job.busy} onClick={() => void job.run()}>
+          {job.busy ? "Making it…" : options.mode === "montage" ? "Make montage" : "Cut best moment"}
+        </ActionButton>
+      )}
+      {job.state?.status === "processing" && (
+        <div className="space-y-1">
+          <div className="h-1.5 overflow-hidden rounded-full bg-[var(--mtv-surface-high)]">
+            <div
+              className="h-full rounded-full bg-[var(--mtv-gold)] transition-[width] duration-500"
+              style={{ width: `${Math.max(4, Math.round(job.state.progress * 100))}%` }}
+            />
+          </div>
+          <p className="text-[11px] text-[var(--mtv-text-2)]">{MONTAGE_STAGE[job.state.stage]}…</p>
+        </div>
+      )}
+
+      {result?.video_url && (
+        <div className="space-y-3">
+          <video
+            key={result.video_url}
+            src={result.video_url}
+            controls
+            playsInline
+            className={cn("w-full rounded-xl bg-black", vertical ? "mx-auto aspect-[9/16] max-h-[460px] w-auto" : "aspect-video")}
+          />
+          <div className="flex flex-wrap gap-2">
+            {youtube?.configured && !youtube.connected ? (
+              <ActionButton variant="gold" onClick={() => void connect()}>
+                <Youtube className="h-3.5 w-3.5" /> Connect YouTube
+              </ActionButton>
+            ) : video.publish_state === "published" ? (
+              <ActionButton variant="gold" busy={posting || postInFlight} onClick={() => void postToChannel()} disabled={!youtube?.connected}>
+                <Youtube className="h-3.5 w-3.5" />
+                {postInFlight ? "Posting…" : post?.status === "published" ? "Post again" : "Post to YouTube"}
+              </ActionButton>
+            ) : null}
+            <a
+              href={result.download_url ?? result.video_url}
+              download
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--mtv-divider)] px-3 py-1.5 text-[13px] font-semibold hover:bg-[var(--mtv-surface-high)]"
+            >
+              <Download className="h-3.5 w-3.5" /> Download
+            </a>
+          </div>
+          {video.publish_state !== "published" && (
+            <p className="text-[11px] text-[var(--mtv-text-2)]">Publish the clip to post this to YouTube.</p>
+          )}
+          {post?.status === "published" && post.url && (
+            <a href={post.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[13px] text-[var(--mtv-gold)] hover:underline">
+              Posted · open on YouTube <ExternalLink className="h-3 w-3" />
+            </a>
+          )}
+          {post?.status === "failed" && <ErrorLine message={post.error} />}
+          {result.suggested_caption && <CopyRow label="Caption" text={result.suggested_caption} />}
+          {result.hashtags.length > 0 && (
+            <CopyRow label="Hashtags" text={result.hashtags.map((h) => `#${h.replace(/^#/, "")}`).join(" ")} />
+          )}
+        </div>
+      )}
+      <ErrorLine message={postError ?? job.error} />
+    </Panel>
+  );
+}
+
+/** Like, views and Share, under the player. */
+export function EngagementBar({ video, onChange }: { video: Video; onChange: (v: Video) => void }) {
   const me = useCurrentUser();
   if (video.kind !== "clip") return null;
   const isOwner = Boolean(me && video.owner_id === me.id);
-
   return (
-    <div className="space-y-4">
+    <div className="flex flex-wrap items-start gap-3">
       <LikeButton video={video} onChange={onChange} />
-      {!me && <ChooseUserNotice action="like clips, or use the AI tools on your own" />}
-      {isOwner && <PublishSection video={video} onChange={onChange} />}
-      {isOwner && video.publish_state === "published" && <YouTubeSection video={video} />}
-      {isOwner && (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <ExportSection video={video} />
-          <CreatorPackSection video={video} />
+      <ShareMenu video={video} isOwner={isOwner} />
+    </div>
+  );
+}
+
+/** The owner's tools for a clip: publishing, YouTube, virality, the AI creator pack and MP4. */
+export function OwnerTools({ video, onChange }: { video: Video; onChange: (v: Video) => void }) {
+  const me = useCurrentUser();
+  if (video.kind !== "clip" || !me || video.owner_id !== me.id) return null;
+  return (
+    <div className="space-y-5">
+      <PublishSection video={video} onChange={onChange} />
+      {video.publish_state === "published" && (
+        <div id="post-to-youtube" className="scroll-mt-28">
+          <YouTubeSection video={video} />
         </div>
       )}
-      {isOwner && <ViralitySection video={video} />}
+      <MontageSection video={video} />
+      <ViralitySection video={video} />
+      <CreatorPackSection video={video} />
+      <ExportSection video={video} />
     </div>
   );
 }

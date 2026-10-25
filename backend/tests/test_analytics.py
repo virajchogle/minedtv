@@ -79,3 +79,35 @@ async def test_analytics_owner_only(sessionmaker):  # noqa: F811
             with pytest.raises(HTTPException) as e:
                 await analytics_api.user_analytics(owner.id, db, _Urls(), who, days=30)
             assert e.value.status_code == 403
+
+
+class _Req:
+    def __init__(self, ip="203.0.113.7"):
+        self.headers = {"x-forwarded-for": f"{ip}, 10.0.0.1"}
+        self.client = None
+
+
+async def test_views_count_once_per_viewer_and_not_for_owner(sessionmaker, clean_counters):  # noqa: F811
+    from app.api import clips as clips_api
+
+    owner, clip = await _draft_clip(sessionmaker)
+    async with sessionmaker() as db:
+        clip_row = await db.get(type(clip), clip.id)
+        clip_row.publish_state = "published"
+        fan = User(username=f"fan_{uuid.uuid4().hex[:6]}")
+        db.add(fan)
+        await db.commit()
+        r = get_redis()
+        async for k in r.scan_iter(f"viewed:{clip.id}:*"):
+            await r.delete(k)
+
+        for _ in range(3):  # a refreshing fan counts once
+            await clips_api.view(clip.id, _Req(), db, fan, None)
+        await clips_api.view(clip.id, _Req(), db, owner, None)  # owners don't count
+        await clips_api.view(clip.id, _Req(), db, None, "browser-a")  # two anonymous browsers
+        await clips_api.view(clip.id, _Req(), db, None, "browser-a")
+        await clips_api.view(clip.id, _Req(), db, None, "browser-b")
+        await clips_api.view(clip.id, _Req("198.51.100.1"), db, None, None)  # no ID: by IP
+        await clips_api.view(clip.id, _Req("198.51.100.1"), db, None, None)
+
+    assert (await counters.pending([clip.id]))[clip.id][0] == 4

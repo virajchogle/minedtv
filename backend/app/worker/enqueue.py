@@ -41,15 +41,30 @@ def enqueue_creator_pack(clip_id: uuid.UUID) -> str:
     return job.id
 
 
-def enqueue_virality(clip_id: uuid.UUID, platform: str, target_audience: str | None, persona_count: int | None) -> str:
+def enqueue_frame_highlights(
+    session_id: uuid.UUID, requested_count: int, clip_duration_ms: int, make_clips: bool = True
+) -> str:
     job = get_queue().enqueue(
-        "app.worker.jobs.virality",
+        "app.worker.jobs.frame_highlights",
+        str(session_id),
+        requested_count=requested_count,
+        clip_duration_ms=clip_duration_ms,
+        make_clips=make_clips,
+        job_id=f"frame-highlights-{session_id}-{uuid.uuid4().hex[:8]}",
+        job_timeout=900,
+        result_ttl=3600,
+        failure_ttl=86400,
+    )
+    return job.id
+
+
+def enqueue_clip_highlights(clip_id: uuid.UUID, options: dict) -> str:
+    job = get_queue().enqueue(
+        "app.worker.jobs.clip_highlights",
         str(clip_id),
-        platform=platform,
-        target_audience=target_audience,
-        persona_count=persona_count,
-        job_id=f"virality-{clip_id}-{uuid.uuid4().hex[:8]}",
-        job_timeout=1800,  # export + creator pack + persona panel
+        options=options,
+        job_id=f"clip-highlights-{clip_id}-{uuid.uuid4().hex[:8]}",
+        job_timeout=1800,
         result_ttl=3600,
         failure_ttl=86400,
     )

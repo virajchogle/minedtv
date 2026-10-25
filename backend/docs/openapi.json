@@ -6,6 +6,157 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/auth/signup": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Signup",
+        "description": "Create an account. Emails listed in DEV_EMAILS become dev accounts.",
+        "operationId": "signup_auth_signup_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignupIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Login",
+        "description": "Sign in with username or email.",
+        "operationId": "login_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Me",
+        "description": "The signed-in account (not whoever a dev account is acting as).",
+        "operationId": "me_auth_me_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Logout",
+        "description": "Tokens are stateless, so signing out means the client drops its token.",
+        "operationId": "logout_auth_logout_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        }
+      }
+    },
     "/uploads": {
       "post": {
         "tags": [
@@ -29,10 +180,28 @@
                   "type": "null"
                 }
               ],
-              "description": "Acting user's ID (demo identity, no auth yet)",
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
               "title": "X-User-Id"
             },
-            "description": "Acting user's ID (demo identity, no auth yet)"
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
           }
         ],
         "requestBody": {
@@ -102,10 +271,28 @@
                   "type": "null"
                 }
               ],
-              "description": "Acting user's ID (demo identity, no auth yet)",
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
               "title": "X-User-Id"
             },
-            "description": "Acting user's ID (demo identity, no auth yet)"
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
           }
         ],
         "responses": {
@@ -158,6 +345,176 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SessionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{session_id}/frame-highlights": {
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Create Frame Highlights",
+        "description": "Score existing sampled frames and generate private highlight clips. This is on-demand and\ndoes not decode the video again. Poll the matching GET until status is ready or failed.",
+        "operationId": "create_frame_highlights_sessions__session_id__frame_highlights_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
+              "title": "X-User-Id"
+            },
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FrameHighlightsCreate",
+                "default": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FrameHighlightsOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Get Frame Highlights",
+        "description": "Return frame scores and generated clips for the current frame-highlight run.",
+        "operationId": "get_frame_highlights_sessions__session_id__frame_highlights_get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
+              "title": "X-User-Id"
+            },
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FrameHighlightsOut"
                 }
               }
             }
@@ -248,10 +605,28 @@
                   "type": "null"
                 }
               ],
-              "description": "Acting user's ID (demo identity, no auth yet)",
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
               "title": "X-User-Id"
             },
-            "description": "Acting user's ID (demo identity, no auth yet)"
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
           }
         ],
         "responses": {
@@ -389,10 +764,28 @@
                   "type": "null"
                 }
               ],
-              "description": "Acting user's ID (demo identity, no auth yet)",
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
               "title": "X-User-Id"
             },
-            "description": "Acting user's ID (demo identity, no auth yet)"
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
           }
         ],
         "responses": {
@@ -450,10 +843,28 @@
                   "type": "null"
                 }
               ],
-              "description": "Acting user's ID (demo identity, no auth yet)",
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
               "title": "X-User-Id"
             },
-            "description": "Acting user's ID (demo identity, no auth yet)"
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
           }
         ],
         "requestBody": {
@@ -520,10 +931,28 @@
                   "type": "null"
                 }
               ],
-              "description": "Acting user's ID (demo identity, no auth yet)",
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
               "title": "X-User-Id"
             },
-            "description": "Acting user's ID (demo identity, no auth yet)"
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
           }
         ],
         "responses": {
@@ -610,10 +1039,28 @@
                   "type": "null"
                 }
               ],
-              "description": "Acting user's ID (demo identity, no auth yet)",
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
               "title": "X-User-Id"
             },
-            "description": "Acting user's ID (demo identity, no auth yet)"
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
           }
         ],
         "requestBody": {
@@ -682,10 +1129,28 @@
                   "type": "null"
                 }
               ],
-              "description": "Acting user's ID (demo identity, no auth yet)",
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
               "title": "X-User-Id"
             },
-            "description": "Acting user's ID (demo identity, no auth yet)"
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
           }
         ],
         "responses": {
@@ -742,10 +1207,28 @@
                   "type": "null"
                 }
               ],
-              "description": "Acting user's ID (demo identity, no auth yet)",
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
               "title": "X-User-Id"
             },
-            "description": "Acting user's ID (demo identity, no auth yet)"
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
           }
         ],
         "responses": {
@@ -778,6 +1261,7 @@
           "clips"
         ],
         "summary": "View",
+        "description": "Count a view. Repeat views by the same viewer within VIEW_DEDUP_MINUTES count once, and\nowners watching their own clips don't count.",
         "operationId": "view_clips__clip_id__view_post",
         "parameters": [
           {
@@ -789,6 +1273,24 @@
               "format": "uuid",
               "title": "Clip Id"
             }
+          },
+          {
+            "name": "x-viewer-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Stable anonymous ID for a signed-out viewer (one per browser or install)",
+              "title": "X-Viewer-Id"
+            },
+            "description": "Stable anonymous ID for a signed-out viewer (one per browser or install)"
           },
           {
             "name": "x-user-id",
@@ -804,10 +1306,28 @@
                   "type": "null"
                 }
               ],
-              "description": "Acting user's ID (demo identity, no auth yet)",
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
               "title": "X-User-Id"
             },
-            "description": "Acting user's ID (demo identity, no auth yet)"
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
           }
         ],
         "responses": {
@@ -840,7 +1360,7 @@
           "clips"
         ],
         "summary": "Get Export",
-        "description": "Status of the MP4 export for the clip's current range.",
+        "description": "Status of the MP4 export for the clip's current range (owner only).",
         "operationId": "get_export_clips__clip_id__export_get",
         "parameters": [
           {
@@ -852,6 +1372,43 @@
               "format": "uuid",
               "title": "Clip Id"
             }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
+              "title": "X-User-Id"
+            },
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
           }
         ],
         "responses": {
@@ -882,7 +1439,7 @@
           "clips"
         ],
         "summary": "Start Export",
-        "description": "Render the clip as an MP4 (for TikTok/Reels). Idempotent: returns the existing export if\nit's ready or in progress. Poll GET until status is 'ready', then download `url`.",
+        "description": "Render the clip as an MP4 (for TikTok/Reels; owner only). Idempotent: returns the existing\nexport if it's ready or in progress. Poll GET until status is 'ready', then download `url`.",
         "operationId": "start_export_clips__clip_id__export_post",
         "parameters": [
           {
@@ -894,6 +1451,43 @@
               "format": "uuid",
               "title": "Clip Id"
             }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
+              "title": "X-User-Id"
+            },
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
           }
         ],
         "responses": {
@@ -926,7 +1520,7 @@
           "clips"
         ],
         "summary": "Get Creator Pack",
-        "description": "Status of the AI creator pack (titles, caption, hashtags, YouTube/Reddit metadata) for this clip.",
+        "description": "Status of the AI creator pack (titles, caption, hashtags, YouTube/Reddit metadata) for this\nclip. Owner only.",
         "operationId": "get_creator_pack_clips__clip_id__creator_pack_get",
         "parameters": [
           {
@@ -938,6 +1532,43 @@
               "format": "uuid",
               "title": "Clip Id"
             }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
+              "title": "X-User-Id"
+            },
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
           }
         ],
         "responses": {
@@ -968,7 +1599,7 @@
           "clips"
         ],
         "summary": "Start Creator Pack",
-        "description": "Generate the creator pack for an already-uploaded clip (no re-upload). Gemini watches the\nclip's MP4; takes ~1-2 min. Idempotent; poll GET until status is 'ready'.",
+        "description": "Generate the creator pack for a clip you own (no re-upload). Gemini watches the clip's MP4;\ntakes ~1-2 min. Idempotent; poll GET until status is 'ready'.",
         "operationId": "start_creator_pack_clips__clip_id__creator_pack_post",
         "parameters": [
           {
@@ -980,6 +1611,43 @@
               "format": "uuid",
               "title": "Clip Id"
             }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
+              "title": "X-User-Id"
+            },
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
           }
         ],
         "responses": {
@@ -989,6 +1657,226 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ClipCreatorPackOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/clips/{clip_id}/highlights": {
+      "post": {
+        "tags": [
+          "clips"
+        ],
+        "summary": "Start Clip Highlights",
+        "description": "Start or reuse an asynchronous AI-share render for a stored clip. Owner only.",
+        "operationId": "start_clip_highlights_clips__clip_id__highlights_post",
+        "parameters": [
+          {
+            "name": "clip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Clip Id"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
+              "title": "X-User-Id"
+            },
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClipHighlightsIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClipHighlightsOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "clips"
+        ],
+        "summary": "Get Clip Highlights",
+        "description": "Poll the stored-clip AI-share job using the same options supplied to POST.",
+        "operationId": "get_clip_highlights_clips__clip_id__highlights_get",
+        "parameters": [
+          {
+            "name": "clip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Clip Id"
+            }
+          },
+          {
+            "name": "platform",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "tiktok",
+              "title": "Platform"
+            }
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "single",
+              "title": "Mode"
+            }
+          },
+          {
+            "name": "captions",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Captions"
+            }
+          },
+          {
+            "name": "caption_style",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "bold",
+              "title": "Caption Style"
+            }
+          },
+          {
+            "name": "hook",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Hook"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
+              "title": "X-User-Id"
+            },
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClipHighlightsOut"
                 }
               }
             }
@@ -1039,10 +1927,28 @@
                   "type": "null"
                 }
               ],
-              "description": "Acting user's ID (demo identity, no auth yet)",
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
               "title": "X-User-Id"
             },
-            "description": "Acting user's ID (demo identity, no auth yet)"
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
           }
         ],
         "responses": {
@@ -1102,10 +2008,28 @@
                   "type": "null"
                 }
               ],
-              "description": "Acting user's ID (demo identity, no auth yet)",
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
               "title": "X-User-Id"
             },
-            "description": "Acting user's ID (demo identity, no auth yet)"
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
           }
         ],
         "responses": {
@@ -1165,10 +2089,28 @@
                   "type": "null"
                 }
               ],
-              "description": "Acting user's ID (demo identity, no auth yet)",
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
               "title": "X-User-Id"
             },
-            "description": "Acting user's ID (demo identity, no auth yet)"
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
           }
         ],
         "responses": {
@@ -1196,13 +2138,13 @@
       }
     },
     "/clips/{clip_id}/virality": {
-      "post": {
+      "get": {
         "tags": [
           "clips"
         ],
-        "summary": "Start Virality",
-        "description": "Run the synthetic audience panel on an unpublished (draft or ready) clip you own. Builds the\nclip's creator pack first if needed; takes a few minutes. Poll GET with the same options.",
-        "operationId": "start_virality_clips__clip_id__virality_post",
+        "summary": "Get Virality",
+        "description": "The clip's virality score (0\u2013100), verdict, signal breakdown and per-frame curve, from the\nframe scorer that runs on every upload. Owner only.",
+        "operationId": "get_virality_clips__clip_id__virality_get",
         "parameters": [
           {
             "name": "clip_id",
@@ -1228,24 +2170,32 @@
                   "type": "null"
                 }
               ],
-              "description": "Acting user's ID (demo identity, no auth yet)",
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
               "title": "X-User-Id"
             },
-            "description": "Acting user's ID (demo identity, no auth yet)"
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
           }
         ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ClipViralityIn"
-              }
-            }
-          }
-        },
         "responses": {
-          "202": {
+          "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
@@ -1267,13 +2217,13 @@
           }
         }
       },
-      "get": {
+      "post": {
         "tags": [
           "clips"
         ],
-        "summary": "Get Virality",
-        "description": "Status/result of the virality check for these options (same values you POSTed).",
-        "operationId": "get_virality_clips__clip_id__virality_get",
+        "summary": "Score Virality",
+        "description": "Score the clip's upload if it hasn't been (uploads from before the frame scorer). Leaves\nevery clip as it is; takes a few seconds. Poll GET until status is 'ready'.",
+        "operationId": "score_virality_clips__clip_id__virality_post",
         "parameters": [
           {
             "name": "clip_id",
@@ -1283,48 +2233,6 @@
               "type": "string",
               "format": "uuid",
               "title": "Clip Id"
-            }
-          },
-          {
-            "name": "platform",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "default": "general",
-              "title": "Platform"
-            }
-          },
-          {
-            "name": "target_audience",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Target Audience"
-            }
-          },
-          {
-            "name": "persona_count",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Persona Count"
             }
           },
           {
@@ -1341,14 +2249,32 @@
                   "type": "null"
                 }
               ],
-              "description": "Acting user's ID (demo identity, no auth yet)",
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
               "title": "X-User-Id"
             },
-            "description": "Acting user's ID (demo identity, no auth yet)"
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
           }
         ],
         "responses": {
-          "200": {
+          "202": {
             "description": "Successful Response",
             "content": {
               "application/json": {
@@ -1440,10 +2366,28 @@
                   "type": "null"
                 }
               ],
-              "description": "Acting user's ID (demo identity, no auth yet)",
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
               "title": "X-User-Id"
             },
-            "description": "Acting user's ID (demo identity, no auth yet)"
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
           }
         ],
         "responses": {
@@ -1598,10 +2542,28 @@
                   "type": "null"
                 }
               ],
-              "description": "Acting user's ID (demo identity, no auth yet)",
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
               "title": "X-User-Id"
             },
-            "description": "Acting user's ID (demo identity, no auth yet)"
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
           }
         ],
         "responses": {
@@ -1651,10 +2613,28 @@
                   "type": "null"
                 }
               ],
-              "description": "Acting user's ID (demo identity, no auth yet)",
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
               "title": "X-User-Id"
             },
-            "description": "Acting user's ID (demo identity, no auth yet)"
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
           }
         ],
         "requestBody": {
@@ -1813,10 +2793,28 @@
                   "type": "null"
                 }
               ],
-              "description": "Acting user's ID (demo identity, no auth yet)",
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
               "title": "X-User-Id"
             },
-            "description": "Acting user's ID (demo identity, no auth yet)"
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
           }
         ],
         "responses": {
@@ -1923,10 +2921,28 @@
                   "type": "null"
                 }
               ],
-              "description": "Acting user's ID (demo identity, no auth yet)",
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
               "title": "X-User-Id"
             },
-            "description": "Acting user's ID (demo identity, no auth yet)"
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
           }
         ],
         "responses": {
@@ -1936,6 +2952,99 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/FeedOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/{user_id}/analytics": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "summary": "User Analytics",
+        "description": "Your own analytics for the last `days` days (and the `days` before, for comparison).",
+        "operationId": "user_analytics_users__user_id__analytics_get",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 180,
+              "minimum": 7,
+              "default": 30,
+              "title": "Days"
+            }
+          },
+          {
+            "name": "x-user-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
+              "title": "X-User-Id"
+            },
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsOut"
                 }
               }
             }
@@ -2014,10 +3123,28 @@
                   "type": "null"
                 }
               ],
-              "description": "Acting user's ID (demo identity, no auth yet)",
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
               "title": "X-User-Id"
             },
-            "description": "Acting user's ID (demo identity, no auth yet)"
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
           }
         ],
         "responses": {
@@ -2075,10 +3202,28 @@
                   "type": "null"
                 }
               ],
-              "description": "Acting user's ID (demo identity, no auth yet)",
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
               "title": "X-User-Id"
             },
-            "description": "Acting user's ID (demo identity, no auth yet)"
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
           }
         ],
         "requestBody": {
@@ -2148,10 +3293,28 @@
                   "type": "null"
                 }
               ],
-              "description": "Acting user's ID (demo identity, no auth yet)",
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
               "title": "X-User-Id"
             },
-            "description": "Acting user's ID (demo identity, no auth yet)"
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
           }
         ],
         "responses": {
@@ -2204,10 +3367,28 @@
                   "type": "null"
                 }
               ],
-              "description": "Acting user's ID (demo identity, no auth yet)",
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
               "title": "X-User-Id"
             },
-            "description": "Acting user's ID (demo identity, no auth yet)"
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
           }
         ],
         "responses": {
@@ -2264,10 +3445,28 @@
                   "type": "null"
                 }
               ],
-              "description": "Acting user's ID (demo identity, no auth yet)",
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
               "title": "X-User-Id"
             },
-            "description": "Acting user's ID (demo identity, no auth yet)"
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
           }
         ],
         "responses": {
@@ -2489,10 +3688,28 @@
                   "type": "null"
                 }
               ],
-              "description": "Acting user's ID (demo identity, no auth yet)",
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
               "title": "X-User-Id"
             },
-            "description": "Acting user's ID (demo identity, no auth yet)"
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
           }
         ],
         "responses": {
@@ -2580,10 +3797,28 @@
                   "type": "null"
                 }
               ],
-              "description": "Acting user's ID (demo identity, no auth yet)",
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
               "title": "X-User-Id"
             },
-            "description": "Acting user's ID (demo identity, no auth yet)"
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
           }
         ],
         "responses": {
@@ -2633,10 +3868,28 @@
                   "type": "null"
                 }
               ],
-              "description": "Acting user's ID (demo identity, no auth yet)",
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
               "title": "X-User-Id"
             },
-            "description": "Acting user's ID (demo identity, no auth yet)"
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
           }
         ],
         "responses": {
@@ -2686,10 +3939,28 @@
                   "type": "null"
                 }
               ],
-              "description": "Acting user's ID (demo identity, no auth yet)",
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
               "title": "X-User-Id"
             },
-            "description": "Acting user's ID (demo identity, no auth yet)"
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
           }
         ],
         "requestBody": {
@@ -2712,6 +3983,149 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/creator/highlights": {
+      "post": {
+        "tags": [
+          "creator"
+        ],
+        "summary": "Create Direct Highlights",
+        "description": "Upload one video and render its major moments as one contextualized montage.\n\nThis does not create a user/session and does not require Postgres, Redis, or the persona simulator.",
+        "operationId": "create_direct_highlights_creator_highlights_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_create_direct_highlights_creator_highlights_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectHighlightsOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/creator/highlights/{run_id}/clips/{index}.mp4": {
+      "get": {
+        "tags": [
+          "creator"
+        ],
+        "summary": "Get Direct Highlight Clip",
+        "operationId": "get_direct_highlight_clip_creator_highlights__run_id__clips__index__mp4_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "index",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Index"
+            }
+          },
+          {
+            "name": "download",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Download"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/creator/highlights/{run_id}/frames/{frame_id}.jpg": {
+      "get": {
+        "tags": [
+          "creator"
+        ],
+        "summary": "Get Direct Highlight Frame",
+        "operationId": "get_direct_highlight_frame_creator_highlights__run_id__frames__frame_id__jpg_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "frame_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Frame Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
           },
           "422": {
             "description": "Validation Error",
@@ -2810,6 +4224,48 @@
         }
       }
     },
+    "/creator/virality": {
+      "post": {
+        "tags": [
+          "creator"
+        ],
+        "summary": "Calculate Video Virality",
+        "description": "Calculate frame-aware video virality with one video analysis and one persona-panel call.\n\nFrame extraction/embedding runs locally in parallel with the Gemini content analysis.\nThe resulting score curve is passed into the single persona request and blended with\nthe deterministic audience cascade; no per-frame or per-persona API calls are made.",
+        "operationId": "calculate_video_virality_creator_virality_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_calculate_video_virality_creator_virality_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudienceSimulationOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/creator/simulate-analysis": {
       "post": {
         "tags": [
@@ -2874,10 +4330,28 @@
                   "type": "null"
                 }
               ],
-              "description": "Acting user's ID (demo identity, no auth yet)",
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
               "title": "X-User-Id"
             },
-            "description": "Acting user's ID (demo identity, no auth yet)"
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
           }
         ],
         "responses": {
@@ -2927,10 +4401,28 @@
                   "type": "null"
                 }
               ],
-              "description": "Acting user's ID (demo identity, no auth yet)",
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
               "title": "X-User-Id"
             },
-            "description": "Acting user's ID (demo identity, no auth yet)"
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
           }
         ],
         "responses": {
@@ -2980,10 +4472,28 @@
                   "type": "null"
                 }
               ],
-              "description": "Acting user's ID (demo identity, no auth yet)",
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
               "title": "X-User-Id"
             },
-            "description": "Acting user's ID (demo identity, no auth yet)"
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
           }
         ],
         "responses": {
@@ -3043,10 +4553,28 @@
                   "type": "null"
                 }
               ],
-              "description": "Acting user's ID (demo identity, no auth yet)",
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
               "title": "X-User-Id"
             },
-            "description": "Acting user's ID (demo identity, no auth yet)"
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
           }
         ],
         "requestBody": {
@@ -3114,10 +4642,28 @@
                   "type": "null"
                 }
               ],
-              "description": "Acting user's ID (demo identity, no auth yet)",
+              "description": "Act as this user. Dev accounts may act as anyone; others only as themselves.",
               "title": "X-User-Id"
             },
-            "description": "Acting user's ID (demo identity, no auth yet)"
+            "description": "Act as this user. Dev accounts may act as anyone; others only as themselves."
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bearer <token> from /auth/login",
+              "title": "Authorization"
+            },
+            "description": "Bearer <token> from /auth/login"
           }
         ],
         "responses": {
@@ -3172,6 +4718,30 @@
         }
       }
     },
+    "/config": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Config",
+        "description": "Read-only view of the models and search settings this server runs with (no secrets).",
+        "operationId": "config_config_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Config Config Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "tags": [
@@ -3196,6 +4766,142 @@
   },
   "components": {
     "schemas": {
+      "AnalyticsDayOut": {
+        "properties": {
+          "day": {
+            "type": "string",
+            "format": "date",
+            "title": "Day"
+          },
+          "views": {
+            "type": "integer",
+            "title": "Views"
+          },
+          "likes": {
+            "type": "integer",
+            "title": "Likes"
+          },
+          "comments": {
+            "type": "integer",
+            "title": "Comments"
+          },
+          "new_followers": {
+            "type": "integer",
+            "title": "New Followers"
+          }
+        },
+        "type": "object",
+        "required": [
+          "day",
+          "views",
+          "likes",
+          "comments",
+          "new_followers"
+        ],
+        "title": "AnalyticsDayOut"
+      },
+      "AnalyticsOut": {
+        "properties": {
+          "days": {
+            "type": "integer",
+            "title": "Days"
+          },
+          "start": {
+            "type": "string",
+            "format": "date",
+            "title": "Start"
+          },
+          "end": {
+            "type": "string",
+            "format": "date",
+            "title": "End"
+          },
+          "tracking_since": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracking Since",
+            "description": "First day with recorded daily views; earlier views only count in totals"
+          },
+          "lifetime": {
+            "$ref": "#/components/schemas/AnalyticsTotalsOut"
+          },
+          "period": {
+            "$ref": "#/components/schemas/AnalyticsTotalsOut"
+          },
+          "previous_period": {
+            "$ref": "#/components/schemas/AnalyticsTotalsOut"
+          },
+          "follower_count": {
+            "type": "integer",
+            "title": "Follower Count"
+          },
+          "daily": {
+            "items": {
+              "$ref": "#/components/schemas/AnalyticsDayOut"
+            },
+            "type": "array",
+            "title": "Daily",
+            "description": "One row per UTC day in the period, oldest first, zero-filled"
+          },
+          "clips": {
+            "items": {
+              "$ref": "#/components/schemas/ClipAnalyticsOut"
+            },
+            "type": "array",
+            "title": "Clips",
+            "description": "All the owner's clips, newest first"
+          }
+        },
+        "type": "object",
+        "required": [
+          "days",
+          "start",
+          "end",
+          "tracking_since",
+          "lifetime",
+          "period",
+          "previous_period",
+          "follower_count",
+          "daily",
+          "clips"
+        ],
+        "title": "AnalyticsOut"
+      },
+      "AnalyticsTotalsOut": {
+        "properties": {
+          "views": {
+            "type": "integer",
+            "title": "Views"
+          },
+          "likes": {
+            "type": "integer",
+            "title": "Likes"
+          },
+          "comments": {
+            "type": "integer",
+            "title": "Comments"
+          },
+          "new_followers": {
+            "type": "integer",
+            "title": "New Followers"
+          }
+        },
+        "type": "object",
+        "required": [
+          "views",
+          "likes",
+          "comments",
+          "new_followers"
+        ],
+        "title": "AnalyticsTotalsOut"
+      },
       "AudienceLayerOut": {
         "properties": {
           "layer": {
@@ -3527,6 +5233,35 @@
             "minimum": 0.0,
             "title": "Virality Score"
           },
+          "persona_score": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 100.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persona Score",
+            "description": "Persona-cascade score before frame evidence is blended; null on older stored reports"
+          },
+          "scoring_version": {
+            "type": "string",
+            "title": "Scoring Version",
+            "default": "persona-cascade-v1"
+          },
+          "video_evidence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VideoViralityEvidenceOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "verdict": {
             "type": "string",
             "enum": [
@@ -3618,6 +5353,30 @@
         ],
         "title": "AudienceSimulationOut"
       },
+      "AuthOut": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "title": "Token",
+            "description": "Send as Authorization: Bearer <token>"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "user": {
+            "$ref": "#/components/schemas/MeOut"
+          }
+        },
+        "type": "object",
+        "required": [
+          "token",
+          "expires_at",
+          "user"
+        ],
+        "title": "AuthOut"
+      },
       "Body_analyze_video_creator_analyze_post": {
         "properties": {
           "video": {
@@ -3632,6 +5391,97 @@
           "video"
         ],
         "title": "Body_analyze_video_creator_analyze_post"
+      },
+      "Body_calculate_video_virality_creator_virality_post": {
+        "properties": {
+          "video": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "Video",
+            "description": "Video file to score with frame evidence and audience personas"
+          },
+          "platform": {
+            "type": "string",
+            "enum": [
+              "general",
+              "youtube",
+              "reddit",
+              "instagram",
+              "tiktok"
+            ],
+            "title": "Platform",
+            "default": "general"
+          },
+          "target_audience": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Audience"
+          },
+          "persona_count": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 15.0,
+                "minimum": 3.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persona Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "video"
+        ],
+        "title": "Body_calculate_video_virality_creator_virality_post"
+      },
+      "Body_create_direct_highlights_creator_highlights_post": {
+        "properties": {
+          "video": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "Video",
+            "description": "Video to score and cut into highlights"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "single",
+              "montage"
+            ],
+            "title": "Mode",
+            "default": "montage"
+          },
+          "captions": {
+            "type": "boolean",
+            "title": "Captions",
+            "default": true
+          },
+          "caption_style": {
+            "type": "string",
+            "enum": [
+              "bold",
+              "minimal",
+              "gamer"
+            ],
+            "title": "Caption Style",
+            "default": "bold"
+          }
+        },
+        "type": "object",
+        "required": [
+          "video"
+        ],
+        "title": "Body_create_direct_highlights_creator_highlights_post"
       },
       "Body_search_image_search_image_post": {
         "properties": {
@@ -3729,6 +5579,37 @@
           "video"
         ],
         "title": "Body_simulate_audience_creator_simulate_post"
+      },
+      "ClipAnalyticsOut": {
+        "properties": {
+          "clip": {
+            "$ref": "#/components/schemas/ClipOut"
+          },
+          "period_views": {
+            "type": "integer",
+            "title": "Period Views"
+          },
+          "period_likes": {
+            "type": "integer",
+            "title": "Period Likes"
+          },
+          "period_comments": {
+            "type": "integer",
+            "title": "Period Comments"
+          },
+          "virality": {
+            "$ref": "#/components/schemas/ViralitySummaryOut"
+          }
+        },
+        "type": "object",
+        "required": [
+          "clip",
+          "period_views",
+          "period_likes",
+          "period_comments",
+          "virality"
+        ],
+        "title": "ClipAnalyticsOut"
       },
       "ClipCreate": {
         "properties": {
@@ -3913,6 +5794,22 @@
             ],
             "title": "Kind"
           },
+          "generation_source": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "pipeline",
+                  "frame_virality"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generation Source",
+            "description": "Which backend generator made an auto clip; null for manually created clips"
+          },
           "publish_state": {
             "type": "string",
             "enum": [
@@ -3921,7 +5818,7 @@
               "published"
             ],
             "title": "Publish State",
-            "description": "draft (owner only) -> ready (queued to post to YouTube, owner only) -> published (public)",
+            "description": "draft (owner only) -> published (public). 'ready' is a legacy owner-only state the web app treats as draft",
             "default": "published"
           },
           "published_at": {
@@ -3961,6 +5858,55 @@
             "title": "Comment Count",
             "default": 0
           },
+          "youtube_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Youtube Url",
+            "description": "Latest successful post of this clip to YouTube"
+          },
+          "age_restricted": {
+            "type": "boolean",
+            "title": "Age Restricted",
+            "description": "Transcript moderation flagged this clip 18+",
+            "default": false
+          },
+          "moderation_severity": {
+            "type": "string",
+            "enum": [
+              "none",
+              "mild",
+              "severe"
+            ],
+            "title": "Moderation Severity",
+            "description": "The owning session's moderation verdict",
+            "default": "none"
+          },
+          "moderation_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Moderation Reason",
+            "description": "One-line reason, owner-visible only"
+          },
+          "moderation_violations": {
+            "items": {
+              "$ref": "#/components/schemas/ModerationViolationOut"
+            },
+            "type": "array",
+            "title": "Moderation Violations",
+            "description": "Itemized findings with where in the video each occurs"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -3976,6 +5922,11 @@
               }
             ],
             "title": "Session Duration Ms"
+          },
+          "frame_count": {
+            "type": "integer",
+            "title": "Frame Count",
+            "description": "Sampled, embedded frames inside the clip's range"
           },
           "events": {
             "items": {
@@ -4010,10 +5961,320 @@
           "like_count",
           "created_at",
           "session_duration_ms",
+          "frame_count",
           "events",
           "transcript"
         ],
         "title": "ClipDetailOut"
+      },
+      "ClipHighlightMomentOut": {
+        "properties": {
+          "source_start_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Source Start Ms",
+            "description": "Start relative to the stored clip, not the session"
+          },
+          "source_end_ms": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Source End Ms",
+            "description": "End relative to the stored clip, not the session"
+          },
+          "score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Score"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_start_ms",
+          "source_end_ms",
+          "score",
+          "reason"
+        ],
+        "title": "ClipHighlightMomentOut"
+      },
+      "ClipHighlightsIn": {
+        "properties": {
+          "platform": {
+            "type": "string",
+            "enum": [
+              "general",
+              "youtube",
+              "reddit",
+              "instagram",
+              "tiktok"
+            ],
+            "title": "Platform",
+            "default": "tiktok"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "single",
+              "montage"
+            ],
+            "title": "Mode",
+            "default": "single"
+          },
+          "captions": {
+            "type": "boolean",
+            "title": "Captions",
+            "default": true
+          },
+          "caption_style": {
+            "type": "string",
+            "enum": [
+              "bold",
+              "minimal",
+              "gamer"
+            ],
+            "title": "Caption Style",
+            "default": "bold"
+          },
+          "hook": {
+            "type": "boolean",
+            "title": "Hook",
+            "default": true
+          }
+        },
+        "type": "object",
+        "title": "ClipHighlightsIn",
+        "description": "Options that identify one cached AI-share render for a stored clip."
+      },
+      "ClipHighlightsOut": {
+        "properties": {
+          "clip_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Clip Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "none",
+              "processing",
+              "ready",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "exporting",
+              "analyzing",
+              "selecting",
+              "captioning",
+              "rendering"
+            ],
+            "title": "Stage"
+          },
+          "progress": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Progress"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "start_ms": {
+            "type": "integer",
+            "title": "Start Ms"
+          },
+          "end_ms": {
+            "type": "integer",
+            "title": "End Ms"
+          },
+          "platform": {
+            "type": "string",
+            "enum": [
+              "general",
+              "youtube",
+              "reddit",
+              "instagram",
+              "tiktok"
+            ],
+            "title": "Platform"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "single",
+              "montage"
+            ],
+            "title": "Mode"
+          },
+          "captions_enabled": {
+            "type": "boolean",
+            "title": "Captions Enabled"
+          },
+          "caption_style": {
+            "type": "string",
+            "enum": [
+              "bold",
+              "minimal",
+              "gamer"
+            ],
+            "title": "Caption Style"
+          },
+          "hook_enabled": {
+            "type": "boolean",
+            "title": "Hook Enabled"
+          },
+          "algorithm_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Algorithm Version"
+          },
+          "video_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Video Url"
+          },
+          "download_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Download Url"
+          },
+          "width": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Width"
+          },
+          "height": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Height"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "frames_analyzed": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Frames Analyzed",
+            "default": 0
+          },
+          "captions_burned": {
+            "type": "boolean",
+            "title": "Captions Burned",
+            "default": false
+          },
+          "moments": {
+            "items": {
+              "$ref": "#/components/schemas/ClipHighlightMomentOut"
+            },
+            "type": "array",
+            "title": "Moments"
+          },
+          "captions": {
+            "items": {
+              "$ref": "#/components/schemas/HighlightCaptionOut"
+            },
+            "type": "array",
+            "title": "Captions"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "suggested_caption": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggested Caption"
+          },
+          "hashtags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Hashtags"
+          }
+        },
+        "type": "object",
+        "required": [
+          "clip_id",
+          "status",
+          "stage",
+          "progress",
+          "start_ms",
+          "end_ms",
+          "platform",
+          "mode",
+          "captions_enabled",
+          "caption_style",
+          "hook_enabled"
+        ],
+        "title": "ClipHighlightsOut"
       },
       "ClipOut": {
         "properties": {
@@ -4091,6 +6352,22 @@
             ],
             "title": "Kind"
           },
+          "generation_source": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "pipeline",
+                  "frame_virality"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generation Source",
+            "description": "Which backend generator made an auto clip; null for manually created clips"
+          },
           "publish_state": {
             "type": "string",
             "enum": [
@@ -4099,7 +6376,7 @@
               "published"
             ],
             "title": "Publish State",
-            "description": "draft (owner only) -> ready (queued to post to YouTube, owner only) -> published (public)",
+            "description": "draft (owner only) -> published (public). 'ready' is a legacy owner-only state the web app treats as draft",
             "default": "published"
           },
           "published_at": {
@@ -4138,6 +6415,55 @@
             "type": "integer",
             "title": "Comment Count",
             "default": 0
+          },
+          "youtube_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Youtube Url",
+            "description": "Latest successful post of this clip to YouTube"
+          },
+          "age_restricted": {
+            "type": "boolean",
+            "title": "Age Restricted",
+            "description": "Transcript moderation flagged this clip 18+",
+            "default": false
+          },
+          "moderation_severity": {
+            "type": "string",
+            "enum": [
+              "none",
+              "mild",
+              "severe"
+            ],
+            "title": "Moderation Severity",
+            "description": "The owning session's moderation verdict",
+            "default": "none"
+          },
+          "moderation_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Moderation Reason",
+            "description": "One-line reason, owner-visible only"
+          },
+          "moderation_violations": {
+            "items": {
+              "$ref": "#/components/schemas/ModerationViolationOut"
+            },
+            "type": "array",
+            "title": "Moderation Violations",
+            "description": "Itemized findings with where in the video each occurs"
           },
           "created_at": {
             "type": "string",
@@ -4207,49 +6533,6 @@
         "type": "object",
         "title": "ClipPatch"
       },
-      "ClipViralityIn": {
-        "properties": {
-          "platform": {
-            "type": "string",
-            "enum": [
-              "general",
-              "youtube",
-              "reddit",
-              "instagram",
-              "tiktok"
-            ],
-            "title": "Platform",
-            "default": "general"
-          },
-          "target_audience": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 500
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Target Audience"
-          },
-          "persona_count": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "maximum": 15.0,
-                "minimum": 3.0
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Persona Count"
-          }
-        },
-        "type": "object",
-        "title": "ClipViralityIn"
-      },
       "ClipViralityOut": {
         "properties": {
           "clip_id": {
@@ -4265,28 +6548,79 @@
               "ready",
               "failed"
             ],
-            "title": "Status"
+            "title": "Status",
+            "description": "'none' = this upload hasn't been scored yet; POST to score it"
           },
-          "platform": {
-            "type": "string",
-            "enum": [
-              "general",
-              "youtube",
-              "reddit",
-              "instagram",
-              "tiktok"
-            ],
-            "title": "Platform"
-          },
-          "result": {
+          "score": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/AudienceSimulationOut"
+                "type": "number",
+                "maximum": 100.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "verdict": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "weak",
+                  "mixed",
+                  "promising",
+                  "strong"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verdict"
+          },
+          "peak_offset_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Peak Offset Ms",
+            "description": "The clip's strongest moment, from its start"
+          },
+          "components": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ViralityComponentsOut"
               },
               {
                 "type": "null"
               }
             ]
+          },
+          "curve": {
+            "items": {
+              "$ref": "#/components/schemas/ViralityPointOut"
+            },
+            "type": "array",
+            "title": "Curve",
+            "description": "Score of every sampled frame in the clip"
+          },
+          "algorithm_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Algorithm Version"
           },
           "error": {
             "anyOf": [
@@ -4312,11 +6646,11 @@
         "required": [
           "clip_id",
           "status",
-          "platform",
           "start_ms",
           "end_ms"
         ],
-        "title": "ClipViralityOut"
+        "title": "ClipViralityOut",
+        "description": "The clip's virality from the frame scorer: every sampled frame is scored 0\u20131 from the\nupload's own data (CLIP embeddings, events, transcript), and the clip gets the average of\nits strongest frames. Scores are relative to the rest of the same upload."
       },
       "CommentCreate": {
         "properties": {
@@ -4684,6 +7018,275 @@
         ],
         "title": "CreatorYouTubeMetadata"
       },
+      "DirectHighlightClipOut": {
+        "properties": {
+          "index": {
+            "type": "integer",
+            "title": "Index"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "start_ms": {
+            "type": "integer",
+            "title": "Start Ms"
+          },
+          "end_ms": {
+            "type": "integer",
+            "title": "End Ms"
+          },
+          "duration_ms": {
+            "type": "integer",
+            "title": "Duration Ms"
+          },
+          "score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Score"
+          },
+          "video_url": {
+            "type": "string",
+            "title": "Video Url"
+          },
+          "download_url": {
+            "type": "string",
+            "title": "Download Url"
+          },
+          "thumbnail_url": {
+            "type": "string",
+            "title": "Thumbnail Url"
+          },
+          "width": {
+            "type": "integer",
+            "title": "Width",
+            "description": "Rendered portrait video width"
+          },
+          "height": {
+            "type": "integer",
+            "title": "Height",
+            "description": "Rendered portrait video height"
+          },
+          "captions_burned": {
+            "type": "boolean",
+            "title": "Captions Burned",
+            "description": "Whether timed captions are burned into the video"
+          },
+          "caption_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Caption Count"
+          },
+          "caption_source": {
+            "type": "string",
+            "enum": [
+              "none",
+              "transcriber",
+              "gemini"
+            ],
+            "title": "Caption Source"
+          },
+          "moments": {
+            "items": {
+              "$ref": "#/components/schemas/DirectHighlightMomentOut"
+            },
+            "type": "array",
+            "title": "Moments",
+            "description": "Chronological source ranges combined into this montage"
+          }
+        },
+        "type": "object",
+        "required": [
+          "index",
+          "title",
+          "start_ms",
+          "end_ms",
+          "duration_ms",
+          "score",
+          "video_url",
+          "download_url",
+          "thumbnail_url",
+          "width",
+          "height",
+          "captions_burned",
+          "caption_count",
+          "caption_source"
+        ],
+        "title": "DirectHighlightClipOut"
+      },
+      "DirectHighlightFrameOut": {
+        "properties": {
+          "frame_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Frame Id"
+          },
+          "t_ms": {
+            "type": "integer",
+            "title": "T Ms"
+          },
+          "score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Score"
+          },
+          "visual_score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Visual Score"
+          },
+          "novelty_score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Novelty Score"
+          },
+          "visibility_score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Visibility Score"
+          },
+          "scene_score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Scene Score"
+          },
+          "selected": {
+            "type": "boolean",
+            "title": "Selected"
+          },
+          "thumbnail_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thumbnail Url",
+            "description": "Present for selected peak frames"
+          }
+        },
+        "type": "object",
+        "required": [
+          "frame_id",
+          "t_ms",
+          "score",
+          "visual_score",
+          "novelty_score",
+          "visibility_score",
+          "scene_score",
+          "selected",
+          "thumbnail_url"
+        ],
+        "title": "DirectHighlightFrameOut"
+      },
+      "DirectHighlightMomentOut": {
+        "properties": {
+          "index": {
+            "type": "integer",
+            "title": "Index"
+          },
+          "source_start_ms": {
+            "type": "integer",
+            "title": "Source Start Ms"
+          },
+          "source_end_ms": {
+            "type": "integer",
+            "title": "Source End Ms"
+          },
+          "duration_ms": {
+            "type": "integer",
+            "title": "Duration Ms"
+          },
+          "score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Score"
+          },
+          "thumbnail_url": {
+            "type": "string",
+            "title": "Thumbnail Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "index",
+          "source_start_ms",
+          "source_end_ms",
+          "duration_ms",
+          "score",
+          "thumbnail_url"
+        ],
+        "title": "DirectHighlightMomentOut"
+      },
+      "DirectHighlightsOut": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Run Id"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "duration_ms": {
+            "type": "integer",
+            "title": "Duration Ms"
+          },
+          "width": {
+            "type": "integer",
+            "title": "Width"
+          },
+          "height": {
+            "type": "integer",
+            "title": "Height"
+          },
+          "frames_analyzed": {
+            "type": "integer",
+            "title": "Frames Analyzed"
+          },
+          "algorithm_version": {
+            "type": "string",
+            "title": "Algorithm Version"
+          },
+          "scores": {
+            "items": {
+              "$ref": "#/components/schemas/DirectHighlightFrameOut"
+            },
+            "type": "array",
+            "title": "Scores"
+          },
+          "clips": {
+            "items": {
+              "$ref": "#/components/schemas/DirectHighlightClipOut"
+            },
+            "type": "array",
+            "title": "Clips"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "filename",
+          "duration_ms",
+          "width",
+          "height",
+          "frames_analyzed",
+          "algorithm_version",
+          "scores",
+          "clips"
+        ],
+        "title": "DirectHighlightsOut"
+      },
       "EventOut": {
         "properties": {
           "id": {
@@ -4843,6 +7446,210 @@
         ],
         "title": "FollowOut"
       },
+      "FrameHighlightsCreate": {
+        "properties": {
+          "count": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 10.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Count",
+            "description": "Maximum non-overlapping clips; omitted uses FRAME_HIGHLIGHT_COUNT"
+          },
+          "clip_duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 120000.0,
+                "minimum": 3000.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clip Duration Ms",
+            "description": "Length of each generated clip; omitted uses FRAME_HIGHLIGHT_DURATION_MS"
+          }
+        },
+        "type": "object",
+        "title": "FrameHighlightsCreate"
+      },
+      "FrameHighlightsOut": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Session Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "none",
+              "processing",
+              "ready",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "requested_count": {
+            "type": "integer",
+            "title": "Requested Count"
+          },
+          "clip_duration_ms": {
+            "type": "integer",
+            "title": "Clip Duration Ms"
+          },
+          "algorithm_version": {
+            "type": "string",
+            "title": "Algorithm Version"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "scores": {
+            "items": {
+              "$ref": "#/components/schemas/FrameViralityPoint"
+            },
+            "type": "array",
+            "title": "Scores"
+          },
+          "clips": {
+            "items": {
+              "$ref": "#/components/schemas/ClipOut"
+            },
+            "type": "array",
+            "title": "Clips"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "status",
+          "requested_count",
+          "clip_duration_ms",
+          "algorithm_version"
+        ],
+        "title": "FrameHighlightsOut"
+      },
+      "FrameViralityPoint": {
+        "properties": {
+          "frame_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Frame Id"
+          },
+          "t_ms": {
+            "type": "integer",
+            "title": "T Ms"
+          },
+          "score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Score",
+            "description": "Combined frame virality score"
+          },
+          "visual_score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Visual Score",
+            "description": "Viral visual semantics, ranked within the video"
+          },
+          "novelty_score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Novelty Score",
+            "description": "Visual change from adjacent sampled frames"
+          },
+          "event_score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Event Score",
+            "description": "Nearby highlight-detector evidence"
+          },
+          "speech_score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Speech Score",
+            "description": "Nearby excited/reaction transcript evidence"
+          },
+          "visibility_score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Visibility Score",
+            "description": "Absolute frame readability based on luminance, visible area, and contrast"
+          },
+          "scene_score": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Scene Score",
+            "description": "Sustained visual strength across the surrounding scene"
+          },
+          "selected": {
+            "type": "boolean",
+            "title": "Selected",
+            "description": "Whether this peak generated a highlight clip"
+          },
+          "thumbnail_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thumbnail Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "frame_id",
+          "t_ms",
+          "score",
+          "visual_score",
+          "novelty_score",
+          "event_score",
+          "speech_score",
+          "visibility_score",
+          "scene_score",
+          "selected",
+          "thumbnail_url"
+        ],
+        "title": "FrameViralityPoint"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -4881,6 +7688,66 @@
         ],
         "title": "HealthOut"
       },
+      "HighlightCaptionOut": {
+        "properties": {
+          "start_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Start Ms",
+            "description": "Caption start relative to the rendered output"
+          },
+          "end_ms": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "End Ms",
+            "description": "Caption end relative to the rendered output"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "hook",
+              "speech",
+              "moment"
+            ],
+            "title": "Kind"
+          }
+        },
+        "type": "object",
+        "required": [
+          "start_ms",
+          "end_ms",
+          "text",
+          "kind"
+        ],
+        "title": "HighlightCaptionOut"
+      },
+      "LoginIn": {
+        "properties": {
+          "login": {
+            "type": "string",
+            "maxLength": 254,
+            "minLength": 1,
+            "title": "Login",
+            "description": "Username or email"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "login",
+          "password"
+        ],
+        "title": "LoginIn"
+      },
       "MarkReadIn": {
         "properties": {
           "ids": {
@@ -4908,6 +7775,109 @@
         },
         "type": "object",
         "title": "MarkReadIn"
+      },
+      "MeOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "is_dev": {
+            "type": "boolean",
+            "title": "Is Dev"
+          },
+          "can_act_as": {
+            "type": "boolean",
+            "title": "Can Act As",
+            "description": "May act as other users: dev accounts, or anyone while REQUIRE_LOGIN is off",
+            "default": false
+          },
+          "birth_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Birth Date"
+          },
+          "is_adult": {
+            "type": "boolean",
+            "title": "Is Adult",
+            "description": "True when birth_date puts this account at 18 or older"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "username",
+          "email",
+          "is_dev",
+          "birth_date",
+          "is_adult"
+        ],
+        "title": "MeOut"
+      },
+      "ModerationViolationOut": {
+        "properties": {
+          "category": {
+            "type": "string",
+            "title": "Category"
+          },
+          "timestamp_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timestamp Ms",
+            "description": "Where in the video this occurs; null if not a specific moment"
+          },
+          "note": {
+            "type": "string",
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "category",
+          "timestamp_ms",
+          "note"
+        ],
+        "title": "ModerationViolationOut"
       },
       "MomentOut": {
         "properties": {
@@ -5500,10 +8470,12 @@
               "thumbnails",
               "frames",
               "audio",
+              "moderating",
               "highlights",
               "finalizing",
               "ready",
-              "failed"
+              "failed",
+              "blocked"
             ],
             "title": "Status"
           },
@@ -5566,6 +8538,41 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "moderation_severity": {
+            "type": "string",
+            "enum": [
+              "none",
+              "mild",
+              "severe"
+            ],
+            "title": "Moderation Severity",
+            "description": "Transcript moderation verdict. 'severe' never reaches this as a readable session \u2014 the pipeline stops and status becomes 'blocked' instead."
+          },
+          "moderation_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Moderation Reason",
+            "description": "One-line reason, owner-visible only"
+          },
+          "age_restricted": {
+            "type": "boolean",
+            "title": "Age Restricted",
+            "description": "True for 'mild' or 'severe' moderation verdicts"
+          },
+          "moderation_violations": {
+            "items": {
+              "$ref": "#/components/schemas/ModerationViolationOut"
+            },
+            "type": "array",
+            "title": "Moderation Violations",
+            "description": "Itemized findings with where in the video each occurs"
           }
         },
         "type": "object",
@@ -5584,7 +8591,9 @@
           "error",
           "poster_url",
           "playlist_url",
-          "created_at"
+          "created_at",
+          "moderation_severity",
+          "age_restricted"
         ],
         "title": "SessionOut"
       },
@@ -5605,10 +8614,12 @@
               "thumbnails",
               "frames",
               "audio",
+              "moderating",
               "highlights",
               "finalizing",
               "ready",
-              "failed"
+              "failed",
+              "blocked"
             ],
             "title": "Status"
           },
@@ -5663,6 +8674,26 @@
           "done": {
             "type": "boolean",
             "title": "Done"
+          },
+          "moderation_severity": {
+            "type": "string",
+            "enum": [
+              "none",
+              "mild",
+              "severe"
+            ],
+            "title": "Moderation Severity"
+          },
+          "age_restricted": {
+            "type": "boolean",
+            "title": "Age Restricted"
+          },
+          "moderation_violations": {
+            "items": {
+              "$ref": "#/components/schemas/ModerationViolationOut"
+            },
+            "type": "array",
+            "title": "Moderation Violations"
           }
         },
         "type": "object",
@@ -5674,10 +8705,49 @@
           "last_step",
           "failed_step",
           "error",
-          "done"
+          "done",
+          "moderation_severity",
+          "age_restricted"
         ],
         "title": "SessionStatusEvent",
         "description": "Payload of each `status` event on GET /sessions/{id}/status (server-sent events)."
+      },
+      "SignupIn": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 2,
+            "pattern": "^[A-Za-z0-9_.-]+$",
+            "title": "Username"
+          },
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$",
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 8,
+            "title": "Password"
+          },
+          "birth_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Birth Date",
+            "description": "Required so age-restricted content can be gated correctly."
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "email",
+          "password",
+          "birth_date"
+        ],
+        "title": "SignupIn"
       },
       "TranscriptOut": {
         "properties": {
@@ -5978,6 +9048,266 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "VideoViralityEvidenceOut": {
+        "properties": {
+          "algorithm_version": {
+            "type": "string",
+            "title": "Algorithm Version"
+          },
+          "duration_ms": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Duration Ms"
+          },
+          "frames_analyzed": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Frames Analyzed"
+          },
+          "frame_score": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Frame Score",
+            "description": "Aggregate strength of the video frame curve"
+          },
+          "peak_score": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Peak Score"
+          },
+          "hook_score": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Hook Score",
+            "description": "Strongest score near the opening of the video"
+          },
+          "sustained_score": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Sustained Score",
+            "description": "75th-percentile frame strength"
+          },
+          "coverage": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Coverage",
+            "description": "Share of sampled frames supporting a strong moment"
+          },
+          "moments": {
+            "items": {
+              "$ref": "#/components/schemas/VideoViralityMomentOut"
+            },
+            "type": "array",
+            "title": "Moments"
+          }
+        },
+        "type": "object",
+        "required": [
+          "algorithm_version",
+          "duration_ms",
+          "frames_analyzed",
+          "frame_score",
+          "peak_score",
+          "hook_score",
+          "sustained_score",
+          "coverage",
+          "moments"
+        ],
+        "title": "VideoViralityEvidenceOut",
+        "description": "Explainable video evidence blended with the synthetic audience panel."
+      },
+      "VideoViralityMomentOut": {
+        "properties": {
+          "t_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "T Ms",
+            "description": "Peak position in the source video"
+          },
+          "context_start_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Context Start Ms",
+            "description": "Start of the setup retained around the peak"
+          },
+          "context_end_ms": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Context End Ms",
+            "description": "End of the payoff retained around the peak"
+          },
+          "score": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Score",
+            "description": "Combined frame virality score on a 0-100 scale"
+          },
+          "visual_score": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Visual Score"
+          },
+          "novelty_score": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Novelty Score"
+          },
+          "speech_score": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Speech Score"
+          },
+          "visibility_score": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Visibility Score"
+          },
+          "scene_score": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Scene Score"
+          }
+        },
+        "type": "object",
+        "required": [
+          "t_ms",
+          "context_start_ms",
+          "context_end_ms",
+          "score",
+          "visual_score",
+          "novelty_score",
+          "speech_score",
+          "visibility_score",
+          "scene_score"
+        ],
+        "title": "VideoViralityMomentOut",
+        "description": "One contextual peak from the video's deterministic frame-score curve."
+      },
+      "ViralityComponentsOut": {
+        "properties": {
+          "visual": {
+            "type": "number",
+            "title": "Visual",
+            "description": "Looks like a highlight (action, skill, payoff), ranked within the upload"
+          },
+          "novelty": {
+            "type": "number",
+            "title": "Novelty",
+            "description": "Visual change between neighbouring frames"
+          },
+          "event": {
+            "type": "number",
+            "title": "Event",
+            "description": "Detected highlight events nearby"
+          },
+          "speech": {
+            "type": "number",
+            "title": "Speech",
+            "description": "Excited or reaction speech nearby"
+          },
+          "visibility": {
+            "type": "number",
+            "title": "Visibility",
+            "description": "Readable frame: brightness, contrast, visible area"
+          },
+          "scene": {
+            "type": "number",
+            "title": "Scene",
+            "description": "Sustained strength across the surrounding scene"
+          }
+        },
+        "type": "object",
+        "required": [
+          "visual",
+          "novelty",
+          "event",
+          "speech",
+          "visibility",
+          "scene"
+        ],
+        "title": "ViralityComponentsOut",
+        "description": "Average 0\u2013100 of each signal over the clip's strongest frames."
+      },
+      "ViralityPointOut": {
+        "properties": {
+          "offset_ms": {
+            "type": "integer",
+            "title": "Offset Ms",
+            "description": "Time from the start of the clip"
+          },
+          "score": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Score"
+          }
+        },
+        "type": "object",
+        "required": [
+          "offset_ms",
+          "score"
+        ],
+        "title": "ViralityPointOut"
+      },
+      "ViralitySummaryOut": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "none",
+              "processing",
+              "ready",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "verdict": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "weak",
+                  "mixed",
+                  "promising",
+                  "strong"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verdict"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "ViralitySummaryOut",
+        "description": "The clip's frame virality, without the curve."
       },
       "YouTubeConnectOut": {
         "properties": {

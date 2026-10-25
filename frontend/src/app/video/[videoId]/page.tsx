@@ -1,22 +1,23 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
-import { AlertTriangle, ArrowLeft, Film, Loader2 } from "lucide-react";
+import { AlertTriangle, Film, Loader2 } from "lucide-react";
 
-import { ClipActions, PublishBadge } from "@/components/clip-actions";
+import { EngagementBar, OwnerTools, PublishBadge } from "@/components/clip-actions";
 import { ChooseUserNotice, useCurrentUser } from "@/components/current-user";
+import { SiteNav } from "@/components/hero/site-nav";
 import { HlsPlayer, type HlsPlayerHandle } from "@/components/hls-player";
+import { Comments } from "@/components/comments";
+import { RelatedClips } from "@/components/related-clips";
 import { SearchPanel } from "@/components/search-panel";
 import {
-  STATUS_COPY,
   fetchVideoWithSegments,
   formatTimestamp,
+  formatUploadDate,
   recordView,
   streamUrlFor,
   type SearchResult,
-  type Segment,
   type Video,
 } from "@/lib/api";
 
@@ -31,7 +32,6 @@ export default function VideoPage() {
 
   const playerRef = useRef<HlsPlayerHandle>(null);
   const [video, setVideo] = useState<Video | null>(null);
-  const [segments, setSegments] = useState<Segment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeMoment, setActiveMoment] = useState<SearchResult | null>(null);
@@ -55,7 +55,6 @@ export default function VideoPage() {
       .then((loaded) => {
         if (cancelled) return;
         setVideo(loaded.video);
-        setSegments(loaded.segments);
         setError(null);
       })
       .catch((caught: Error) => {
@@ -83,154 +82,111 @@ export default function VideoPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 p-8 text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        Loading video…
-      </div>
+      <Shell>
+        <p className="flex items-center gap-2 text-sm text-[var(--mtv-text-2)]">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Loading clip…
+        </p>
+      </Shell>
     );
   }
 
   if (error || !video) {
+    const missing = Boolean(error && /not found/i.test(error));
     return (
-      <div className="mx-auto max-w-3xl space-y-4 p-8">
-        <BackToGallery />
-        {error && /not found/i.test(error) && <ChooseUserNotice action="open your private videos" />}
-        <div className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          <p>
-            {error && /not found/i.test(error)
-              ? "This clip doesn't exist, or it's a private video that only its owner can see."
-              : (error ?? "This video could not be loaded.")}
+      <Shell>
+        <div className="max-w-2xl space-y-4">
+          <p className="flex items-start gap-2 text-sm text-[var(--mtv-red)]">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            {missing
+              ? "This clip doesn't exist, or it's a private video only its owner can see."
+              : (error ?? "This clip couldn't be loaded.")}
           </p>
+          {missing && <ChooseUserNotice action="open your private videos" />}
         </div>
-      </div>
+      </Shell>
     );
   }
 
-  const status = STATUS_COPY[video.processing_status];
-  const transcriptLines = segments.filter((s) => s.kind === "transcript").length;
-  const events = segments.filter((s) => s.kind === "scene").length;
-  const stats = [
-    formatTimestamp(video.duration_seconds),
-    status.label,
-    video.kind === "clip" && `${video.frame_count} frames indexed`,
-    video.kind === "clip" && `${transcriptLines} transcript ${transcriptLines === 1 ? "line" : "lines"}`,
-    events > 0 && `${events} highlight ${events === 1 ? "event" : "events"}`,
-  ].filter(Boolean);
+  const isOwner = Boolean(me && video.owner_id === me.id);
+  const meta = [video.uploader && `@${video.uploader}`, video.game, formatUploadDate(video.published_at ?? video.upload_date)]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-8">
-      <BackToGallery />
-
-      <header className="space-y-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-2xl font-semibold tracking-tight">{video.title}</h1>
-          {video.publish_state && <PublishBadge state={video.publish_state} />}
-        </div>
-        {(video.uploader || video.game) && (
-          <p className="text-sm text-muted-foreground">
-            {video.uploader && <>@{video.uploader}</>}
-            {video.uploader && video.game && " · "}
-            {video.game}
-          </p>
-        )}
-        <p className="text-xs text-muted-foreground">
-          {stats.join(" · ")}
-        </p>
-        {video.summary && (
-          <p className="max-w-3xl pt-1 text-sm text-muted-foreground">{video.summary}</p>
-        )}
-        {video.topics.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 pt-1">
-            {video.topics.map((topic) => (
-              <span
-                key={topic}
-                className="rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[11px] text-muted-foreground"
-              >
-                {topic}
-              </span>
-            ))}
+    <Shell>
+      <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="min-w-0 space-y-6">
+          <div className="overflow-hidden rounded-2xl bg-black ring-1 ring-white/10">
+            <HlsPlayer
+              ref={playerRef}
+              src={streamUrlFor(video)}
+              poster={video.thumbnail_url}
+              initialSeek={startAt}
+              onError={setPlaybackError}
+              className="max-h-[70vh] w-full"
+            />
           </div>
-        )}
-      </header>
+          {playbackError && <p className="text-xs text-[var(--mtv-red)]">{playbackError}</p>}
 
-      <div className="overflow-hidden rounded-xl border bg-black">
-        <HlsPlayer
-          ref={playerRef}
-          src={streamUrlFor(video)}
-          poster={video.thumbnail_url}
-          initialSeek={startAt}
-          onError={setPlaybackError}
-          className="max-h-[60vh] w-full"
-        />
-      </div>
+          <header className="space-y-2">
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{video.title}</h1>
+              {isOwner && video.publish_state && video.publish_state !== "published" && (
+                <PublishBadge state={video.publish_state} />
+              )}
+            </div>
+            {meta && <p className="text-sm text-white/55">{meta}</p>}
+          </header>
 
-      {playbackError && (
-        <p className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
-          {playbackError}
-        </p>
-      )}
+          <EngagementBar video={video} onChange={setVideo} />
 
-      <ClipActions video={video} onChange={setVideo} />
+          {activeMoment && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-white/70">
+              <Film className="h-3.5 w-3.5" />
+              <span>
+                Playing the moment at <span className="font-mono">{formatTimestamp(activeMoment.seek_seconds)}</span> ·{" "}
+                {activeMoment.match.label.toLowerCase()}
+              </span>
+              <button type="button" onClick={() => setActiveMoment(null)} className="underline underline-offset-2 hover:text-white">
+                Clear
+              </button>
+            </div>
+          )}
 
-      {activeMoment && (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border bg-muted/30 px-3 py-2 text-xs">
-          <Film className="h-3.5 w-3.5 text-muted-foreground" />
-          <span>
-            Playing the moment at{" "}
-            <span className="font-mono">{formatTimestamp(activeMoment.seek_seconds)}</span> —{" "}
-            {activeMoment.match.label.toLowerCase()}
-          </span>
-          <button
-            type="button"
-            onClick={() => setActiveMoment(null)}
-            className="ml-auto text-muted-foreground underline underline-offset-2 hover:text-foreground"
-          >
-            Clear
-          </button>
+          <SearchPanel
+            // Keyed by video so moving between clips resets the panel.
+            key={video.video_id}
+            scope="video"
+            videoId={video.video_id}
+            placeholder="Find a moment in this clip…"
+            scopeLabel={<span>Search inside this clip</span>}
+            onOpenResult={openResult}
+            disabled={!video.searchable}
+            disabledMessage={
+              video.processing_status === "failed"
+                ? `Processing failed, so this clip can't be searched. ${video.processing_error ?? ""}`
+                : "This clip is still being indexed. Search opens once it's ready."
+            }
+          />
+
+          {video.kind === "clip" && <Comments clipId={video.video_id} />}
         </div>
-      )}
 
-      <SearchPanel
-        // Keyed by video so navigating between videos resets the panel state
-        // rather than carrying the previous video's results across.
-        key={video.video_id}
-        scope="video"
-        videoId={video.video_id}
-        placeholder={`Search in “${video.title}”…`}
-        scopeLabel={
-          <span className="flex items-center gap-1.5">
-            <Film className="h-3.5 w-3.5" />
-            Searching in this video only
-          </span>
-        }
-        onOpenResult={openResult}
-        disabled={!video.searchable}
-        disabledMessage={
-          video.processing_status === "failed"
-            ? `Processing failed, so this video is not searchable. ${video.processing_error ?? ""}`
-            : "This video is still being indexed. Search will open once it is ready."
-        }
-      />
-
-      {video.processing_status === "visual_only" && (
-        <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-200">
-          Only the visual index is available for this video, so searches match on appearance
-          rather than spoken content.
-        </p>
-      )}
-    </div>
+        <aside className="space-y-10">
+          {isOwner && <OwnerTools video={video} onChange={setVideo} />}
+          {video.game && <RelatedClips game={video.game} excludeId={video.video_id} />}
+        </aside>
+      </div>
+    </Shell>
   );
 }
 
-function BackToGallery() {
+function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <Link
-      href="/library"
-      className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-    >
-      <ArrowLeft className="h-4 w-4" />
-      All videos
-    </Link>
+    <div className="min-h-screen bg-[var(--mtv-bg)] px-4 pb-20 pt-28 text-[var(--mtv-text)] sm:px-8 sm:pt-32">
+      <SiteNav />
+      <div className="mx-auto max-w-6xl">{children}</div>
+    </div>
   );
 }

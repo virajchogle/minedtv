@@ -8,8 +8,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Menu, Video, X } from "lucide-react";
+import { Menu, X } from "lucide-react";
 
+import { Logo } from "@/components/brand";
 import { UserSwitcher } from "@/components/current-user";
 import { cn } from "@/lib/utils";
 
@@ -58,10 +59,7 @@ export function SiteNav() {
           href="/"
           className="flex items-center gap-2 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
         >
-          <span className="rounded-md bg-white/10 p-1.5 ring-1 ring-white/15">
-            <Video className="h-4 w-4 text-white" />
-          </span>
-          <span className="text-sm font-semibold tracking-tight text-white">MinedTV</span>
+          <Logo size={28} />
         </Link>
 
         <div className="hidden items-center gap-1 sm:flex">

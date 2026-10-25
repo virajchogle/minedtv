@@ -7,7 +7,7 @@ from sqlalchemy import func, select
 from app.api.deps import Db, OptionalUser, Urls
 from app.api.feed import base_clip_query, clip_page
 from app.db.models import PUBLISH_STATES, UNPUBLISHED_STATES, Clip, User
-from app.schemas import FeedOut, ProfileOut, UserCreate, UserOut
+from app.schemas import ClipFormat, FeedOut, FeedSort, ProfileOut, UserCreate, UserOut
 from app.services import social
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -66,6 +66,8 @@ async def user_clips(
     state: Literal["all", "draft", "ready", "published", "unpublished"] = Query(
         default="all", description="Owner only (X-User-Id = user_id); everyone else always gets published clips"
     ),
+    format: ClipFormat | None = Query(default=None, description="short (Reels) or long; omit for both"),
+    sort: FeedSort = Query(default="new", description="new = newest first; top = ranked by engagement and virality"),
 ) -> FeedOut:
     """A user's clips, newest first (same pagination as /feed). Owners can filter by publish state:
     draft, ready (queued to post to YouTube), published, unpublished (draft + ready) or all."""
@@ -78,4 +80,5 @@ async def user_clips(
             "all": PUBLISH_STATES,
             "unpublished": UNPUBLISHED_STATES,
         }.get(state, (state,))
-    return await clip_page(db, base_clip_query(states).where(Clip.user_id == user_id), limit, cursor, urls, me)
+    stmt = base_clip_query(states).where(Clip.user_id == user_id)
+    return await clip_page(db, stmt, limit, cursor, urls, me, format, sort)

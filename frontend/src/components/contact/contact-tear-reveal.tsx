@@ -1,10 +1,10 @@
 "use client";
 
 /**
- * Closing "Contact us" section: the MinedTV wordmark tears open like a film
+ * Closing "Contact us" section: the MinedIt wordmark tears open like a film
  * clapperboard snapping shut, in the spirit of the tiger-tear-reveal
  * reference but scoped down to a one-shot in-view animation (no scroll
- * scrubbing) and restyled gold-on-dark for MinedTV — no tiger artwork, no
+ * scrubbing) and restyled gold-on-dark for MinedIt — no tiger artwork, no
  * borrowed branding.
  *
  * Two clapperboard bars start pressed together over the wordmark, then snap
@@ -18,7 +18,7 @@ import { Mail } from "lucide-react";
 const EASE = [0.16, 1, 0.3, 1] as const;
 
 export function ContactTearReveal({
-  wordmark = "MinedTV",
+  wordmark = "MinedIt",
   email = "hello@minedtv.app",
 }: {
   wordmark?: string;

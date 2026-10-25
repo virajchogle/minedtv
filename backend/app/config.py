@@ -78,8 +78,12 @@ class Settings(BaseSettings):
     creator_request_timeout_s: int = Field(default=90, ge=10, le=600)
     creator_persona_count: int = Field(default=9, ge=3, le=15)
     creator_persona_model: str = "gemini-3.1-flash-lite"
-    # Extra persona panels per clip virality check, run in parallel; their scores give a range.
-    virality_extra_panels: int = Field(default=2, ge=0, le=5)
+    # Direct-upload video virality samples frames locally in parallel with the one
+    # Gemini content-analysis call, then blends this much frame evidence into the
+    # deterministic persona-cascade score. It never calls Gemini once per frame.
+    creator_virality_sample_fps: float = Field(default=0.5, gt=0, le=4)
+    creator_virality_max_frames: int = Field(default=240, ge=12, le=2000)
+    creator_virality_frame_weight: float = Field(default=0.25, ge=0, le=0.5)
     # Content moderation (app/ml/moderation.py). Same cheap model tier as persona
     # generation — this is a short classification call, not full video analysis.
     moderation_model: str = "gemini-3.1-flash-lite"
@@ -114,9 +118,28 @@ class Settings(BaseSettings):
     transcript_min_window_ms: int = 5000
     transcript_max_window_ms: int = 10000
     auto_clip_count: int = 3
+    # On-demand frame virality highlights. This uses the frame embeddings already produced by
+    # the pipeline, so it does not re-read or re-upload the video.
+    # Run the frame scorer on every processed upload; its clips replace the event-based ones.
+    auto_frame_highlights: bool = True
+    frame_highlight_count: int = Field(default=3, ge=1, le=10)
+    frame_highlight_duration_ms: int = Field(default=30_000, ge=3_000, le=120_000)
+    frame_virality_min_score: float = Field(default=0.42, ge=0, le=1)
+    standalone_highlight_dir: str = ".data/standalone-highlights"
+    standalone_highlight_ttl_s: int = Field(default=86_400, ge=300)
+    standalone_highlight_sample_fps: float = Field(default=0.5, gt=0, le=4)
+    # Bound extraction work for long direct uploads. At 240 frames a ten-minute
+    # recording is sampled at 0.4 fps instead of growing without limit.
+    standalone_highlight_max_frames: int = Field(default=240, ge=12, le=2000)
+    standalone_mobile_width: int = Field(default=720, ge=360, le=2160, multiple_of=2)
+    standalone_mobile_height: int = Field(default=1280, ge=640, le=3840, multiple_of=2)
+    stored_highlight_max_minutes: int = Field(default=10, ge=1, le=90)
+    stored_highlight_max_source_mb: int = Field(default=1024, ge=1)
     # Publish state for clips the pipeline creates. "draft" keeps new uploads private until the owner
     # publishes; "published" puts them straight in the feed (useful until the app has a publish button).
     new_clip_publish_state: Literal["draft", "ready", "published"] = "draft"
+    # A clip is a "short" (Reels tab) when it's vertical and at most this long; everything else is "long".
+    short_max_duration_s: int = Field(default=60, ge=5, le=600)
     upload_concurrency: int = 8
     # Uploads over these limits are refused (size) or fail at the probe step (length), so one huge
     # file can't run the worker into its job timeout.
@@ -143,6 +166,8 @@ class Settings(BaseSettings):
 
     # --- counters ---
     counter_flush_interval_s: int = 30
+    # A viewer's repeat views of the same clip within this window count once.
+    view_dedup_minutes: int = Field(default=30, ge=1)
 
     @field_validator(
         "s3_endpoint_url", "s3_public_endpoint_url", "storage_public_base_url", "public_api_base_url",

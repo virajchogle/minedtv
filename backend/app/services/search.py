@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.config import Settings
 from app.db.models import Clip, Event, Frame, Session, SessionStatus, Transcript, User
 from app.ml.interfaces import Embedder
+from app.services.formats import ClipFormat, clip_format
 
 log = logging.getLogger(__name__)
 
@@ -81,6 +82,8 @@ class Filters:
     date_to: datetime | None = None
     # Only set when the caller searches their own clips: drafts and "ready" clips are included.
     include_unpublished: bool = False
+    # Only short (vertical, reel-length) or only long results.
+    fmt: ClipFormat | None = None
 
 
 @dataclass
@@ -249,9 +252,9 @@ def group_by_session(moments: list[Moment], max_others: int = 3) -> list[Session
 def cache_key(q: str, f: Filters, limit: int) -> str:
     payload = json.dumps(
         [normalize_query(q), (f.game or "").lower(), str(f.user_id or ""), str(f.date_from or ""), str(f.date_to or ""),
-         limit, f.include_unpublished]
+         limit, f.include_unpublished, f.fmt or ""]
     )
-    return "search:v3:" + hashlib.sha1(payload.encode()).hexdigest()
+    return "search:v4:" + hashlib.sha1(payload.encode()).hexdigest()
 
 
 # ---------------------------------------------------------------- signal queries
@@ -266,6 +269,8 @@ def _filtered(stmt: Select, f: Filters) -> Select:
         )
     if f.game:
         stmt = stmt.where(func.lower(Session.game) == f.game.lower())
+    if f.fmt == "short":
+        stmt = stmt.where(Session.height > Session.width)  # the duration half is checked per clip in resolve()
     if f.user_id:
         stmt = stmt.where(Session.user_id == f.user_id)
     when = func.coalesce(Session.started_at, Session.created_at)
@@ -368,6 +373,9 @@ class Resolved:
     title: str | None
     user: dict
     other_moments_ms: list[int]
+    width: int | None = None
+    height: int | None = None
+    format: str = "long"
     # Best moment first, then the others: {t_ms, confidence, signals, label, snippet, thumbnail_key}
     moments: list[dict] = field(default_factory=list)
 
@@ -395,10 +403,16 @@ async def _nearest_thumb(db: AsyncSession, session_id: uuid.UUID, t: int) -> str
 
 
 async def resolve(
-    db: AsyncSession, hits: list[SessionHit], window_ms: int, include_unpublished: bool = False
+    db: AsyncSession,
+    hits: list[SessionHit],
+    window_ms: int,
+    include_unpublished: bool = False,
+    fmt: ClipFormat | None = None,
+    short_max_ms: int = 60_000,
 ) -> list[Resolved]:
     """Turn each session's moments into a result. Public search only resolves to published clips,
-    so unpublished footage never leaks; owners also get drafts and suggested windows."""
+    so unpublished footage never leaks; owners also get drafts and suggested windows. With fmt,
+    only clips of that format count, and results of the other format are dropped."""
     if not hits:
         return []
     session_ids = [h.best.session_id for h in hits]
@@ -424,6 +438,11 @@ async def resolve(
             )
             if not include_unpublished:
                 stmt = stmt.where(Clip.publish_state == "published")
+            vertical = bool(s.width and s.height and s.height > s.width)
+            if fmt == "short":
+                stmt = stmt.where((Clip.end_ms - Clip.start_ms) <= short_max_ms)
+            elif fmt == "long" and vertical:
+                stmt = stmt.where((Clip.end_ms - Clip.start_ms) > short_max_ms)
             clip = await db.scalar(stmt)
             if clip is not None:
                 anchor = m
@@ -455,6 +474,9 @@ async def resolve(
         else:
             kind, clip_id, title = "session", None, s.title
             start, end = max(0, t - window_ms), min(s.duration_ms or t + window_ms, t + window_ms)
+        shape = clip_format(s.width, s.height, end - start)
+        if fmt and shape != fmt:
+            continue
         out.append(
             Resolved(
                 kind=kind,
@@ -472,6 +494,9 @@ async def resolve(
                 title=title,
                 user={"id": str(u.id), "username": u.username, "avatar_url": u.avatar_url},
                 other_moments_ms=[m.t_ms for m in ordered[1:]],
+                width=s.width,
+                height=s.height,
+                format=shape,
                 moments=moments,
             )
         )
@@ -515,7 +540,10 @@ class SearchService:
         # Over-fetch: public search may skip sessions whose matches are all in unpublished footage.
         grouped = group_by_session(moments)[: limit * 2]
         async with self.sessionmaker() as db:
-            return (await resolve(db, grouped, st.clip_window_ms, f.include_unpublished))[:limit]
+            resolved = await resolve(
+                db, grouped, st.clip_window_ms, f.include_unpublished, f.fmt, st.short_max_duration_s * 1000
+            )
+            return resolved[:limit]
 
     async def search_text(self, q: str, f: Filters, limit: int) -> tuple[list[Resolved], bool]:
         """Returns (results, served_from_cache)."""

@@ -14,8 +14,11 @@ from pathlib import Path
 from app.db.models import PIPELINE_STEPS
 from app.main import create_app
 from app.ml.audience_simulator import AudiencePanelDraft, build_audience_simulation
+from app.services.video_persona_virality import ALGORITHM_VERSION as PERSONA_FRAME_ALGORITHM_VERSION
 from app.schemas import (
     ClipDetailOut,
+    ClipHighlightMomentOut,
+    ClipHighlightsOut,
     CommentOut,
     CommentsPage,
     FollowOut,
@@ -27,10 +30,17 @@ from app.schemas import (
     ClipOut,
     CountsOut,
     CreatorPackOut,
+    DirectHighlightClipOut,
+    DirectHighlightFrameOut,
+    DirectHighlightMomentOut,
+    DirectHighlightsOut,
     EventOut,
     ExportOut,
     FeedOut,
+    FrameHighlightsOut,
+    FrameViralityPoint,
     HealthOut,
+    HighlightCaptionOut,
     SearchOut,
     SearchResult,
     SessionOut,
@@ -38,6 +48,8 @@ from app.schemas import (
     TranscriptOut,
     UploadOut,
     UserOut,
+    VideoViralityEvidenceOut,
+    VideoViralityMomentOut,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -71,6 +83,7 @@ def clip(i: int, liked: bool | None = None) -> ClipOut:
         id=cid, session_id=sid, user=USERS[u], game=game, title=title, start_ms=start, end_ms=end,
         duration_ms=end - start, thumbnail_url=f"{CDN}/sessions/{sid}/frames/{(start + end) // 2 // 1000 * 1000:09d}.jpg",
         playlist_url=f"{API}/clips/{cid}/playlist.m3u8", status="ready", kind=kind, view_count=views,
+        generation_source="pipeline" if kind == "auto" else None,
         like_count=likes, liked_by_me=liked, created_at=NOW - timedelta(hours=3 * i),
     )
 
@@ -83,7 +96,9 @@ def session(status: str = "ready", last_step: str | None = "finalize", **kw) -> 
         duration_ms=2_712_000 if last_step else None, width=1920 if last_step else None,
         height=1080 if last_step else None, status=status, last_step=last_step, failed_step=kw.get("failed_step"),
         error=kw.get("error"), poster_url=f"{CDN}/sessions/{sid}/poster.jpg" if ready else None,
-        playlist_url=f"{API}/sessions/{sid}/playlist.m3u8" if ready else None, created_at=NOW - timedelta(hours=1),
+        playlist_url=f"{API}/sessions/{sid}/playlist.m3u8" if ready else None,
+        moderation_severity="none", moderation_reason=None, age_restricted=False,
+        created_at=NOW - timedelta(hours=1),
     )
 
 
@@ -92,7 +107,7 @@ def status_event(status: str, last_step: str | None, **kw) -> SessionStatusEvent
     return SessionStatusEvent(
         session_id=uid(500), status=status, progress=1.0 if status == "ready" else done / len(PIPELINE_STEPS),
         steps=PIPELINE_STEPS, last_step=last_step, failed_step=kw.get("failed_step"), error=kw.get("error"),
-        done=status in ("ready", "failed"),
+        done=status in ("ready", "failed", "blocked"), moderation_severity="none", age_restricted=False,
     )
 
 
@@ -214,10 +229,33 @@ def examples() -> dict[str, object]:
         "sessions.get.json": session(),
         "sessions.get.failed.json": session("failed", "audio", failed_step="highlights", error="RuntimeError: model exploded"),
         "sessions.reprocess.json": status_event("queued", "audio"),
+        "sessions.frame-highlights.json": FrameHighlightsOut(
+            session_id=sid,
+            status="ready",
+            requested_count=3,
+            clip_duration_ms=30_000,
+            algorithm_version="frame-virality-v2-visibility",
+            scores=[
+                FrameViralityPoint(
+                    frame_id=uid(9200), t_ms=331_000, score=0.934, visual_score=0.91,
+                    novelty_score=0.78, event_score=0.97, speech_score=0.88,
+                    visibility_score=0.96, scene_score=0.89, selected=True,
+                    thumbnail_url=f"{CDN}/sessions/{sid}/frames/000331000.jpg",
+                ),
+                FrameViralityPoint(
+                    frame_id=uid(9201), t_ms=332_000, score=0.741, visual_score=0.84,
+                    novelty_score=0.43, event_score=0.76, speech_score=0.88,
+                    visibility_score=0.91, scene_score=0.85, selected=False,
+                    thumbnail_url=f"{CDN}/sessions/{sid}/frames/000332000.jpg",
+                ),
+            ],
+            clips=[clip(0).model_copy(update={"generation_source": "frame_virality", "publish_state": "draft"})],
+            updated_at=NOW,
+        ),
         "feed.json": FeedOut(items=[clip(i) for i in range(5)], next_cursor="MjAyNi0xMC0yNFQwNjozMDowMCswMDowMHwwMDAw"),
         "users.clips.json": FeedOut(items=[clip(0)], next_cursor=None),
         "clips.get.json": ClipDetailOut(
-            **c0.model_dump(), session_duration_ms=2_712_000,
+            **c0.model_dump(), session_duration_ms=2_712_000, frame_count=31,
             events=[
                 EventOut(id=uid(9001), t_ms=318_400, type="kill", score=0.62, source="HighlightDetector", metadata={"weapon": "vandal"}),
                 EventOut(id=uid(9002), t_ms=331_000, type="clutch", score=0.97, source="HighlightDetector", metadata={"enemies": 5}),
@@ -236,6 +274,42 @@ def examples() -> dict[str, object]:
         "clips.export.processing.json": ExportOut(clip_id=c0.id, status="processing", url=None, start_ms=c0.start_ms, end_ms=c0.end_ms),
         "clips.export.ready.json": ExportOut(clip_id=c0.id, status="ready", url=f"{CDN}/exports/{c0.id}/{c0.start_ms}-{c0.end_ms}.mp4",
                                              start_ms=c0.start_ms, end_ms=c0.end_ms),
+        "clips.highlights.ready.json": ClipHighlightsOut(
+            clip_id=c0.id,
+            status="ready",
+            stage="rendering",
+            progress=1.0,
+            start_ms=c0.start_ms,
+            end_ms=c0.end_ms,
+            platform="tiktok",
+            mode="single",
+            captions_enabled=True,
+            caption_style="bold",
+            hook_enabled=True,
+            algorithm_version="stored-ai-share-v1",
+            video_url=f"{CDN}/highlights/{c0.id}/{c0.start_ms}-{c0.end_ms}-abcdef0123456789.mp4",
+            download_url=f"{CDN}/highlights/{c0.id}/{c0.start_ms}-{c0.end_ms}-abcdef0123456789.mp4",
+            width=720,
+            height=1280,
+            duration_ms=20_000,
+            frames_analyzed=31,
+            captions_burned=True,
+            moments=[
+                ClipHighlightMomentOut(
+                    source_start_ms=8_000,
+                    source_end_ms=28_000,
+                    score=0.934,
+                    reason="The final elimination wins the round",
+                )
+            ],
+            captions=[
+                HighlightCaptionOut(start_ms=0, end_ms=2_500, text="1v5 Clutch on Ascent", kind="hook"),
+                HighlightCaptionOut(start_ms=4_000, end_ms=7_000, text="No way.", kind="speech"),
+            ],
+            summary=creator.summary,
+            suggested_caption=creator.caption,
+            hashtags=creator.hashtags,
+        ),
         "comments.list.json": CommentsPage(
             total=3,
             next_cursor=None,
@@ -281,7 +355,77 @@ def examples() -> dict[str, object]:
         "search.json": search_results(),
         "search.image.json": search_results().model_copy(update={"query": "image:screenshot.png", "took_ms": 241}),
         "creator.analyze.json": creator,
+        "creator.highlights.json": DirectHighlightsOut(
+            run_id=uid(9300), filename="ranked-ascent.mp4", duration_ms=91_000, width=1920, height=1080,
+            frames_analyzed=46, algorithm_version="frame-virality-v4-highlight-montage",
+            scores=[
+                DirectHighlightFrameOut(
+                    frame_id=uid(9301), t_ms=40_000, score=0.934, visual_score=0.91,
+                    novelty_score=0.82, visibility_score=0.95, scene_score=0.88, selected=True,
+                    thumbnail_url=f"{API}/creator/highlights/{uid(9300)}/frames/{uid(9301)}.jpg",
+                ),
+                DirectHighlightFrameOut(
+                    frame_id=uid(9302), t_ms=42_000, score=0.612, visual_score=0.68,
+                    novelty_score=0.44, visibility_score=0.89, scene_score=0.73,
+                    selected=True,
+                    thumbnail_url=f"{API}/creator/highlights/{uid(9300)}/frames/{uid(9302)}.jpg",
+                ),
+            ],
+            clips=[
+                DirectHighlightClipOut(
+                    index=1, title="The highlight montage", start_ms=0, end_ms=18_000,
+                    duration_ms=18_000, score=0.934,
+                    video_url=f"{API}/creator/highlights/{uid(9300)}/clips/1.mp4",
+                    download_url=f"{API}/creator/highlights/{uid(9300)}/clips/1.mp4?download=true",
+                    thumbnail_url=f"{API}/creator/highlights/{uid(9300)}/frames/{uid(9301)}.jpg",
+                    width=720, height=1280, captions_burned=True, caption_count=8,
+                    caption_source="gemini",
+                    moments=[
+                        DirectHighlightMomentOut(
+                            index=1, source_start_ms=8_000, source_end_ms=17_000,
+                            duration_ms=9_000, score=0.934,
+                            thumbnail_url=f"{API}/creator/highlights/{uid(9300)}/frames/{uid(9301)}.jpg",
+                        ),
+                        DirectHighlightMomentOut(
+                            index=2, source_start_ms=38_000, source_end_ms=47_000,
+                            duration_ms=9_000, score=0.612,
+                            thumbnail_url=f"{API}/creator/highlights/{uid(9300)}/frames/{uid(9302)}.jpg",
+                        ),
+                    ],
+                )
+            ],
+        ),
         "creator.simulate.json": build_audience_simulation(panel, creator, "instagram", "FPS highlight viewers"),
+        "creator.virality.json": build_audience_simulation(
+            panel,
+            creator,
+            "instagram",
+            "FPS highlight viewers",
+            VideoViralityEvidenceOut(
+                algorithm_version=PERSONA_FRAME_ALGORITHM_VERSION,
+                duration_ms=91_000,
+                frames_analyzed=46,
+                frame_score=76.8,
+                peak_score=93.4,
+                hook_score=71.2,
+                sustained_score=74.6,
+                coverage=0.2391,
+                moments=[
+                    VideoViralityMomentOut(
+                        t_ms=40_000,
+                        context_start_ms=34_000,
+                        context_end_ms=47_000,
+                        score=93.4,
+                        visual_score=91.0,
+                        novelty_score=82.0,
+                        speech_score=77.0,
+                        visibility_score=95.0,
+                        scene_score=88.0,
+                    )
+                ],
+            ),
+            0.25,
+        ),
     }
 
 
@@ -294,21 +438,27 @@ def dump(obj) -> str:
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     for name, obj in examples().items():
-        (OUT / name).write_text(dump(obj) + "\n")
+        (OUT / name).write_text(dump(obj) + "\n", encoding="utf-8")
 
     sse = [status_event("queued", None), status_event("probing", None), status_event("segmenting", "probe"),
            status_event("frames", "thumbnails"), status_event("audio", "frames"), status_event("ready", "finalize")]
-    (OUT / "sessions.status.sse.txt").write_text("".join(f"event: status\ndata: {e.model_dump_json()}\n\n" for e in sse))
+    (OUT / "sessions.status.sse.txt").write_text(
+        "".join(f"event: status\ndata: {e.model_dump_json()}\n\n" for e in sse),
+        encoding="utf-8",
+    )
 
     c = clip(0)
     playlist = ["#EXTM3U", "#EXT-X-VERSION:6", "#EXT-X-TARGETDURATION:2", "#EXT-X-MEDIA-SEQUENCE:156",
                 "#EXT-X-PLAYLIST-TYPE:VOD", "#EXT-X-INDEPENDENT-SEGMENTS"]
     for i in range(156, 171):
         playlist += ["#EXTINF:2.000,", f"{CDN}/sessions/{c.session_id}/hls/seg_{i:05d}.ts"]
-    (OUT / "clips.playlist.m3u8").write_text("\n".join(playlist + ["#EXT-X-ENDLIST"]) + "\n")
+    (OUT / "clips.playlist.m3u8").write_text(
+        "\n".join(playlist + ["#EXT-X-ENDLIST"]) + "\n",
+        encoding="utf-8",
+    )
 
     spec = create_app().openapi()
-    (ROOT / "docs" / "openapi.json").write_text(json.dumps(spec, indent=2) + "\n")
+    (ROOT / "docs" / "openapi.json").write_text(json.dumps(spec, indent=2) + "\n", encoding="utf-8")
     print(f"wrote {len(list(OUT.iterdir()))} examples to {OUT.relative_to(ROOT)} and docs/openapi.json")
 
 

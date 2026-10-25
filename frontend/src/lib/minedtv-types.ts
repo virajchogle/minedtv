@@ -1,5 +1,5 @@
 /**
- * Types for the deployed MinedTV API.
+ * Types for the deployed MinedIt API.
  *
  * These mirror the service's OpenAPI schema exactly — same field names, same
  * units (milliseconds), same nullability. Nothing is renamed here; the
@@ -51,6 +51,13 @@ export interface ClipOut {
   start_ms: number;
   end_ms: number;
   duration_ms: number;
+  /** Display size (rotation applied); null until processed. */
+  width?: number | null;
+  height?: number | null;
+  /** short = vertical and at most /config limits.short_max_duration_s long. */
+  format?: "short" | "long";
+  /** For reels: the clip it was made from. */
+  reel_of?: string | null;
   thumbnail_url: string | null;
   playlist_url: string;
   status: UpstreamStatus;
@@ -229,64 +236,24 @@ export interface ClipCreatorPackOut {
 
 export type CreatorPlatform = "general" | "youtube" | "reddit" | "instagram" | "tiktok";
 
-export interface AudiencePersonaReview {
-  name: string;
-  layer: string;
-  profile: string;
-  interests: string[];
-  hook_score: number;
-  completion_probability: number;
-  like_probability: number;
-  share_probability: number;
-  skip_probability: number;
-  primary_action: string;
-  reaction?: string;
-  what_worked?: string;
-  friction?: string;
-  recommended_change?: string;
-  [key: string]: unknown;
-}
-
-/** The persona simulator's output (backend AudienceSimulationOut). */
-export interface AudienceSimulation {
-  platform: CreatorPlatform;
-  requested_target_audience: string | null;
-  inferred_niche: string;
-  inferred_target_audience: string;
-  virality_score: number;
-  verdict: "weak" | "mixed" | "promising" | "strong";
-  cascade_depth: "target_only" | "adjacent" | "outsider" | "broad_breakout";
-  cascade_summary: string;
-  metrics: {
-    simulated_watch_rate: number;
-    simulated_completion_rate: number;
-    simulated_like_rate: number;
-    simulated_comment_rate: number;
-    simulated_save_rate: number;
-    simulated_share_rate: number;
-  };
-  layers: {
-    layer: string;
-    persona_count: number;
-    score: number;
-    threshold: number;
-    exposed_in_cascade?: boolean;
-    cleared_threshold: boolean;
-  }[];
-  persona_reviews: AudiencePersonaReview[];
-  consensus_strengths: string[];
-  consensus_risks: string[];
-  recommended_changes: string[];
-  disclaimer: string;
-  /** Every persona panel's score (the first is this report's). Empty for older one-panel results. */
-  score_samples?: number[];
-}
-
+/** A clip's virality from the frame scorer (backend ClipViralityOut). Scores are 0–100. */
 export interface ClipViralityOut {
   clip_id: string;
   status: JobStatus;
-  platform: CreatorPlatform;
-  result: AudienceSimulation | null;
+  score: number | null;
+  verdict: "weak" | "mixed" | "promising" | "strong" | null;
+  /** The clip's strongest moment, from its start. */
+  peak_offset_ms: number | null;
+  components: {
+    visual: number;
+    novelty: number;
+    event: number;
+    speech: number;
+    visibility: number;
+    scene: number;
+  } | null;
+  curve: { offset_ms: number; score: number }[];
+  algorithm_version: string | null;
   error: string | null;
   start_ms: number;
   end_ms: number;
@@ -322,6 +289,7 @@ export interface YouTubeStatusOut {
 export interface YouTubeUploadOut {
   id: string;
   clip_id: string;
+  kind?: "clip" | "montage";
   status: "queued" | "uploading" | "published" | "failed";
   privacy: YouTubePrivacy;
   title: string;
@@ -351,7 +319,6 @@ export interface ViralitySummary {
   status: JobStatus;
   score: number | null;
   verdict: "weak" | "mixed" | "promising" | "strong" | null;
-  score_samples: number[];
 }
 
 export interface ClipAnalytics {
@@ -373,4 +340,59 @@ export interface AnalyticsOut {
   follower_count: number;
   daily: AnalyticsDay[];
   clips: ClipAnalytics[];
+}
+
+// ── comments ─────────────────────────────────────────────────────────────────
+
+export interface CommentOut {
+  id: string;
+  clip_id: string;
+  user: UserOut;
+  body: string;
+  parent_id: string | null;
+  created_at: string;
+  reply_count: number;
+  /** Oldest first; only on top-level comments. */
+  replies: CommentOut[];
+  /** Author or clip owner; only set when acting as a user. */
+  can_delete: boolean | null;
+}
+
+export interface CommentsPage {
+  /** Top-level comments, newest first, each with its replies. */
+  items: CommentOut[];
+  next_cursor: string | null;
+  /** All comments on the clip, replies included. */
+  total: number;
+}
+
+// ── AI share renders: single highlight or montage (POST/GET /clips/{id}/highlights) ──
+
+export type HighlightMode = "single" | "montage";
+export type HighlightCaptionStyle = "bold" | "minimal" | "gamer";
+
+export interface HighlightOptions {
+  platform: CreatorPlatform;
+  mode: HighlightMode;
+  captions: boolean;
+  caption_style: HighlightCaptionStyle;
+  hook: boolean;
+}
+
+export interface ClipHighlightsOut {
+  clip_id: string;
+  status: JobStatus;
+  stage: "queued" | "exporting" | "analyzing" | "selecting" | "captioning" | "rendering";
+  progress: number;
+  error: string | null;
+  video_url: string | null;
+  download_url: string | null;
+  width: number | null;
+  height: number | null;
+  duration_ms: number | null;
+  moments: { source_start_ms: number; source_end_ms: number; score: number; reason: string }[];
+  captions: { start_ms: number; end_ms: number; text: string; kind: "hook" | "speech" | "moment" }[];
+  summary: string | null;
+  suggested_caption: string | null;
+  hashtags: string[];
 }

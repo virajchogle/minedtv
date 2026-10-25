@@ -72,10 +72,10 @@ export function MinecraftSunriseHero({
   foregroundSrc,
   videoSrc,
   scrollLength = 420,
-  eyebrow = "MinedTV",
+  eyebrow = "MinedIt",
   headline = "Your moments. Rediscovered.",
   subhead = "Search every clip. Find every moment.",
-  wordmark = "MinedTV",
+  wordmark = "MinedIt",
 }: MinecraftSunriseHeroProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const reduceMotion = useReducedMotion();
