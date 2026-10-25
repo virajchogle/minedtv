@@ -112,9 +112,11 @@ jobs:
           service_account: ${{ vars.GCP_DEPLOY_SA }}
       - uses: google-github-actions/setup-gcloud@v2
       - name: Mark the tested images as latest
+        # Re-tags by pushing the same manifest under :latest (no rebuild); needs only write access.
         run: |
-          gcloud artifacts docker tags add "$REPO/api:$TAG" "$REPO/api:latest" --quiet
-          gcloud artifacts docker tags add "$REPO/worker:$TAG" "$REPO/worker:latest" --quiet
+          gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
+          docker buildx imagetools create -t "$REPO/api:latest" "$REPO/api:$TAG"
+          docker buildx imagetools create -t "$REPO/worker:latest" "$REPO/worker:$TAG"
       - name: Migrate the database (before any new code serves traffic)
         run: |
           gcloud run jobs update minedtv-migrate --project "$PROJECT" --region "$REGION" --image "$REPO/worker:$TAG"
