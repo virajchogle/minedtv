@@ -1,0 +1,224 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-archivo-black);
+  --font-grotesk: var(--font-space-grotesk);
+  --font-accent-mono: var(--font-jetbrains-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+}
+
+@layer base {
+  /* ── Light theme ──────────────────────────────────────────────────────────── */
+  :root {
+    --background: hsl(0 0% 98%);
+    --foreground: hsl(224 71% 4%);
+    --card: hsl(0 0% 100%);
+    --card-foreground: hsl(224 71% 4%);
+    --popover: hsl(0 0% 100%);
+    --popover-foreground: hsl(224 71% 4%);
+    --primary: hsl(352 100% 38%);          /* Fox Crimson #C20017 */
+    --primary-foreground: hsl(0 0% 100%);
+    --secondary: hsl(220 14% 95%);
+    --secondary-foreground: hsl(224 71% 4%);
+    --muted: hsl(220 14% 95%);
+    --muted-foreground: hsl(220 9% 46%);
+    --accent: hsl(220 14% 95%);
+    --accent-foreground: hsl(224 71% 4%);
+    --destructive: hsl(0 84% 60%);
+    --destructive-foreground: hsl(0 0% 98%);
+    --border: hsl(220 13% 91%);
+    --input: hsl(220 13% 91%);
+    --ring: hsl(352 100% 38%);
+    --radius: 0.5rem;
+    --sidebar: hsl(220 14% 96%);
+    --sidebar-foreground: hsl(224 71% 4%);
+    --sidebar-primary: hsl(352 100% 38%);
+    --sidebar-primary-foreground: hsl(0 0% 100%);
+    --sidebar-accent: hsl(220 14% 91%);
+    --sidebar-accent-foreground: hsl(224 71% 4%);
+    --sidebar-border: hsl(220 13% 91%);
+    --sidebar-ring: hsl(352 100% 38%);
+    --sidebar-glass-bg: rgba(255, 255, 255, 0.3);
+    --sidebar-glass-border: rgba(0, 0, 0, 0.08);
+  }
+
+  /* ── Dark theme — recolored to match medal.tv's black + lime-green look ──── */
+  .dark {
+    --background: #050505;
+    --foreground: hsl(0 0% 100%);
+    --card: #121212;
+    --card-foreground: hsl(0 0% 100%);
+    --popover: #121212;
+    --popover-foreground: hsl(0 0% 100%);
+    --primary: #cbff3d;                    /* Medal-style neon lime accent */
+    --primary-foreground: #000000;
+    --secondary: hsl(0 0% 12%);
+    --secondary-foreground: hsl(0 0% 100%);
+    --muted: hsl(0 0% 12%);
+    --muted-foreground: hsl(0 0% 62%);
+    --accent: hsl(0 0% 12%);
+    --accent-foreground: hsl(0 0% 100%);
+    --destructive: hsl(0 62.8% 30.6%);
+    --destructive-foreground: hsl(0 0% 98%);
+    --border: hsl(0 0% 16%);
+    --input: hsl(0 0% 14%);
+    --ring: #cbff3d;
+    --sidebar: #050505;
+    --sidebar-foreground: hsl(0 0% 100%);
+    --sidebar-primary: #cbff3d;
+    --sidebar-primary-foreground: #000000;
+    --sidebar-accent: hsl(0 0% 11%);
+    --sidebar-accent-foreground: hsl(0 0% 100%);
+    --sidebar-border: hsl(0 0% 16%);
+    --sidebar-ring: #cbff3d;
+    --sidebar-glass-bg: rgba(0, 0, 0, 0.7);
+    --sidebar-glass-border: rgba(255, 255, 255, 0.06);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply text-foreground;
+    background: #050505;
+  }
+}
+
+/* ── Mouse-tracking radial gradient (follows cursor via --mx/--my set in JS) */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: radial-gradient(
+    600px circle at var(--mx, 50%) var(--my, 50%),
+    rgba(203, 255, 61, 0.05),
+    transparent 60%
+  );
+}
+
+/* ── Subtle noise texture overlay */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ── Drifting orb animations ─────────────────────────────────────────────── */
+
+@keyframes drift1 {
+  to { transform: translate(-60px, 50px); }
+}
+
+@keyframes drift2 {
+  to { transform: translate(50px, -30px); }
+}
+
+@keyframes drift3 {
+  to { transform: translate(60px, 30px); }
+}
+
+/* ── Sparkle animation ───────────────────────────────────────────────────── */
+
+@keyframes sparkle-pop {
+  0%   { transform: translate(-50%, -50%) scale(0) rotate(-15deg); opacity: 0; }
+  30%  { transform: translate(-50%, -50%) scale(1.1) rotate(5deg);  opacity: 1; }
+  60%  { transform: translate(-50%, -50%) scale(1)   rotate(0deg);  opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(0)   rotate(15deg); opacity: 0; }
+}
+
+/* ── MinedTv design tokens ────────────────────────────────────────────────
+ * Scoped as plain custom properties (not mapped into @theme) so they are
+ * additive only: nothing elsewhere in the app references these names, so
+ * introducing them cannot change any existing page's colours.
+ * Used by: /explore, /upload, /library, the profile scroll hero.
+ *
+ * Recolored to match medal.tv's black + neon-lime look (explicit direction,
+ * overriding the Android spec doc's literal gold — same hex as --primary
+ * above so the shadcn-based components (SearchPanel, Input, Button, ResultCard)
+ * and these hand-built ones stay visually identical. */
+:root {
+  --mtv-bg: #050505;
+  --mtv-surface: #121212;
+  --mtv-surface-high: #1c1c1c;
+  --mtv-gold: #cbff3d;
+  --mtv-on-gold: #000000;
+  --mtv-text: #ffffff;
+  --mtv-text-2: #9b9b9b;
+  --mtv-divider: #262626;
+  --mtv-red: #ff4d5e;
+  --mtv-green: #3ddc84;
+  --mtv-shimmer: #2a2a2a;
+}
+
+/* ── Marquee: continuous-scroll track for the Explore clip wall ─────────── */
+.animate-marquee {
+  animation: mtv-marquee var(--duration, 40s) linear infinite;
+}
+.animate-marquee-vertical {
+  animation: mtv-marquee-vertical var(--duration, 40s) linear infinite;
+}
+@keyframes mtv-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(calc(-100% - var(--gap, 1rem))); }
+}
+@keyframes mtv-marquee-vertical {
+  from { transform: translateY(0); }
+  to { transform: translateY(calc(-100% - var(--gap, 1rem))); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-marquee,
+  .animate-marquee-vertical {
+    animation: none;
+  }
+}
