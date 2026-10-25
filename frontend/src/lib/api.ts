@@ -622,8 +622,26 @@ export const reindexVideo = (sessionId: string) =>
     method: "POST",
   });
 
+/**
+ * A random ID kept per browser, so the API can count a signed-out viewer's repeat views once.
+ * Without it every web visitor would look like one viewer: they all reach the API via our proxy.
+ */
+function viewerId(): string {
+  try {
+    let id = window.localStorage.getItem("minedtv-viewer");
+    if (!id) {
+      id = crypto.randomUUID();
+      window.localStorage.setItem("minedtv-viewer", id);
+    }
+    return id;
+  } catch {
+    return "no-storage";
+  }
+}
+
+/** Counts once per viewer per clip every 30 minutes; owners' own views don't count. */
 export const recordView = (clipId: string) =>
-  request<unknown>(`/clips/${clipId}/view`, { method: "POST" }).catch(() => {
+  request<unknown>(`/clips/${clipId}/view`, { method: "POST", headers: { "X-Viewer-Id": viewerId() } }).catch(() => {
     /* view counting must never interrupt playback */
   });
 

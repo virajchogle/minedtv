@@ -24,7 +24,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /** Request headers worth forwarding. Hop-by-hop and auth headers are dropped. */
-const FORWARD_REQUEST_HEADERS = ["content-type", "accept", "x-user-id"];
+const FORWARD_REQUEST_HEADERS = ["content-type", "accept", "x-user-id", "x-viewer-id"];
 const FORWARD_RESPONSE_HEADERS = ["content-type", "cache-control", "etag"];
 
 async function proxy(request: NextRequest, path: string[]) {

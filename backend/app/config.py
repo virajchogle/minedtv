@@ -143,6 +143,8 @@ class Settings(BaseSettings):
 
     # --- counters ---
     counter_flush_interval_s: int = 30
+    # A viewer's repeat views of the same clip within this window count once.
+    view_dedup_minutes: int = Field(default=30, ge=1)
 
     @field_validator(
         "s3_endpoint_url", "s3_public_endpoint_url", "storage_public_base_url", "public_api_base_url",
