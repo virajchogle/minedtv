@@ -19,6 +19,7 @@ import { ScreenTitle } from "@/components/ui/screen-header";
 import { ScrollExpandMedia } from "@/components/ui/scroll-expansion-hero";
 import { VideoCard } from "@/components/video-card";
 import { fetchMyVideos, type SearchResult, type Video } from "@/lib/api";
+import { usePageTitle } from "@/lib/use-page-title";
 
 const LIBRARY_HERO_VIDEO = "/videos/2.mp4";
 const LIBRARY_HERO_POSTER = "/images/library-hero.jpg";
@@ -79,6 +80,7 @@ function YouTubeConnectBanner() {
 }
 
 function Library() {
+  usePageTitle("My Library");
   const router = useRouter();
   const me = useCurrentUser();
   const [bucket, setBucket] = useState<Bucket>("all");
@@ -125,6 +127,7 @@ function Library() {
     <div className="min-h-screen text-[var(--mtv-text)]">
       <SiteNav />
 
+      <main id="main-content">
       <ScrollExpandMedia
         mediaType="video"
         mediaSrc={LIBRARY_HERO_VIDEO}
@@ -136,6 +139,7 @@ function Library() {
       >
       <div className="mx-auto max-w-5xl space-y-10 px-4 pb-16 sm:px-8">
         <ScreenTitle
+          level="h2"
           action={
             <Link
               href="/upload"
@@ -201,7 +205,7 @@ function Library() {
               )}
 
               {error && (
-                <div className="flex items-start gap-2 rounded-lg border border-[var(--mtv-red)]/40 bg-[var(--mtv-red)]/10 p-3 text-sm text-[var(--mtv-red)]">
+                <div role="alert" className="flex items-start gap-2 rounded-lg border border-[var(--mtv-red)]/40 bg-[var(--mtv-red)]/10 p-3 text-sm text-[var(--mtv-red)]">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                   <div>
                     <p>{error}</p>
@@ -238,6 +242,7 @@ function Library() {
         )}
       </div>
       </ScrollExpandMedia>
+      </main>
     </div>
   );
 }

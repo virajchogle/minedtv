@@ -175,14 +175,14 @@ export function SearchPanel({
       </div>
 
       {searching && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <div role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
           Searching{scope === "video" ? " this video" : " every indexed video"}…
         </div>
       )}
 
       {error && (
-        <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+        <div role="alert" className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
           {error}
         </div>
       )}

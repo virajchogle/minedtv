@@ -65,11 +65,16 @@ function Compose({
         onKeyDown={(e) => (e.metaKey || e.ctrlKey) && e.key === "Enter" && void submit()}
         placeholder={placeholder}
         rows={2}
+        // Only ever passed `true` by the reply box below, which mounts in
+        // direct response to clicking "Reply" — a user-initiated focus
+        // move (WCAG 2.2 "On Focus"/"Change on Request" are about
+        // unrequested context changes on load, not this).
+        // eslint-disable-next-line jsx-a11y/no-autofocus
         autoFocus={autoFocus}
         className="block w-full resize-y rounded-lg border border-[var(--mtv-divider)] bg-[var(--mtv-surface-high)] px-3 py-2 text-[13px] text-[var(--mtv-text)] placeholder:text-[var(--mtv-text-2)]/60 focus:border-[var(--mtv-gold)]/60 focus:outline-none"
       />
       <div className="flex items-center justify-end gap-2">
-        {error && <p className="mr-auto text-xs text-[var(--mtv-red)]">{error}</p>}
+        {error && <p role="alert" className="mr-auto text-xs text-[var(--mtv-red)]">{error}</p>}
         {body.length > MAX_LENGTH * 0.8 && (
           <span className="mr-auto text-[11px] text-[var(--mtv-text-2)]">
             {body.length}/{MAX_LENGTH}
@@ -251,7 +256,7 @@ export function Comments({ clipId }: { clipId: string }) {
         <ChooseUserNotice action="comment" />
       )}
 
-      {error && <p className="text-xs text-[var(--mtv-red)]">{error}</p>}
+      {error && <p role="alert" className="text-xs text-[var(--mtv-red)]">{error}</p>}
       {!items && !error && (
         <p className="flex items-center gap-2 text-xs text-[var(--mtv-text-2)]">
           <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading comments…
@@ -271,6 +276,7 @@ export function Comments({ clipId }: { clipId: string }) {
                 <Compose
                   placeholder={`Reply to @${c.user.username}…`}
                   submitLabel="Reply"
+                  // eslint-disable-next-line jsx-a11y/no-autofocus -- user-initiated by the Reply click above
                   autoFocus
                   onSubmit={(body) => addReply(c.id, body)}
                   onCancel={() => setReplyingTo(null)}

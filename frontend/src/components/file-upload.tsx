@@ -39,6 +39,7 @@ export function FileUpload({ onFileSelect }: FileUploadProps) {
   return (
     <div
       {...getRootProps()}
+      aria-label={file ? `Selected video: ${file.name}. Click to choose a different one.` : "Upload a video file: click, or drag and drop"}
       className={cn(
         "flex min-h-[280px] cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed p-12 text-center transition-colors duration-200",
         isDragActive

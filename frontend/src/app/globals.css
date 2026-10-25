@@ -127,6 +127,35 @@
     @apply text-foreground;
     background: #050505;
   }
+
+  /* Keyboard-only focus ring: :focus-visible never matches a mouse click, so
+     this is invisible to mouse users and only ever shows for Tab/keyboard
+     navigation. !important guarantees it wins over any `outline-none`
+     utility elsewhere, so no focusable element is ever left without one. */
+  :focus-visible {
+    outline: 2px solid var(--mtv-gold, #eab308) !important;
+    outline-offset: 2px !important;
+  }
+}
+
+/* ── Skip link (components/skip-link.tsx): hidden off-canvas until it gets
+   keyboard focus, then docks top-left above everything else. ────────────── */
+.mtv-skip-link {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 200;
+  transform: translateY(-120%);
+  padding: 0.75rem 1.25rem;
+  background: var(--mtv-gold, #eab308);
+  color: var(--mtv-on-gold, #000000);
+  font-weight: 700;
+  font-size: 0.875rem;
+  border-radius: 0 0 0.5rem 0;
+  transition: transform 150ms ease-out;
+}
+.mtv-skip-link:focus {
+  transform: translateY(0);
 }
 
 /* ── Mouse-tracking radial gradient (follows cursor via --mx/--my set in JS) */

@@ -62,7 +62,9 @@ function MarqueeRow({
           <>
             <ClipThumbnail
               src={absoluteUrl(video.thumbnail_url)}
-              alt={video.title}
+              // Decorative: the title right below is already in this same
+              // link's text, so a real alt here would just repeat it.
+              alt=""
               duration={formatDuration(video.duration_seconds)}
               ageRestricted={video.age_restricted}
             />

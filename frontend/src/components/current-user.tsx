@@ -104,13 +104,22 @@ export function UserSwitcher({
   const openMode = useActAsOpen();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  // Closing via Escape or picking a menu item returns focus to the trigger,
+  // same as a click on it would; closing by clicking elsewhere doesn't, so
+  // focus stays wherever the user just clicked.
+  const close = (returnFocus = false) => {
+    setOpen(false);
+    if (returnFocus) triggerRef.current?.focus();
+  };
 
   useEffect(() => {
     if (!open) return;
     const onDown = (event: MouseEvent) => {
       if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
     };
-    const onKey = (event: KeyboardEvent) => event.key === "Escape" && setOpen(false);
+    const onKey = (event: KeyboardEvent) => event.key === "Escape" && close(true);
     window.addEventListener("mousedown", onDown);
     window.addEventListener("keydown", onKey);
     return () => {
@@ -141,6 +150,7 @@ export function UserSwitcher({
   return (
     <div ref={rootRef} className={cn("relative", className)}>
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
         className={cn(
@@ -175,13 +185,13 @@ export function UserSwitcher({
           ) : (
             <p className="px-2 pb-2 text-xs text-white/50">Testing mode: pick any user, no sign-in needed.</p>
           )}
-          {canActAs && <ActAs account={account} me={me} onDone={() => setOpen(false)} />}
+          {canActAs && <ActAs account={account} me={me} onDone={() => close(true)} />}
           {account ? (
             <button
               type="button"
               role="menuitem"
               onClick={() => {
-                setOpen(false);
+                close(true);
                 void signOut();
               }}
               className="mt-1 flex w-full items-center gap-2 rounded-lg border-t border-white/10 px-2 py-2 text-left text-sm text-white/75 hover:bg-white/10"
@@ -273,6 +283,8 @@ function ActAs({ account, me, onDone }: { account: MeOut | null; me: UserOut | n
           onChange={(e) => setNewName(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && void create()}
           placeholder="New demo user"
+          aria-label="New demo user name"
+          autoComplete="off"
           className="min-w-0 flex-1 rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-sm text-white placeholder:text-white/35 focus:outline-none"
         />
         <button
@@ -285,7 +297,7 @@ function ActAs({ account, me, onDone }: { account: MeOut | null; me: UserOut | n
           {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
         </button>
       </div>
-      {error && <p className="px-2 pt-1.5 text-xs text-[var(--mtv-red)]">{error}</p>}
+      {error && <p role="alert" className="px-2 pt-1.5 text-xs text-[var(--mtv-red)]">{error}</p>}
       {account && me && me.id !== account.id && (
         <button
           type="button"

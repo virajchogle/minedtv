@@ -20,6 +20,7 @@ import {
   type SearchResult,
   type Video,
 } from "@/lib/api";
+import { usePageTitle } from "@/lib/use-page-title";
 
 const noopSubscribe = () => () => {};
 
@@ -34,6 +35,7 @@ export default function VideoPage() {
   const [video, setVideo] = useState<Video | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  usePageTitle(video?.title || (error ? "Clip not found" : "Loading clip"));
   const [activeMoment, setActiveMoment] = useState<SearchResult | null>(null);
   const [playbackError, setPlaybackError] = useState<string | null>(null);
   const startAt = Number.isFinite(initialSeek) && initialSeek > 0 ? initialSeek : 0;
@@ -83,6 +85,7 @@ export default function VideoPage() {
   if (loading) {
     return (
       <Shell>
+        <h1 className="sr-only">Loading clip</h1>
         <p className="flex items-center gap-2 text-sm text-[var(--mtv-text-2)]">
           <Loader2 className="h-4 w-4 animate-spin" />
           Loading clip…
@@ -95,8 +98,9 @@ export default function VideoPage() {
     const missing = Boolean(error && /not found/i.test(error));
     return (
       <Shell>
+        <h1 className="sr-only">{missing ? "Clip not found" : "Couldn't load clip"}</h1>
         <div className="max-w-2xl space-y-4">
-          <p className="flex items-start gap-2 text-sm text-[var(--mtv-red)]">
+          <p role="alert" className="flex items-start gap-2 text-sm text-[var(--mtv-red)]">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             {missing
               ? "This clip doesn't exist, or it's a private video only its owner can see."
@@ -127,7 +131,7 @@ export default function VideoPage() {
               className="max-h-[70vh] w-full"
             />
           </div>
-          {playbackError && <p className="text-xs text-[var(--mtv-red)]">{playbackError}</p>}
+          {playbackError && <p role="alert" className="text-xs text-[var(--mtv-red)]">{playbackError}</p>}
 
           <header className="space-y-2">
             <div className="flex flex-wrap items-center gap-3">
@@ -186,7 +190,9 @@ function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen px-4 pb-20 pt-28 text-[var(--mtv-text)] sm:px-8 sm:pt-32">
       <SiteNav />
-      <div className="mx-auto max-w-6xl">{children}</div>
+      <main id="main-content" className="mx-auto max-w-6xl">
+        {children}
+      </main>
     </div>
   );
 }

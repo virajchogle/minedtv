@@ -109,6 +109,11 @@ export const HlsPlayer = forwardRef<HlsPlayerHandle, HlsPlayerProps>(function Hl
   };
 
   return (
+    // The backend already stores a per-clip timestamped transcript
+    // (schemas.TranscriptOut); serving it as a WebVTT <track> here needs a
+    // new backend endpoint, tracked separately rather than shipped as an
+    // empty/fake track.
+    // eslint-disable-next-line jsx-a11y/media-has-caption
     <video
       ref={videoRef}
       poster={poster ?? undefined}

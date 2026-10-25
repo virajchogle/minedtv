@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import { Archivo_Black, Geist, Geist_Mono, JetBrains_Mono, Space_Grotesk } from "next/font/google";
+import { MotionConfig } from "framer-motion";
 import { AppShell } from "@/components/app-shell";
+import { AxeDev } from "@/components/axe-dev";
 import { BackgroundEffects } from "@/components/background-effects";
+import { SkipLink } from "@/components/skip-link";
 import { Splash } from "@/components/splash";
 import Velaris from "@/components/ui/velaris";
 import "./globals.css";
@@ -38,7 +41,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MinedIt",
+  title: { default: "MinedIt", template: "%s — MinedIt" },
   description: "Semantic video moment retrieval across a gallery or within a single video",
 };
 
@@ -65,6 +68,8 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${archivoBlack.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable} antialiased text-foreground`}
       >
+        <SkipLink />
+        <AxeDev />
         <Splash />
         <script
           dangerouslySetInnerHTML={{
@@ -73,7 +78,11 @@ export default function RootLayout({
         />
         <BackgroundEffects />
         <Velaris height="100%" className="fixed inset-0 -z-10 opacity-70" />
-        <AppShell>{children}</AppShell>
+        {/* reducedMotion="user" makes every motion.* component site-wide honor
+            prefers-reduced-motion automatically, no per-component changes. */}
+        <MotionConfig reducedMotion="user">
+          <AppShell>{children}</AppShell>
+        </MotionConfig>
       </body>
     </html>
   );

@@ -15,9 +15,11 @@ import { SiteNav } from "@/components/hero/site-nav";
 import { ScrollExpandMedia } from "@/components/ui/scroll-expansion-hero";
 import { VideoCard } from "@/components/video-card";
 import { fetchMyVideos, type Video } from "@/lib/api";
+import { usePageTitle } from "@/lib/use-page-title";
 
 export default function ProfilePage() {
   const me = useCurrentUser();
+  usePageTitle(me ? `@${me.username}` : "Profile");
   const [clips, setClips] = useState<Video[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -52,9 +54,11 @@ export default function ProfilePage() {
   return (
     <div className="text-[var(--mtv-text)]">
       <SiteNav />
+      <main id="main-content">
       <ScrollExpandMedia
-        mediaType="image"
-        mediaSrc={published[0]?.thumbnail_url ?? "/images/minecraft-hero.webp"}
+        mediaType="video"
+        mediaSrc="/videos/3.mp4"
+        posterSrc="/images/minecraft-hero.webp"
         bgImageSrc="/images/minecraft-hero.webp"
         title={me ? `@${me.username}` : "MinedIt"}
         date={me ? `${published.length} published clips` : "Clip the plays that blow your mind"}
@@ -64,7 +68,7 @@ export default function ProfilePage() {
           {!me ? (
             <ChooseUserNotice action="see your profile" />
           ) : error ? (
-            <p className="text-sm text-[var(--mtv-red)]">{error}</p>
+            <p role="alert" className="text-sm text-[var(--mtv-red)]">{error}</p>
           ) : clips === null ? (
             <p className="flex items-center gap-2 text-sm text-[var(--mtv-text-2)]">
               <Loader2 className="h-4 w-4 animate-spin" /> Loading profile…
@@ -121,6 +125,7 @@ export default function ProfilePage() {
           )}
         </div>
       </ScrollExpandMedia>
+      </main>
     </div>
   );
 }

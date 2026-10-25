@@ -827,6 +827,8 @@ function MontageSection({ video }: { video: Video }) {
 
       {result?.video_url && (
         <div className="space-y-3">
+          {/* eslint-disable-next-line jsx-a11y/media-has-caption -- see hls-player.tsx: real
+              captions need a backend WebVTT endpoint from the existing transcript data. */}
           <video
             key={result.video_url}
             src={result.video_url}

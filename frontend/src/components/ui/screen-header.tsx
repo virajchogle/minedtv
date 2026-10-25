@@ -14,6 +14,13 @@ export function ScreenTitle({
   subtitle,
   action,
   className,
+  /**
+   * Defaults to "h1": on most pages this is the page's only big heading. Set
+   * to "h2" on pages that already render their own <h1> elsewhere (e.g. a
+   * <ScrollExpandMedia> hero above it), so the page still has exactly one h1
+   * and headings don't skip/reverse levels.
+   */
+  level = "h1",
 }: {
   children: React.ReactNode;
   accent?: React.ReactNode;
@@ -21,17 +28,19 @@ export function ScreenTitle({
   subtitle?: React.ReactNode;
   action?: React.ReactNode;
   className?: string;
+  level?: "h1" | "h2";
 }) {
+  const Heading = level;
   return (
     <div className={cn("flex flex-wrap items-end justify-between gap-6", className)}>
       <div className="min-w-0">
         {eyebrow && (
           <p className="mb-3 font-mono text-[11px] uppercase tracking-[0.25em] text-[var(--mtv-gold)]">{eyebrow}</p>
         )}
-        <h1 className="font-display text-balance text-4xl uppercase leading-[0.95] tracking-tight text-[var(--mtv-text)] sm:text-6xl">
+        <Heading className="font-display text-balance text-4xl uppercase leading-[0.95] tracking-tight text-[var(--mtv-text)] sm:text-6xl">
           {children}
           {accent && <span className="text-[var(--mtv-gold)]"> {accent}</span>}
-        </h1>
+        </Heading>
         {subtitle && <p className="mt-4 max-w-xl text-base text-white/55 sm:text-lg">{subtitle}</p>}
       </div>
       {action}

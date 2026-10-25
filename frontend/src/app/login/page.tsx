@@ -10,17 +10,21 @@ import { AlertTriangle, Loader2, LogOut } from "lucide-react";
 import { useAccount } from "@/components/current-user";
 import { SiteNav } from "@/components/hero/site-nav";
 import { signIn, signOut, signUp } from "@/lib/api";
+import { usePageTitle } from "@/lib/use-page-title";
 import { cn } from "@/lib/utils";
 
 type Mode = "signin" | "signup";
 
 export default function LoginPage() {
+  usePageTitle("Sign in");
   return (
     <div className="min-h-screen px-4 pb-16 pt-28 text-[var(--mtv-text)] sm:px-8 sm:pt-32">
       <SiteNav />
-      <Suspense>
-        <LoginForm />
-      </Suspense>
+      <main id="main-content">
+        <Suspense>
+          <LoginForm />
+        </Suspense>
+      </main>
     </div>
   );
 }
@@ -93,6 +97,8 @@ function LoginForm() {
       onSubmit={(e) => void submit(e)}
       className="mx-auto max-w-sm space-y-5 rounded-2xl border border-[var(--mtv-divider)] bg-[var(--mtv-surface)] p-6"
     >
+      {/* No visible heading in this design, but every page needs exactly one h1. */}
+      <h1 className="sr-only">{mode === "signin" ? "Sign in" : "Create an account"}</h1>
       <div className="grid grid-cols-2 gap-1 rounded-xl bg-[var(--mtv-surface-high)] p-1 text-sm font-semibold">
         {(["signin", "signup"] as const).map((m) => (
           <button
@@ -168,7 +174,7 @@ function LoginForm() {
       </label>
 
       {error && (
-        <p className="flex items-start gap-1.5 text-xs text-[var(--mtv-red)]">
+        <p role="alert" className="flex items-start gap-1.5 text-xs text-[var(--mtv-red)]">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           {error}
         </p>

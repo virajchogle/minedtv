@@ -21,6 +21,7 @@ import {
   type ProcessingStatus,
   type Video,
 } from "@/lib/api";
+import { usePageTitle } from "@/lib/use-page-title";
 import { cn } from "@/lib/utils";
 
 type Phase = "idle" | "uploading" | "processing" | "complete" | "failed" | "blocked";
@@ -101,6 +102,7 @@ function MtvCard({ className, children }: { className?: string; children: React.
 }
 
 export default function UploadPage() {
+  usePageTitle("Upload");
   const router = useRouter();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [phase, setPhase] = useState<Phase>("idle");
@@ -209,7 +211,7 @@ export default function UploadPage() {
   return (
     <div className="min-h-screen px-4 pb-16 pt-28 text-[var(--mtv-text)] sm:px-8 sm:pt-32">
       <SiteNav />
-      <div className="mx-auto max-w-2xl space-y-6">
+      <main id="main-content" className="mx-auto max-w-2xl space-y-6">
         <ScreenTitle
           eyebrow="Upload"
           accent="gameplay."
@@ -375,7 +377,7 @@ export default function UploadPage() {
                     </button>
                   </div>
                 ))}
-                {error && <p className="text-xs text-[var(--mtv-red)]">{error}</p>}
+                {error && <p role="alert" className="text-xs text-[var(--mtv-red)]">{error}</p>}
               </div>
             )}
             <div className="flex gap-3 pt-1">
@@ -393,7 +395,7 @@ export default function UploadPage() {
               <XCircle className="h-6 w-6 shrink-0" />
               <span className="text-lg font-semibold">Something went wrong</span>
             </div>
-            {error && <p className="text-sm text-[var(--mtv-red)]/90">{error}</p>}
+            {error && <p role="alert" className="text-sm text-[var(--mtv-red)]/90">{error}</p>}
             <OutlineButton onClick={reset}>Try again</OutlineButton>
           </MtvCard>
         )}
@@ -415,7 +417,7 @@ export default function UploadPage() {
             <OutlineButton onClick={reset}>Try a different clip</OutlineButton>
           </MtvCard>
         )}
-      </div>
+      </main>
     </div>
   );
 }

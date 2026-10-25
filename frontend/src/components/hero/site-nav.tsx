@@ -6,8 +6,9 @@
  * Links point only at routes that exist.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
 
 import { Logo } from "@/components/brand";
@@ -26,6 +27,8 @@ const LINKS = [
 export function SiteNav() {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
+  const pathname = usePathname();
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
@@ -34,11 +37,17 @@ export function SiteNav() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  // Close the mobile sheet on Escape. The sheet never locks body scroll.
+  // Close the mobile sheet on Escape and return focus to the button that
+  // opened it, same as a click on the toggle would. The sheet never locks
+  // body scroll (it's a disclosure list, not a modal, so the rest of the
+  // page stays reachable).
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape") {
+        setOpen(false);
+        menuButtonRef.current?.focus();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -67,6 +76,7 @@ export function SiteNav() {
             <Link
               key={link.href}
               href={link.href}
+              aria-current={pathname === link.href ? "page" : undefined}
               className="rounded-lg px-3 py-1.5 text-sm text-white/70 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
             >
               {link.label}
@@ -78,10 +88,12 @@ export function SiteNav() {
         <div className="flex items-center gap-2 sm:hidden">
         <UserSwitcher compact />
         <button
+          ref={menuButtonRef}
           type="button"
           onClick={() => setOpen((value) => !value)}
           className="rounded-lg p-1.5 text-white/80 transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 sm:hidden"
           aria-expanded={open}
+          aria-controls="mtv-mobile-nav"
           aria-label={open ? "Close menu" : "Open menu"}
         >
           {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -90,11 +102,12 @@ export function SiteNav() {
       </nav>
 
       {open && (
-        <div className="absolute inset-x-4 top-20 rounded-2xl border border-white/10 bg-black/80 p-2 backdrop-blur-xl sm:hidden">
+        <div id="mtv-mobile-nav" className="absolute inset-x-4 top-20 rounded-2xl border border-white/10 bg-black/80 p-2 backdrop-blur-xl sm:hidden">
           {LINKS.map((link) => (
             <Link
               key={link.href}
               href={link.href}
+              aria-current={pathname === link.href ? "page" : undefined}
               onClick={() => setOpen(false)}
               className="block rounded-lg px-3 py-2.5 text-sm text-white/80 transition-colors hover:bg-white/10 hover:text-white"
             >

@@ -24,6 +24,7 @@ import { ScreenTitle } from "@/components/ui/screen-header";
 import { ScoreMeter, VerdictBadge } from "@/components/virality-report";
 import { clipViralityScore, fetchAnalytics } from "@/lib/api";
 import type { AnalyticsOut, AnalyticsTotals, ClipAnalytics } from "@/lib/minedtv-types";
+import { usePageTitle } from "@/lib/use-page-title";
 import { cn } from "@/lib/utils";
 
 type Metric = keyof AnalyticsTotals;
@@ -47,6 +48,7 @@ const PANEL_LABEL: Record<Panel, string> = {
 };
 
 export default function DashboardPage() {
+  usePageTitle("Dashboard");
   const me = useCurrentUser();
   const [days, setDays] = useState<number>(30);
   const [metric, setMetric] = useState<Metric>("views");
@@ -91,17 +93,22 @@ export default function DashboardPage() {
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden px-3 pb-3 pt-24 text-[var(--mtv-text)] sm:px-5 [--neon-accent:234_179_8]">
       <SiteNav />
-      <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col gap-3">
+      <main id="main-content" className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col gap-3">
         <header className="flex shrink-0 flex-wrap items-center justify-between gap-3">
           {open ? (
-            <button
-              type="button"
-              onClick={() => setOpen(null)}
-              className="inline-flex items-center gap-2 text-lg font-bold tracking-tight hover:text-[var(--mtv-gold)]"
-            >
-              <ArrowLeft className="h-5 w-5" />
-              {PANEL_LABEL[open]}
-            </button>
+            <>
+              {/* Keeps the page's one h1 present even while a tile panel is open and the
+                  visible heading becomes a back button instead of <ScreenTitle>. */}
+              <h1 className="sr-only">Dashboard — {PANEL_LABEL[open]}</h1>
+              <button
+                type="button"
+                onClick={() => setOpen(null)}
+                className="inline-flex items-center gap-2 text-lg font-bold tracking-tight hover:text-[var(--mtv-gold)]"
+              >
+                <ArrowLeft className="h-5 w-5" />
+                {PANEL_LABEL[open]}
+              </button>
+            </>
           ) : (
             <ScreenTitle className="[&_h1]:text-2xl [&_h1]:sm:text-3xl">Dashboard</ScreenTitle>
           )}
@@ -122,7 +129,7 @@ export default function DashboardPage() {
         ) : (
           <>
             {error && (
-              <p className="flex items-start gap-2 rounded-lg border border-[var(--mtv-red)]/40 bg-[var(--mtv-red)]/10 p-3 text-sm text-[var(--mtv-red)]">
+              <p role="alert" className="flex items-start gap-2 rounded-lg border border-[var(--mtv-red)]/40 bg-[var(--mtv-red)]/10 p-3 text-sm text-[var(--mtv-red)]">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                 {error}
               </p>
@@ -171,7 +178,7 @@ export default function DashboardPage() {
             )}
           </>
         )}
-      </div>
+      </main>
     </div>
   );
 }

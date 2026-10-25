@@ -13,7 +13,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowRight, Clock, Layers, Search, Upload } from "lucide-react";
 
-import { Footer } from "@/components/footer";
+import { DoodleCrewFooter } from "@/components/ui/doodle-crew-footer";
 import { GameMarquee } from "@/components/hero/game-marquee";
 import { MinecraftSunriseHero } from "@/components/hero/minecraft-sunrise-hero";
 import { SiteNav } from "@/components/hero/site-nav";
@@ -47,6 +47,7 @@ export default function LandingPage() {
     <div className="min-h-screen text-white">
       <SiteNav />
 
+      <main id="main-content">
       {/* ── 1 + 2: hero and scroll-driven sunrise ── */}
       <MinecraftSunriseHero
         imageSrc="/images/minecraft-hero.webp"
@@ -121,8 +122,9 @@ export default function LandingPage() {
           </div>
         </motion.div>
       </section>
+      </main>
 
-      <Footer />
+      <DoodleCrewFooter />
     </div>
   );
 }

@@ -21,11 +21,13 @@ import { Pill, PillRow } from "@/components/ui/pill";
 import { ScreenTitle, SectionHeader } from "@/components/ui/screen-header";
 import { ScrollExpandMedia } from "@/components/ui/scroll-expansion-hero";
 import { absoluteUrl, fetchVideos, formatDuration, type SearchResult, type Video } from "@/lib/api";
+import { usePageTitle } from "@/lib/use-page-title";
 
 const EXPLORE_HERO_VIDEO = "/videos/1.mp4";
 const EXPLORE_HERO_POSTER = "/images/explore-hero.jpg";
 
 export default function ExplorePage() {
+  usePageTitle("Explore");
   const router = useRouter();
   const [videos, setVideos] = useState<Video[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -61,6 +63,7 @@ export default function ExplorePage() {
     <div className="min-h-screen text-[var(--mtv-text)]">
       <SiteNav />
 
+      <main id="main-content">
       <ScrollExpandMedia
         mediaType="video"
         mediaSrc={EXPLORE_HERO_VIDEO}
@@ -72,6 +75,7 @@ export default function ExplorePage() {
       >
         <div className="mx-auto max-w-6xl space-y-10 px-4 pb-16 sm:px-8">
           <ScreenTitle
+            level="h2"
             action={
               <Link
                 href="/upload"
@@ -108,7 +112,7 @@ export default function ExplorePage() {
           </div>
 
           {error && (
-            <div className="flex items-start gap-2 rounded-lg border border-[var(--mtv-red)]/40 bg-[var(--mtv-red)]/10 p-3 text-sm text-[var(--mtv-red)]">
+            <div role="alert" className="flex items-start gap-2 rounded-lg border border-[var(--mtv-red)]/40 bg-[var(--mtv-red)]/10 p-3 text-sm text-[var(--mtv-red)]">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
               <p>{error}</p>
             </div>
@@ -141,7 +145,9 @@ export default function ExplorePage() {
                     <ClipThumbnail
                       compact
                       src={absoluteUrl(video.thumbnail_url)}
-                      alt={video.title}
+                      // Decorative: the title right below is already in this same
+                      // link's text, so a real alt here would just repeat it.
+                      alt=""
                       duration={formatDuration(video.duration_seconds)}
                       ageRestricted={video.age_restricted}
                     />
@@ -167,6 +173,7 @@ export default function ExplorePage() {
           )}
         </div>
       </ScrollExpandMedia>
+      </main>
     </div>
   );
 }

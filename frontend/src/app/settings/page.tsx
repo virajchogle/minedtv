@@ -22,8 +22,10 @@ import {
   type Video,
 } from "@/lib/api";
 import type { ServerConfigOut } from "@/lib/minedtv-types";
+import { usePageTitle } from "@/lib/use-page-title";
 
 export default function SettingsPage() {
+  usePageTitle("Settings");
   const account = useAccount();
   const me = useCurrentUser();
   const loginHref = useLoginHref();
@@ -94,7 +96,7 @@ export default function SettingsPage() {
   return (
     <div className="min-h-screen px-4 pb-20 pt-28 text-[var(--mtv-text)] sm:px-8 sm:pt-32">
       <SiteNav />
-      <div className="mx-auto max-w-3xl space-y-12">
+      <main id="main-content" className="mx-auto max-w-3xl space-y-12">
         <ScreenTitle eyebrow="Settings">Settings</ScreenTitle>
 
         <Section title="Account">
@@ -138,7 +140,7 @@ export default function SettingsPage() {
 
         <Section title="Your clips">
           <p className="text-sm text-white/55">Re-index an upload after a model change, or delete a clip.</p>
-          {error && <p className="text-sm text-[var(--mtv-red)]">{error}</p>}
+          {error && <p role="alert" className="text-sm text-[var(--mtv-red)]">{error}</p>}
           {loading && <p className="text-sm text-white/55">Loading…</p>}
           {!loading && videos.length === 0 && <p className="text-sm text-white/55">No clips yet.</p>}
           <ul className="divide-y divide-[var(--mtv-divider)]">
@@ -219,7 +221,7 @@ export default function SettingsPage() {
             )}
           </div>
         </details>
-      </div>
+      </main>
     </div>
   );
 }

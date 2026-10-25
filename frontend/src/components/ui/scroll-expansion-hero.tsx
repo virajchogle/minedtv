@@ -27,11 +27,23 @@ export interface ScrollExpandMediaProps {
   posterSrc?: string;
   bgImageSrc: string;
   title?: string;
+  /**
+   * Heading level for `title`. Defaults to "h1": on most pages this hero is
+   * the only big heading. Set to "h2" on pages that render their own <h1>
+   * elsewhere (e.g. a <ScreenTitle> further down), so the page still has
+   * exactly one h1 and headings don't skip/reverse levels.
+   */
+  titleLevel?: "h1" | "h2";
   date?: string;
   scrollToExpand?: string;
   textBlend?: boolean;
   children?: ReactNode;
 }
+
+// Created once at module scope, not per render/per component instance: React
+// Compiler flags any component-creating call (even memoized) inside render.
+const MotionH1 = motion.create("h1");
+const MotionH2 = motion.create("h2");
 
 export function ScrollExpandMedia({
   mediaType = "video",
@@ -39,11 +51,13 @@ export function ScrollExpandMedia({
   posterSrc,
   bgImageSrc,
   title,
+  titleLevel = "h1",
   date,
   scrollToExpand,
   textBlend,
   children,
 }: ScrollExpandMediaProps) {
+  const MotionTitle = titleLevel === "h1" ? MotionH1 : MotionH2;
   const [scrollProgress, setScrollProgress] = useState(0);
   const [showContent, setShowContent] = useState(false);
   const [mediaFullyExpanded, setMediaFullyExpanded] = useState(false);
@@ -236,24 +250,24 @@ export function ScrollExpandMedia({
                 </div>
               </div>
 
-              <div
-                className={`relative z-10 flex w-full flex-col items-center justify-center gap-2 text-center transition-none ${
+              <MotionTitle
+                className={`relative z-10 flex w-full flex-col items-center justify-center gap-2 text-center font-display uppercase leading-none tracking-tight transition-none ${
                   textBlend ? "mix-blend-difference" : "mix-blend-normal"
                 }`}
               >
-                <motion.h2
-                  className="font-display text-5xl uppercase leading-none tracking-tight text-white transition-none md:text-7xl lg:text-8xl"
+                <motion.span
+                  className="text-5xl text-white transition-none md:text-7xl lg:text-8xl"
                   style={{ transform: `translateX(-${textTranslateX}vw)` }}
                 >
                   {firstWord}
-                </motion.h2>
-                <motion.h2
-                  className="font-display text-center text-5xl uppercase leading-none tracking-tight text-[var(--mtv-gold)] transition-none md:text-7xl lg:text-8xl"
+                </motion.span>
+                <motion.span
+                  className="text-center text-5xl text-[var(--mtv-gold)] transition-none md:text-7xl lg:text-8xl"
                   style={{ transform: `translateX(${textTranslateX}vw)` }}
                 >
                   {restOfTitle}
-                </motion.h2>
-              </div>
+                </motion.span>
+              </MotionTitle>
             </div>
 
             <motion.section
