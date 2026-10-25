@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Eye, Loader2, XCircle, Youtube } from "lucide-react";
+import { CheckCircle2, Eye, Loader2, ShieldAlert, XCircle, Youtube } from "lucide-react";
 
 import { PublishBadge } from "@/components/clip-actions";
 import { ChooseUserNotice, useCurrentUser } from "@/components/current-user";
@@ -22,7 +22,7 @@ import {
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
-type Phase = "idle" | "uploading" | "processing" | "complete" | "failed";
+type Phase = "idle" | "uploading" | "processing" | "complete" | "failed" | "blocked";
 
 const STAGE_DETAIL: Partial<Record<ProcessingStatus, string>> = {
   pending: "Queued — the worker picks uploads up within about a minute.",
@@ -37,6 +37,7 @@ const DOT_TONE: Record<Phase, string> = {
   processing: "bg-[var(--mtv-gold)] animate-pulse",
   complete: "bg-[var(--mtv-green)]",
   failed: "bg-[var(--mtv-red)]",
+  blocked: "bg-[var(--mtv-red)]",
 };
 
 const PHASE_LABEL: Record<Phase, string> = {
@@ -45,6 +46,7 @@ const PHASE_LABEL: Record<Phase, string> = {
   processing: "Processing",
   complete: "Indexed and searchable",
   failed: "Something went wrong",
+  blocked: "Upload blocked",
 };
 
 function PrimaryButton(props: React.ButtonHTMLAttributes<HTMLButtonElement>) {
@@ -110,6 +112,8 @@ export default function UploadPage() {
   const [game, setGame] = useState("");
   const [clips, setClips] = useState<Video[]>([]);
   const [acting, setActing] = useState<string | null>(null);
+  const [ageRestricted, setAgeRestricted] = useState(false);
+  const [moderationReason, setModerationReason] = useState<string | null>(null);
   const me = useCurrentUser();
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -127,11 +131,17 @@ export default function UploadPage() {
       try {
         const video = await fetchVideo(id);
         setStatus(video.processing_status);
+        setAgeRestricted(video.age_restricted);
+        setModerationReason(video.moderation_reason);
         if (video.searchable) {
           setPhase("complete");
           stopPolling();
           // The pipeline made one or more draft clips for this upload.
           fetchClipsForSession(id).then(setClips).catch(() => setClips([]));
+        } else if (video.processing_status === "blocked") {
+          setPhase("blocked");
+          setError(video.moderation_reason ?? "This video violates our community guidelines.");
+          stopPolling();
         } else if (video.processing_status === "failed") {
           setPhase("failed");
           setError(
@@ -173,6 +183,8 @@ export default function UploadPage() {
     setClips([]);
     setTitle("");
     setGame("");
+    setAgeRestricted(false);
+    setModerationReason(null);
     setResetKey((key) => key + 1);
   };
 
@@ -297,6 +309,17 @@ export default function UploadPage() {
                 Transcript search will work after a re-index.
               </p>
             )}
+            {ageRestricted && (
+              <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
+                <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                <div>
+                  <p className="font-semibold">Marked 18+</p>
+                  <p className="text-amber-200/80">
+                    {moderationReason ?? "The transcript contains language that isn't suitable for all audiences."}
+                  </p>
+                </div>
+              </div>
+            )}
             {clips.length > 0 && (
               <div className="space-y-2">
                 <p className="text-sm text-[var(--mtv-text-2)]">
@@ -361,6 +384,23 @@ export default function UploadPage() {
             </div>
             {error && <p className="text-sm text-[var(--mtv-red)]/90">{error}</p>}
             <OutlineButton onClick={reset}>Try again</OutlineButton>
+          </MtvCard>
+        )}
+
+        {phase === "blocked" && (
+          <MtvCard className="space-y-4">
+            <div className="flex items-center gap-3 text-[var(--mtv-red)]">
+              <ShieldAlert className="h-6 w-6 shrink-0" />
+              <span className="text-lg font-semibold">This video can&apos;t be posted</span>
+            </div>
+            <p className="text-sm text-[var(--mtv-red)]/90">
+              {moderationReason ?? "The transcript violates our community guidelines."}
+            </p>
+            <p className="text-xs text-[var(--mtv-text-2)]">
+              Nothing from this upload is public or searchable. Remove the flagged content and
+              try again with a different clip.
+            </p>
+            <OutlineButton onClick={reset}>Try a different clip</OutlineButton>
           </MtvCard>
         )}
       </div>

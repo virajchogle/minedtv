@@ -26,6 +26,7 @@ import type {
   CreatorPlatform,
   ExportOut,
   FeedOut,
+  ModerationSeverity,
   PublishState,
   SearchOut,
   SessionOut,
@@ -34,7 +35,7 @@ import type {
   UserOut,
 } from "@/lib/minedtv-types";
 
-export type { PublishState } from "@/lib/minedtv-types";
+export type { ModerationSeverity, PublishState } from "@/lib/minedtv-types";
 
 /** Same-origin proxy. The upstream host is only ever known to the server. */
 export const API_BASE_URL = "/api/minedtv";
@@ -46,7 +47,10 @@ export type ProcessingStatus =
   | "indexing"
   | "complete"
   | "visual_only"
-  | "failed";
+  | "failed"
+  /** Transcript moderation found severe content; the pipeline stopped before
+   * creating a clip. Terminal, distinct from a technical "failed". */
+  | "blocked";
 
 export type MatchBucket = "strong" | "moderate" | "weak" | "no_reliable_match";
 
@@ -84,6 +88,11 @@ export interface Video {
   liked_by_me: boolean;
   start_ms: number;
   end_ms: number;
+  /** Transcript moderation flagged this 18+ ("mild" or "severe" verdict). */
+  age_restricted: boolean;
+  moderation_severity: ModerationSeverity;
+  /** Owner-visible one-line reason; never the policy itself. */
+  moderation_reason: string | null;
 }
 
 export interface SignalBreakdown {
@@ -245,6 +254,7 @@ const STATUS_MAP: Record<string, ProcessingStatus> = {
   thumbnails: "extracting_frames",
   frames: "indexing",
   audio: "analyzing",
+  moderating: "analyzing",
   highlights: "analyzing",
   finalizing: "indexing",
   uploading: "pending",
@@ -253,6 +263,7 @@ const STATUS_MAP: Record<string, ProcessingStatus> = {
   created: "pending",
   failed: "failed",
   error: "failed",
+  blocked: "blocked",
 };
 
 const toStatus = (raw: string | null | undefined): ProcessingStatus =>
@@ -367,10 +378,15 @@ function clipToVideo(clip: ClipOut): Video {
     liked_by_me: Boolean(clip.liked_by_me),
     start_ms: clip.start_ms,
     end_ms: clip.end_ms,
+    age_restricted: Boolean(clip.age_restricted),
+    moderation_severity: clip.moderation_severity ?? "none",
+    moderation_reason: clip.moderation_reason ?? null,
   };
 }
 
 function sessionToVideo(session: SessionOut): Video {
+  // `session.status` is already authoritative ("failed" vs "blocked" vs anything
+  // else) — don't override it from failed_step, which is set for both.
   const status = toStatus(session.status);
   return {
     video_id: session.id,
@@ -379,7 +395,7 @@ function sessionToVideo(session: SessionOut): Video {
     duration_seconds: ms(session.duration_ms),
     file_size_bytes: 0,
     upload_date: session.created_at,
-    processing_status: session.failed_step ? "failed" : status,
+    processing_status: status,
     processing_error: session.error,
     searchable: status === "complete",
     summary: null,
@@ -400,6 +416,9 @@ function sessionToVideo(session: SessionOut): Video {
     liked_by_me: false,
     start_ms: 0,
     end_ms: session.duration_ms ?? 0,
+    age_restricted: Boolean(session.age_restricted),
+    moderation_severity: session.moderation_severity ?? "none",
+    moderation_reason: session.moderation_reason ?? null,
   };
 }
 
@@ -895,4 +914,5 @@ export const STATUS_COPY: Record<
   complete: { label: "Ready", tone: "ok" },
   visual_only: { label: "Visual only", tone: "partial" },
   failed: { label: "Failed", tone: "error" },
+  blocked: { label: "Blocked", tone: "error" },
 };

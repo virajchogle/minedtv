@@ -52,8 +52,22 @@ class UploadOut(_Out):
 
 
 SessionStatusLiteral = Literal[
-    "uploading", "queued", "probing", "segmenting", "thumbnails", "frames", "audio", "highlights", "finalizing", "ready", "failed"
+    "uploading",
+    "queued",
+    "probing",
+    "segmenting",
+    "thumbnails",
+    "frames",
+    "audio",
+    "moderating",
+    "highlights",
+    "finalizing",
+    "ready",
+    "failed",
+    "blocked",
 ]
+
+ModerationSeverity = Literal["none", "mild", "severe"]
 
 
 class SessionOut(_Out):
@@ -72,6 +86,12 @@ class SessionOut(_Out):
     poster_url: str | None
     playlist_url: str | None
     created_at: datetime
+    moderation_severity: ModerationSeverity = Field(
+        description="Transcript moderation verdict. 'severe' never reaches this as a readable session — "
+        "the pipeline stops and status becomes 'blocked' instead."
+    )
+    moderation_reason: str | None = Field(default=None, description="One-line reason, owner-visible only")
+    age_restricted: bool = Field(description="True for 'mild' or 'severe' moderation verdicts")
 
 
 class SessionStatusEvent(_Out):
@@ -85,6 +105,8 @@ class SessionStatusEvent(_Out):
     failed_step: str | None
     error: str | None
     done: bool
+    moderation_severity: ModerationSeverity
+    age_restricted: bool
 
 
 # --- clips ---
@@ -115,6 +137,9 @@ class ClipOut(_Out):
     like_count: int
     liked_by_me: bool | None = Field(default=None, description="Only set when X-User-Id is sent")
     comment_count: int = 0
+    age_restricted: bool = Field(default=False, description="Transcript moderation flagged this clip 18+")
+    moderation_severity: ModerationSeverity = Field(default="none", description="The owning session's moderation verdict")
+    moderation_reason: str | None = Field(default=None, description="One-line reason, owner-visible only")
     created_at: datetime
 
 

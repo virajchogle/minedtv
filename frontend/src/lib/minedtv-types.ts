@@ -21,6 +21,10 @@ export type UpstreamStatus = string;
 /** Clip visibility. draft/ready are owner-only; published is public. */
 export type PublishState = "draft" | "ready" | "published";
 
+/** Transcript moderation verdict. "severe" never reaches a readable session —
+ * the pipeline stops and session status becomes "blocked" instead. */
+export type ModerationSeverity = "none" | "mild" | "severe";
+
 export interface ClipOut {
   id: string;
   session_id: string;
@@ -40,6 +44,9 @@ export interface ClipOut {
   view_count: number;
   like_count: number;
   liked_by_me: boolean | null;
+  age_restricted: boolean;
+  moderation_severity: ModerationSeverity;
+  moderation_reason: string | null;
   created_at: string;
 }
 
@@ -124,6 +131,9 @@ export interface SessionOut {
   poster_url: string | null;
   playlist_url: string | null;
   created_at: string;
+  moderation_severity: ModerationSeverity;
+  moderation_reason: string | null;
+  age_restricted: boolean;
 }
 
 export interface SessionStatusEvent {
@@ -135,6 +145,8 @@ export interface SessionStatusEvent {
   failed_step: string | null;
   error: string | null;
   done: boolean;
+  moderation_severity: ModerationSeverity;
+  age_restricted: boolean;
 }
 
 export interface UploadOut {

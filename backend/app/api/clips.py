@@ -165,6 +165,7 @@ async def create_clip(body: ClipCreate, user: CurrentUser, db: Db, urls: Urls) -
         thumbnail_key=await nearest_frame_key(db, session.id, (body.start_ms + body.end_ms) // 2),
         status="ready",
         kind="user",
+        age_restricted=session.age_restricted,
     )
     db.add(clip)
     await db.commit()

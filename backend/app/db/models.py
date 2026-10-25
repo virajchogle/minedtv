@@ -45,23 +45,29 @@ class SessionStatus:
     THUMBNAILS = "thumbnails"
     FRAMES = "frames"
     AUDIO = "audio"
+    MODERATING = "moderating"
     HIGHLIGHTS = "highlights"
     FINALIZING = "finalizing"
     READY = "ready"
     FAILED = "failed"
+    # Terminal: transcript moderation found severe content. No clip is ever
+    # created for this session — distinct from FAILED, which is a technical error.
+    BLOCKED = "blocked"
 
 
 PUBLISH_STATES = ("draft", "ready", "published")
 UNPUBLISHED_STATES = ("draft", "ready")
+MODERATION_SEVERITIES = ("none", "mild", "severe")
 
 # Pipeline steps in order, and the session status shown while each one runs.
-PIPELINE_STEPS = ["probe", "segment", "thumbnails", "frames", "audio", "highlights", "finalize"]
+PIPELINE_STEPS = ["probe", "segment", "thumbnails", "frames", "audio", "moderate", "highlights", "finalize"]
 STEP_STATUS = {
     "probe": SessionStatus.PROBING,
     "segment": SessionStatus.SEGMENTING,
     "thumbnails": SessionStatus.THUMBNAILS,
     "frames": SessionStatus.FRAMES,
     "audio": SessionStatus.AUDIO,
+    "moderate": SessionStatus.MODERATING,
     "highlights": SessionStatus.HIGHLIGHTS,
     "finalize": SessionStatus.FINALIZING,
 }
@@ -80,6 +86,9 @@ class Session(Base):
     """One uploaded recording."""
 
     __tablename__ = "sessions"
+    __table_args__ = (
+        CheckConstraint("moderation_severity IN ('none', 'mild', 'severe')", name="ck_sessions_moderation_severity"),
+    )
 
     id: Mapped[uuid.UUID] = _pk()
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -104,6 +113,12 @@ class Session(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
     )
+
+    # Transcript moderation (see app/ml/moderation.py). "severe" never reaches
+    # this row as READY — the pipeline stops and leaves status=BLOCKED instead.
+    moderation_severity: Mapped[str] = mapped_column(String(16), nullable=False, default="none", server_default="none")
+    moderation_reason: Mapped[str | None] = mapped_column(Text)
+    age_restricted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
 
 
 class Segment(Base):
@@ -151,6 +166,8 @@ class Clip(Base):
     # clips are owner-only; virality simulation only runs on them.
     publish_state: Mapped[str] = mapped_column(String(16), nullable=False, default="draft", server_default="draft")
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Copied from the owning session's moderation verdict when this clip is created.
+    age_restricted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
 
 
 class Frame(Base):

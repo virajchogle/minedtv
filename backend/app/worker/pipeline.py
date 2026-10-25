@@ -35,6 +35,7 @@ from app.db.models import (
 from app.db.session import get_sessionmaker
 from app.log import bind
 from app.ml.interfaces import DetectedEvent, Embedder, HighlightDetector, Transcriber, TranscriptChunk
+from app.ml.moderation import ContentPolicyViolation, get_moderator
 from app.services.queries import nearest_frame_key
 from app.services.social import notify
 from app.services.storage import Storage, get_storage
@@ -268,6 +269,29 @@ async def step_audio(ctx: Ctx) -> None:
             await db.commit()
 
 
+async def step_moderate(ctx: Ctx) -> None:
+    """Classify the real transcript. Raises ContentPolicyViolation on severe content,
+    which stops the pipeline before finalize — see run_pipeline's except clause."""
+    async with ctx.deps.sessionmaker() as db:
+        rows = (
+            await db.execute(select(Transcript.text).where(Transcript.session_id == ctx.session_id).order_by(Transcript.start_ms))
+        ).scalars().all()
+    text = " ".join(rows).strip()
+
+    result = await asyncio.to_thread(get_moderator().classify, text)
+
+    async with ctx.deps.sessionmaker() as db:
+        s = await ctx.session(db)
+        s.moderation_severity = result.severity
+        s.moderation_reason = result.reason or None
+        s.age_restricted = result.severity in ("mild", "severe")
+        await db.commit()
+    log.info("moderation classified", extra={"severity": result.severity, "categories": result.categories})
+
+    if result.severity == "severe":
+        raise ContentPolicyViolation(result.reason, result.categories)
+
+
 async def step_highlights(ctx: Ctx) -> None:
     detector = ctx.deps.detector
     events: list[DetectedEvent] = await asyncio.to_thread(detector.detect, str(await ctx.source_path()), str(ctx.session_id))
@@ -329,6 +353,7 @@ async def step_finalize(ctx: Ctx) -> None:
                         kind="auto",
                         publish_state=st.new_clip_publish_state,
                         published_at=func.now() if st.new_clip_publish_state == "published" else None,
+                        age_restricted=s.age_restricted,
                     )
                 )
         else:
@@ -344,6 +369,7 @@ async def step_finalize(ctx: Ctx) -> None:
                     kind="auto",
                     publish_state=st.new_clip_publish_state,
                     published_at=func.now() if st.new_clip_publish_state == "published" else None,
+                    age_restricted=s.age_restricted,
                 )
             )
         await db.flush()
@@ -368,6 +394,7 @@ STEP_FUNCS = {
     "thumbnails": step_thumbnails,
     "frames": step_frames,
     "audio": step_audio,
+    "moderate": step_moderate,
     "highlights": step_highlights,
     "finalize": step_finalize,
 }
@@ -378,7 +405,8 @@ assert list(STEP_FUNCS) == PIPELINE_STEPS
 
 
 async def run_pipeline(session_id: uuid.UUID | str, *, resume: bool = False, deps: Deps | None = None) -> str:
-    """Process a session. Returns the final status ("ready" or "failed"); never raises for step errors."""
+    """Process a session. Returns the final status ("ready", "failed", or "blocked" for
+    severe moderation content); never raises for step errors."""
     session_id = uuid.UUID(str(session_id))
     deps = deps or Deps.default()
     with bind(session_id=str(session_id)):
@@ -416,6 +444,14 @@ async def run_pipeline(session_id: uuid.UUID | str, *, resume: bool = False, dep
                 await db.commit()
             log.info("pipeline ready", extra={"secs": round(time.monotonic() - t_all, 2)})
             return SessionStatus.READY
+        except ContentPolicyViolation as e:
+            with bind(step=step):
+                log.warning("pipeline blocked by content policy", extra={"categories": e.categories})
+            async with deps.sessionmaker() as db:
+                s = await ctx.session(db)
+                s.status, s.failed_step, s.error = SessionStatus.BLOCKED, step, e.reason
+                await db.commit()
+            return SessionStatus.BLOCKED
         except Exception as e:
             with bind(step=step):
                 log.exception("pipeline step failed")

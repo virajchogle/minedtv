@@ -61,6 +61,15 @@ export function VideoCard({ video }: { video: Video }) {
           {formatDuration(video.duration_seconds)}
         </span>
 
+        {video.age_restricted && (
+          <span
+            className="absolute bottom-2 left-2 rounded border border-[var(--mtv-red)]/50 bg-black/75 px-1.5 py-0.5 text-[10px] font-bold text-[var(--mtv-red)]"
+            title={video.moderation_reason ?? "Flagged 18+ by transcript moderation"}
+          >
+            18+
+          </span>
+        )}
+
         {video.searchable && video.publish_state ? (
           video.publish_state !== "published" && (
             <PublishBadge state={video.publish_state} className="absolute left-2 top-2" />
