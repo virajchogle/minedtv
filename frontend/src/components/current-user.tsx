@@ -9,7 +9,7 @@
  * backend allows for dev accounts only.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Check, ChevronDown, Loader2, LogIn, LogOut, Plus, UserRound } from "lucide-react";
@@ -26,19 +26,26 @@ import {
 import type { MeOut, UserOut } from "@/lib/minedtv-types";
 import { cn } from "@/lib/utils";
 
+function subscribe(onChange: () => void): () => void {
+  window.addEventListener(USER_CHANGED_EVENT, onChange);
+  window.addEventListener("storage", onChange);
+  return () => {
+    window.removeEventListener(USER_CHANGED_EVENT, onChange);
+    window.removeEventListener("storage", onChange);
+  };
+}
+
+/** Reads identity synchronously on the client (null during server render and hydration). */
 function useStored<T>(read: () => T | null): T | null {
-  const [value, setValue] = useState<T | null>(null);
-  useEffect(() => {
-    const sync = () => setValue(read());
-    sync();
-    window.addEventListener(USER_CHANGED_EVENT, sync);
-    window.addEventListener("storage", sync);
-    return () => {
-      window.removeEventListener(USER_CHANGED_EVENT, sync);
-      window.removeEventListener("storage", sync);
-    };
-  }, [read]);
-  return value;
+  // Snapshots must be referentially stable, so re-parse only when the stored JSON changes.
+  const cache = useRef<{ json: string; value: T | null } | null>(null);
+  const getSnapshot = () => {
+    const value = read();
+    const json = JSON.stringify(value);
+    if (cache.current?.json !== json) cache.current = { json, value };
+    return cache.current.value;
+  };
+  return useSyncExternalStore(subscribe, getSnapshot, () => null);
 }
 
 /** Who requests act as (the account itself, or whoever a dev account picked). */
@@ -66,7 +73,16 @@ function Avatar({ user, className }: { user: UserOut | null; className?: string 
   );
 }
 
-export function UserSwitcher({ compact = false, className }: { compact?: boolean; className?: string }) {
+export function UserSwitcher({
+  compact = false,
+  up = false,
+  className,
+}: {
+  compact?: boolean;
+  /** Open the menu upwards (for the bottom of the sidebar). */
+  up?: boolean;
+  className?: string;
+}) {
   const account = useAccount();
   const me = useCurrentUser();
   const loginHref = useLoginHref();
@@ -123,7 +139,13 @@ export function UserSwitcher({ compact = false, className }: { compact?: boolean
       </button>
 
       {open && (
-        <div className="absolute right-0 z-[70] mt-2 w-64 rounded-xl border border-white/10 bg-black/90 p-2 shadow-2xl backdrop-blur-xl" role="menu">
+        <div
+          className={cn(
+            "absolute z-[70] rounded-xl border border-white/10 bg-black/90 p-2 shadow-2xl backdrop-blur-xl",
+            up ? "bottom-full left-0 mb-2 w-52" : "right-0 mt-2 w-64"
+          )}
+          role="menu"
+        >
           <div className="px-2 pb-2">
             <p className="truncate text-sm font-semibold text-white">{account.username}</p>
             <p className="truncate text-xs text-white/50">

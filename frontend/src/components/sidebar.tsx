@@ -82,8 +82,9 @@ export function Sidebar() {
 
       {/* ── Bottom: greeting + settings + logout ─────────────────────── */}
       <div className="flex flex-col gap-1 px-2">
-        <div className="px-1 pb-1" style={textStyle}>
-          <UserSwitcher />
+        {/* Fade only: overflow must stay visible or the account menu gets clipped. */}
+        <div className="px-1 pb-1" style={{ opacity: textStyle.opacity, transition: textStyle.transition }}>
+          <UserSwitcher up />
         </div>
 
         <Link
