@@ -206,7 +206,7 @@ async def test_failed_step_resumes(sessionmaker, video, tmp_path):
     assert await run_pipeline(sid, deps=_deps(sessionmaker, storage, BrokenDetector())) == SessionStatus.FAILED
     async with sessionmaker() as db:
         s = await db.get(Session, sid)
-        assert (s.status, s.failed_step, s.last_step) == ("failed", "highlights", "audio")
+        assert (s.status, s.failed_step, s.last_step) == ("failed", "highlights", "moderate")
         assert "model exploded" in s.error
         seg_ids = set((await db.scalars(select(Segment.id).where(Segment.session_id == sid))).all())
 
