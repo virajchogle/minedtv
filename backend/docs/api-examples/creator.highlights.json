@@ -1,0 +1,69 @@
+{
+  "run_id": "00000000-0000-0000-0000-000000002454",
+  "filename": "ranked-ascent.mp4",
+  "duration_ms": 91000,
+  "width": 1920,
+  "height": 1080,
+  "frames_analyzed": 46,
+  "algorithm_version": "frame-virality-v4-highlight-montage",
+  "scores": [
+    {
+      "frame_id": "00000000-0000-0000-0000-000000002455",
+      "t_ms": 40000,
+      "score": 0.934,
+      "visual_score": 0.91,
+      "novelty_score": 0.82,
+      "visibility_score": 0.95,
+      "scene_score": 0.88,
+      "selected": true,
+      "thumbnail_url": "https://minedtv-api-xxxxx-ue.a.run.app/creator/highlights/00000000-0000-0000-0000-000000002454/frames/00000000-0000-0000-0000-000000002455.jpg"
+    },
+    {
+      "frame_id": "00000000-0000-0000-0000-000000002456",
+      "t_ms": 42000,
+      "score": 0.612,
+      "visual_score": 0.68,
+      "novelty_score": 0.44,
+      "visibility_score": 0.89,
+      "scene_score": 0.73,
+      "selected": true,
+      "thumbnail_url": "https://minedtv-api-xxxxx-ue.a.run.app/creator/highlights/00000000-0000-0000-0000-000000002454/frames/00000000-0000-0000-0000-000000002456.jpg"
+    }
+  ],
+  "clips": [
+    {
+      "index": 1,
+      "title": "The highlight montage",
+      "start_ms": 0,
+      "end_ms": 18000,
+      "duration_ms": 18000,
+      "score": 0.934,
+      "video_url": "https://minedtv-api-xxxxx-ue.a.run.app/creator/highlights/00000000-0000-0000-0000-000000002454/clips/1.mp4",
+      "download_url": "https://minedtv-api-xxxxx-ue.a.run.app/creator/highlights/00000000-0000-0000-0000-000000002454/clips/1.mp4?download=true",
+      "thumbnail_url": "https://minedtv-api-xxxxx-ue.a.run.app/creator/highlights/00000000-0000-0000-0000-000000002454/frames/00000000-0000-0000-0000-000000002455.jpg",
+      "width": 720,
+      "height": 1280,
+      "captions_burned": true,
+      "caption_count": 8,
+      "caption_source": "gemini",
+      "moments": [
+        {
+          "index": 1,
+          "source_start_ms": 8000,
+          "source_end_ms": 17000,
+          "duration_ms": 9000,
+          "score": 0.934,
+          "thumbnail_url": "https://minedtv-api-xxxxx-ue.a.run.app/creator/highlights/00000000-0000-0000-0000-000000002454/frames/00000000-0000-0000-0000-000000002455.jpg"
+        },
+        {
+          "index": 2,
+          "source_start_ms": 38000,
+          "source_end_ms": 47000,
+          "duration_ms": 9000,
+          "score": 0.612,
+          "thumbnail_url": "https://minedtv-api-xxxxx-ue.a.run.app/creator/highlights/00000000-0000-0000-0000-000000002454/frames/00000000-0000-0000-0000-000000002456.jpg"
+        }
+      ]
+    }
+  ]
+}

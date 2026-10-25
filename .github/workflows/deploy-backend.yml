@@ -1,0 +1,135 @@
+# Tests and deploys the backend on every push to main that touches backend/.
+#
+#   tests (real Postgres + Redis)  \
+#                                    -> migrate the database -> deploy API -> update worker
+#   build images (layer-cached)    /
+#
+# Tests and the image build run in parallel. Images are pushed tagged with the commit only, and
+# become :latest after the tests pass, so an untested build is never the default.
+#
+# Signs in to Google Cloud without a key (Workload Identity Federation, trusted only for main of
+# this repo) and ships new images only: the settings stay on Cloud Run, so .env.prod never leaves
+# Viraj's machine. Changing .env.prod still needs a manual `./deploy/cloudrun.sh`.
+#
+# One-time setup: backend/deploy/github-setup.sh (creates the identity, the migration job and the
+# GCP_* repo variables used below).
+name: Deploy backend
+
+on:
+  push:
+    branches: [main]
+    paths: ["backend/**", ".github/workflows/deploy-backend.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: false  # never interrupt a deploy halfway
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: minedtv
+          POSTGRES_PASSWORD: minedtv
+          POSTGRES_DB: minedtv
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U minedtv" --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+        options: --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 10
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+      - name: Install ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ffmpeg
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Tests
+        run: pytest -q
+
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # lets GitHub hand Google a signed identity token
+    strategy:
+      matrix:
+        image: [api, worker]
+    env:
+      REPO: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/minedtv
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Log Docker in to Artifact Registry
+        run: gcloud auth configure-docker "${{ vars.GCP_REGION }}-docker.pkg.dev" --quiet
+      - uses: docker/setup-buildx-action@v3
+      - name: Build and push ${{ matrix.image }}
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          file: backend/Dockerfile.${{ matrix.image }}
+          push: true
+          tags: ${{ env.REPO }}/${{ matrix.image }}:${{ github.sha }}
+          # Layers (ffmpeg, pip install) are reused across runs until requirements or the Dockerfile change.
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,scope=${{ matrix.image }},mode=max
+
+  deploy:
+    needs: [test, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # lets GitHub hand Google a signed identity token
+    env:
+      PROJECT: ${{ vars.GCP_PROJECT_ID }}
+      REGION: ${{ vars.GCP_REGION }}
+      REPO: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/minedtv
+      TAG: ${{ github.sha }}
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Mark the tested images as latest
+        # Re-tags by pushing the same manifest under :latest (no rebuild); needs only write access.
+        run: |
+          gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
+          docker buildx imagetools create -t "$REPO/api:latest" "$REPO/api:$TAG"
+          docker buildx imagetools create -t "$REPO/worker:latest" "$REPO/worker:$TAG"
+      - name: Migrate the database (before any new code serves traffic)
+        run: |
+          gcloud run jobs update minedtv-migrate --project "$PROJECT" --region "$REGION" --image "$REPO/worker:$TAG"
+          gcloud run jobs execute minedtv-migrate --project "$PROJECT" --region "$REGION" --wait
+      - name: Deploy API
+        run: gcloud run deploy minedtv-api --project "$PROJECT" --region "$REGION" --image "$REPO/api:$TAG"
+      - name: Update worker
+        run: gcloud run jobs update minedtv-worker --project "$PROJECT" --region "$REGION" --image "$REPO/worker:$TAG"
+      - name: Smoke test
+        run: |
+          URL="$(gcloud run services describe minedtv-api --project "$PROJECT" --region "$REGION" --format='value(status.url)')"
+          for i in 1 2 3 4 5; do
+            code="$(curl -s -o /dev/null -w '%{http_code}' "$URL/health")" && [ "$code" = 200 ] && { echo "health $code"; exit 0; }
+            sleep 5
+          done
+          echo "health check failed ($code)"; exit 1
