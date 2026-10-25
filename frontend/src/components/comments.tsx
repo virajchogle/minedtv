@@ -7,7 +7,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, MessageCircle } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 import { ChooseUserNotice, useCurrentUser } from "@/components/current-user";
 import { deleteComment, fetchComments, postComment } from "@/lib/api";
@@ -240,10 +240,9 @@ export function Comments({ clipId }: { clipId: string }) {
   };
 
   return (
-    <section className="space-y-4 rounded-2xl border border-[var(--mtv-divider)] bg-[var(--mtv-surface)] p-4">
-      <h3 className="flex items-center gap-2 text-sm font-semibold">
-        <MessageCircle className="h-4 w-4 text-[var(--mtv-gold)]" />
-        Comments{items && <span className="font-normal text-[var(--mtv-text-2)]">· {total}</span>}
+    <section className="space-y-5 border-t border-[var(--mtv-divider)] pt-6">
+      <h3 className="text-lg font-bold">
+        {items ? `${total.toLocaleString()} ${total === 1 ? "comment" : "comments"}` : "Comments"}
       </h3>
 
       {me ? (

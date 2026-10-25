@@ -210,18 +210,20 @@ export default function UploadPage() {
     <div className="min-h-screen bg-[var(--mtv-bg)] px-4 pb-16 pt-28 text-[var(--mtv-text)] sm:px-8 sm:pt-32">
       <SiteNav />
       <div className="mx-auto max-w-2xl space-y-6">
-        <ScreenTitle>Upload</ScreenTitle>
+        <ScreenTitle
+          eyebrow="Upload"
+          accent="gameplay."
+          subtitle="We index every moment and cut the highlights for you."
+        >
+          Drop your
+        </ScreenTitle>
 
-        {/* ── status card — always visible, mirrors the spec's Clipper status card ── */}
+        {/* Progress, shown once an upload is under way. */}
+        {phase !== "idle" && (
         <MtvCard className="flex items-center gap-3">
           <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", DOT_TONE[phase])} />
           <div className="min-w-0 flex-1">
             <p className="text-[15px] font-semibold">{PHASE_LABEL[phase]}</p>
-            {phase === "idle" && (
-              <p className="text-[13px] text-[var(--mtv-text-2)]">
-                MP4, MOV, MKV or WebM, up to 90 minutes and 4 GB. Indexing runs in the background.
-              </p>
-            )}
             {phase === "processing" && (
               <p className="text-[13px] text-[var(--mtv-text-2)]">
                 {STAGE_DETAIL[status] ?? "Working…"}
@@ -229,12 +231,14 @@ export default function UploadPage() {
             )}
           </div>
         </MtvCard>
+        )}
 
         {phase === "idle" && !me && <ChooseUserNotice action="upload clips" />}
 
         {phase === "idle" && me && (
           <div className="space-y-4">
             <FileUpload key={resetKey} onFileSelect={setSelectedFile} />
+            <p className="text-xs text-white/45">MP4, MOV, MKV or WebM · up to 90 minutes and 4 GB</p>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="space-y-1 text-[13px] text-[var(--mtv-text-2)]">
                 Title
@@ -263,7 +267,7 @@ export default function UploadPage() {
             </div>
             <p className="text-xs text-[var(--mtv-text-2)]">
               Uploading as <span className="font-semibold text-[var(--mtv-text)]">@{me.username}</span>. New clips
-              land in My videos (private) first, each with a virality score. Publish one to put it on MinedTV.
+              land in My videos (private) first, each with a virality score. Publish one to put it on MinedIt.
             </p>
             <div className="flex justify-end gap-3">
               <OutlineButton href="/library">Cancel</OutlineButton>

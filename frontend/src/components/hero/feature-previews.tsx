@@ -192,7 +192,7 @@ function PreviewCard({
         {availability === "offline" && (
           <StatusNote
             tone="warn"
-            text="The MinedTV backend isn’t reachable, so live search is unavailable here. Start it to try this."
+            text="The MinedIt backend isn’t reachable, so live search is unavailable here. Start it to try this."
           />
         )}
 

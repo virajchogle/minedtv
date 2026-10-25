@@ -5,7 +5,7 @@
  * available (see minecraft-sunrise-hero.tsx).
  *
  * It is split into a background plate and a foreground plate so the hero can
- * render the "MinedTV" wordmark *between* them — the depth effect where the
+ * render the "MinedIt" wordmark *between* them — the depth effect where the
  * terrain overlaps the lettering. A flat photograph cannot do this without a
  * hand-authored alpha cutout; an SVG can, because the silhouette is real
  * geometry with correct edges.

@@ -56,7 +56,7 @@ export default function ProfilePage() {
         mediaType="image"
         mediaSrc={published[0]?.thumbnail_url ?? "/images/minecraft-hero.webp"}
         bgImageSrc="/images/minecraft-hero.webp"
-        title={me ? `@${me.username}` : "MinedTV"}
+        title={me ? `@${me.username}` : "MinedIt"}
         date={me ? `${published.length} published clips` : "Clip the plays that blow your mind"}
         scrollToExpand="Scroll to expand"
       >

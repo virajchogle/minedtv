@@ -803,11 +803,17 @@ class YouTubePostIn(BaseModel):
         default="private",
         description="Until the Google project passes YouTube's API audit, uploads may be forced to private",
     )
+    montage: ClipHighlightsIn | None = Field(
+        default=None,
+        description="Post this rendered AI edit (same options as POST /clips/{id}/highlights; it must be ready) "
+        "instead of the plain clip",
+    )
 
 
 class YouTubeUploadOut(_Out):
     id: uuid.UUID
     clip_id: uuid.UUID
+    kind: Literal["clip", "montage"] = "clip"
     status: Literal["queued", "uploading", "published", "failed"]
     privacy: YouTubePrivacy
     title: str

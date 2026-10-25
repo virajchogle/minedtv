@@ -1,12 +1,11 @@
 "use client";
 
-/** "More {game} clips": other published clips of the same game, under a clip. */
+/** "More {game}": other published clips of the same game, as a compact list beside a clip. */
 
 import { useEffect, useState } from "react";
-import { Gamepad2 } from "lucide-react";
+import Link from "next/link";
 
-import { VideoCard } from "@/components/video-card";
-import { fetchRelated, type Video } from "@/lib/api";
+import { fetchRelated, formatDuration, type Video } from "@/lib/api";
 
 export function RelatedClips({ game, excludeId }: { game: string; excludeId: string }) {
   const [clips, setClips] = useState<Video[] | null>(null);
@@ -24,16 +23,37 @@ export function RelatedClips({ game, excludeId }: { game: string; excludeId: str
 
   if (!clips || clips.length === 0) return null;
   return (
-    <section className="space-y-3">
-      <h2 className="flex items-center gap-2 text-sm font-semibold">
-        <Gamepad2 className="h-4 w-4 text-[var(--mtv-gold)]" />
-        More {game} clips
-      </h2>
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+    <section className="space-y-4">
+      <h2 className="font-mono text-[11px] uppercase tracking-[0.2em] text-[var(--mtv-text-2)]">More {game}</h2>
+      <ul className="space-y-3">
         {clips.map((clip) => (
-          <VideoCard key={clip.video_id} video={clip} />
+          <li key={clip.video_id}>
+            <Link href={`/video/${clip.video_id}`} className="group flex gap-3">
+              <span className="relative block aspect-video w-36 shrink-0 overflow-hidden rounded-lg bg-[var(--mtv-surface-high)]">
+                {clip.thumbnail_url && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={clip.thumbnail_url}
+                    alt=""
+                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                  />
+                )}
+                <span className="absolute bottom-1 right-1 rounded bg-black/75 px-1 font-mono text-[10px] text-white">
+                  {formatDuration(clip.duration_seconds)}
+                </span>
+              </span>
+              <span className="min-w-0 space-y-1">
+                <span className="line-clamp-2 text-[13px] font-semibold leading-snug group-hover:text-[var(--mtv-gold)]">
+                  {clip.title}
+                </span>
+                <span className="block truncate text-xs text-white/50">
+                  @{clip.uploader} · {clip.view_count.toLocaleString()} views
+                </span>
+              </span>
+            </Link>
+          </li>
         ))}
-      </div>
+      </ul>
     </section>
   );
 }

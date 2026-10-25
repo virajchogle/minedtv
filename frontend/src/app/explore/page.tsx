@@ -81,6 +81,7 @@ export default function ExplorePage() {
                 Upload
               </Link>
             }
+            accent="clips."
           >
             Explore
           </ScreenTitle>

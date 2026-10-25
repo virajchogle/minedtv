@@ -1,4 +1,4 @@
-# MinedTV
+# MinedIt
 
 Gaming clip app with plain-language search over your gameplay ("the clutch on Bind") that jumps to the exact second. Built for the Medal.tv hackathon.
 

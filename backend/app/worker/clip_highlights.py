@@ -1,4 +1,4 @@
-"""Asynchronous AI-share highlights for clips already stored by MinedTV.
+"""Asynchronous AI-share highlights for clips already stored by MinedIt.
 
 The job reuses the clip export, creator pack, sampled frame embeddings, events, and
 transcript produced by the normal pipeline. Only the final portrait render is new.

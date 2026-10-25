@@ -1,5 +1,5 @@
 /**
- * MinedTV client — adapter over the deployed team API.
+ * MinedIt client — adapter over the deployed team API.
  *
  * The UI was built against a videos/moments/scope contract; the deployed
  * service speaks sessions, clips, HLS playlists and millisecond offsets. This
@@ -19,12 +19,14 @@ import type {
   ClipCreatorPackOut,
   ClipDetailOut,
   ClipOut,
+  ClipHighlightsOut,
   ClipViralityOut,
   CommentOut,
   CommentsPage,
   CountsOut,
   ExportOut,
   FeedOut,
+  HighlightOptions,
   MeOut,
   ModerationSeverity,
   ModerationViolationOut,
@@ -208,7 +210,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers, cache: "no-store" });
   } catch {
-    throw new Error("Could not reach the MinedTV API.");
+    throw new Error("Could not reach the MinedIt API.");
   }
   if (!response.ok) {
     let message = `${response.status} ${response.statusText}`;
@@ -803,7 +805,7 @@ async function authRequest<T>(action: string, body?: unknown): Promise<T> {
       cache: "no-store",
     });
   } catch {
-    throw new Error("Could not reach the MinedTV API.");
+    throw new Error("Could not reach the MinedIt API.");
   }
   if (!response.ok) {
     let message = `${response.status} ${response.statusText}`;
@@ -937,13 +939,43 @@ export const getYouTubeUploads = (clipId: string) =>
 /** Title, description and tags default to the clip's AI creator pack. */
 export const postToYouTube = (
   clipId: string,
-  body: { privacy: YouTubePrivacy; title?: string | null; description?: string | null; tags?: string[] | null }
+  body: {
+    privacy: YouTubePrivacy;
+    title?: string | null;
+    description?: string | null;
+    tags?: string[] | null;
+    /** Post this finished render instead of the plain clip. */
+    montage?: HighlightOptions | null;
+  }
 ) =>
   request<YouTubeUploadOut>(`/clips/${clipId}/youtube`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+
+// ── AI share renders (montage / single highlight) ──────────────────────────
+
+function highlightQuery(o: HighlightOptions): string {
+  return new URLSearchParams({
+    platform: o.platform,
+    mode: o.mode,
+    captions: String(o.captions),
+    caption_style: o.caption_style,
+    hook: String(o.hook),
+  }).toString();
+}
+
+/** Starts (or reuses) the render for these options. Poll getMontage with the same options. */
+export const startMontage = (clipId: string, o: HighlightOptions) =>
+  request<ClipHighlightsOut>(`/clips/${clipId}/highlights`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(o),
+  });
+
+export const getMontage = (clipId: string, o: HighlightOptions) =>
+  request<ClipHighlightsOut>(`/clips/${clipId}/highlights?${highlightQuery(o)}`);
 
 // ── comments and related clips ───────────────────────────────────────────────
 

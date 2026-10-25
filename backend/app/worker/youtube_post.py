@@ -30,7 +30,7 @@ async def post_to_youtube(upload_id: uuid.UUID | str, deps: Deps, redis=None, ht
         if up.status == YouTubeUploadStatus.PUBLISHED and up.video_id:
             return up.video_id
         account = await db.get(YouTubeAccount, up.user_id)
-        clip_id, user_id = up.clip_id, up.user_id
+        clip_id, user_id, source_key = up.clip_id, up.user_id, up.source_key
         meta = (up.title, up.description, list(up.tags or []), up.privacy)
         up.status, up.error = YouTubeUploadStatus.UPLOADING, None
         await db.commit()
@@ -61,7 +61,8 @@ async def post_to_youtube(upload_id: uuid.UUID | str, deps: Deps, redis=None, ht
     try:
         if account is None:
             raise youtube.YouTubeError("YouTube isn't connected for this user")
-        mp4_key = await export_clip(clip_id, deps, redis)
+        # A montage post uploads its rendered file; otherwise the clip's own MP4 export.
+        mp4_key = source_key or await export_clip(clip_id, deps, redis)
         mp4 = workdir / "clip.mp4"
         await asyncio.to_thread(deps.storage.download_file, mp4_key, mp4)
         token = await youtube.access_token(client, deps.settings, youtube.decrypt_token(deps.settings, account.refresh_token_enc))

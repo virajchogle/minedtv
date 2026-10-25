@@ -2,7 +2,7 @@
 
 /**
  * My Library — the acting user's own clips: My videos (private; uploads land
- * here), Published (public on MinedTV) and On YouTube (posted from MinedTV).
+ * here), Published (public on MinedIt) and On YouTube (posted from MinedIt).
  * Search here is scoped to your clips and includes private ones.
  */
 
@@ -26,9 +26,9 @@ type Bucket = "all" | "mine" | "published" | "youtube";
 
 const BUCKETS: { id: Bucket; label: string; hint?: string }[] = [
   { id: "all", label: "All" },
-  { id: "mine", label: "My videos", hint: "Private: only you can see these. Publish one to put it on MinedTV." },
-  { id: "published", label: "Published", hint: "Public on MinedTV. Open one to post it to YouTube." },
-  { id: "youtube", label: "On YouTube", hint: "Posted to YouTube from MinedTV." },
+  { id: "mine", label: "My videos", hint: "Private: only you can see these. Publish one to put it on MinedIt." },
+  { id: "published", label: "Published", hint: "Public on MinedIt. Open one to post it to YouTube." },
+  { id: "youtube", label: "On YouTube", hint: "Posted to YouTube from MinedIt." },
 ];
 
 const inBucket = (video: Video, bucket: Bucket) =>
@@ -132,8 +132,11 @@ function Library() {
               Upload
             </Link>
           }
+          eyebrow="My library"
+          accent="clips."
+          subtitle="Private until you publish. Search them the way you'd describe them."
         >
-          My Library
+          Your
         </ScreenTitle>
 
         <YouTubeConnectBanner />

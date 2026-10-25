@@ -1,17 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, Moon, RefreshCw, Sun, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { ChevronDown, Loader2, LogIn, LogOut, Moon, RefreshCw, Sun, Trash2 } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { PublishBadge } from "@/components/clip-actions";
+import { useAccount, useCurrentUser, useLoginHref } from "@/components/current-user";
+import { SiteNav } from "@/components/hero/site-nav";
+import { ScreenTitle } from "@/components/ui/screen-header";
 import {
   BAND_MODERATE,
   BAND_STRONG,
@@ -22,11 +18,15 @@ import {
   fetchServerConfig,
   formatDuration,
   reindexVideo,
+  signOut,
   type Video,
 } from "@/lib/api";
 import type { ServerConfigOut } from "@/lib/minedtv-types";
 
 export default function SettingsPage() {
+  const account = useAccount();
+  const me = useCurrentUser();
+  const loginHref = useLoginHref();
   const [isDark, setIsDark] = useState(true);
   const [videos, setVideos] = useState<Video[]>([]);
   const [config, setConfig] = useState<ServerConfigOut | null>(null);
@@ -88,155 +88,155 @@ export default function SettingsPage() {
     }
   };
 
+  const outline =
+    "inline-flex items-center gap-1.5 rounded-lg border border-[var(--mtv-divider)] px-3 py-1.5 text-[13px] font-semibold transition-colors hover:bg-[var(--mtv-surface-high)] disabled:opacity-40";
+
   return (
-    <div className="mx-auto max-w-3xl space-y-6 p-8">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Appearance, server configuration, and your clips.
-        </p>
-      </header>
+    <div className="min-h-screen bg-[var(--mtv-bg)] px-4 pb-20 pt-28 text-[var(--mtv-text)] sm:px-8 sm:pt-32">
+      <SiteNav />
+      <div className="mx-auto max-w-3xl space-y-12">
+        <ScreenTitle eyebrow="Settings">Settings</ScreenTitle>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Appearance</CardTitle>
-          <CardDescription>Choose your colour scheme.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            {isDark ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
-            <span className="text-sm font-medium">{isDark ? "Dark mode" : "Light mode"}</span>
-          </div>
-          <Button variant="outline" onClick={toggleTheme} className="gap-2">
-            {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-            Switch to {isDark ? "light" : "dark"}
-          </Button>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Server configuration</CardTitle>
-          <CardDescription>
-            What the server runs with (read-only; set in the backend&apos;s environment).
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4 text-xs">
-          {!config && <p className="text-muted-foreground">Backend unreachable.</p>}
-          {config && (
-            <>
-              <ConfigRow label="Models">
-                <ul className="space-y-0.5 font-mono">
-                  <li>visual + text embeddings: {config.models.embedder}</li>
-                  <li>speech to text: {config.models.transcriber}</li>
-                  <li>highlight detector: {config.models.highlights}</li>
-                  <li>
-                    AI creator pack:{" "}
-                    {config.models.creator
-                      ? [config.models.creator, ...config.models.creator_fallbacks].join(" → ")
-                      : "off (no Gemini key)"}
-                  </li>
-                  <li>creator persona tools: {config.models.personas ?? "off"}</li>
-                </ul>
-              </ConfigRow>
-              <ConfigRow label="Search thresholds">
-                <p className="font-mono">
-                  {Object.entries(config.search)
-                    .map(([name, value]) => `${name} ${value}`)
-                    .join(" · ")}
-                </p>
-                <p className="mt-1 text-muted-foreground">
-                  Similarity cut-offs for counting a frame or line as a match. Visual and speech scores are
-                  contrastive: similarity to the query minus similarity to generic gameplay or talk.
-                </p>
-              </ConfigRow>
-              <ConfigRow label="Match labels">
-                <p className="font-mono">
-                  strong ≥ {BAND_STRONG} · moderate ≥ {BAND_MODERATE} · weak ≥ {BAND_WEAK}
-                </p>
-                <p className="mt-1 text-muted-foreground">
-                  How this app labels the confidence the server returns. Display bands, not probabilities.
-                </p>
-              </ConfigRow>
-              <ConfigRow label="Features and limits">
-                <p className="font-mono">
-                  Gemini {config.features.gemini ? "on" : "off"} · YouTube posting{" "}
-                  {config.features.youtube ? "on" : "off"} · accounts {config.features.accounts ? "on" : "off"} ·
-                  uploads up to {config.limits.max_video_minutes} min / {(config.limits.max_upload_mb / 1024).toFixed(0)} GB
-                </p>
-              </ConfigRow>
-            </>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Library</CardTitle>
-          <CardDescription>
-            Your clips. Re-index re-runs processing on the clip&apos;s upload (after a model change);
-            delete removes the clip.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-1">
-          {error && <p className="pb-3 text-sm text-destructive">{error}</p>}
-          {loading && <p className="py-2 text-sm text-muted-foreground">Loading…</p>}
-          {!loading && videos.length === 0 && (
-            <p className="py-2 text-sm text-muted-foreground">No videos yet.</p>
-          )}
-          {videos.map((video) => (
-            <div
-              key={video.video_id}
-              className="flex items-center justify-between gap-3 border-b border-border py-3 last:border-0"
-            >
-              <div className="min-w-0">
-                <p className="flex items-center gap-2 truncate text-sm font-medium">
-                  {video.title}
-                  {video.publish_state && <PublishBadge state={video.publish_state} />}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {STATUS_COPY[video.processing_status].label} · {formatDuration(video.duration_seconds)}
-                  {video.game && <> · {video.game}</>}
+        <Section title="Account">
+          {account ? (
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <p className="font-semibold">@{account.username}</p>
+                <p className="text-sm text-white/55">
+                  {account.email}
+                  {me && me.id !== account.id && <> · acting as @{me.username}</>}
                 </p>
               </div>
-              <div className="flex shrink-0 items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="gap-1.5"
-                  onClick={() => handleReindex(video)}
-                  disabled={busyId !== null}
-                >
-                  {busyId === video.video_id ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="h-4 w-4" />
-                  )}
-                  Re-index
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                  onClick={() => handleDelete(video)}
-                  disabled={busyId !== null}
-                >
-                  <Trash2 className="h-4 w-4" />
-                  Delete
-                </Button>
-              </div>
+              <button type="button" onClick={() => void signOut()} className={outline}>
+                <LogOut className="h-3.5 w-3.5" /> Log out
+              </button>
             </div>
-          ))}
-        </CardContent>
-      </Card>
+          ) : (
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <p className="text-sm text-white/55">
+                {me ? <>Not signed in · using @{me.username}</> : "Not signed in."}
+              </p>
+              <Link href={loginHref} className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--mtv-gold)] px-3 py-1.5 text-[13px] font-semibold text-[var(--mtv-on-gold)]">
+                <LogIn className="h-3.5 w-3.5" /> Sign in
+              </Link>
+            </div>
+          )}
+        </Section>
+
+        <Section title="Appearance">
+          <div className="flex items-center justify-between gap-4">
+            <p className="flex items-center gap-2 text-sm">
+              {isDark ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+              {isDark ? "Dark" : "Light"}
+            </p>
+            <button type="button" onClick={toggleTheme} className={outline}>
+              {isDark ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
+              Switch to {isDark ? "light" : "dark"}
+            </button>
+          </div>
+        </Section>
+
+        <Section title="Your clips">
+          <p className="text-sm text-white/55">Re-index an upload after a model change, or delete a clip.</p>
+          {error && <p className="text-sm text-[var(--mtv-red)]">{error}</p>}
+          {loading && <p className="text-sm text-white/55">Loading…</p>}
+          {!loading && videos.length === 0 && <p className="text-sm text-white/55">No clips yet.</p>}
+          <ul className="divide-y divide-[var(--mtv-divider)]">
+            {videos.map((video) => (
+              <li key={video.video_id} className="flex items-center justify-between gap-3 py-3">
+                <div className="min-w-0">
+                  <p className="flex items-center gap-2 text-sm font-medium">
+                    <span className="truncate">{video.title}</span>
+                    {video.publish_state && <PublishBadge state={video.publish_state} />}
+                  </p>
+                  <p className="text-xs text-white/50">
+                    {STATUS_COPY[video.processing_status].label} · {formatDuration(video.duration_seconds)}
+                    {video.game && <> · {video.game}</>}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  <button type="button" onClick={() => handleReindex(video)} disabled={busyId !== null} className={outline}>
+                    {busyId === video.video_id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                    Re-index
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(video)}
+                    disabled={busyId !== null}
+                    className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] font-semibold text-[var(--mtv-red)] hover:bg-[var(--mtv-red)]/10 disabled:opacity-40"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" /> Delete
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Section>
+
+        <details className="group border-t border-[var(--mtv-divider)] pt-6">
+          <summary className="flex cursor-pointer list-none items-center gap-2 font-mono text-[11px] uppercase tracking-[0.2em] text-[var(--mtv-text-2)]">
+            For developers
+            <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
+          </summary>
+          <div className="mt-4 space-y-4 text-xs text-white/60">
+            {!config && <p>Backend unreachable.</p>}
+            {config && (
+              <>
+                <DevRow label="Models">
+                  <ul className="space-y-0.5 font-mono">
+                    <li>visual + text embeddings: {config.models.embedder}</li>
+                    <li>speech to text: {config.models.transcriber}</li>
+                    <li>highlight detector: {config.models.highlights}</li>
+                    <li>
+                      AI creator pack:{" "}
+                      {config.models.creator
+                        ? [config.models.creator, ...config.models.creator_fallbacks].join(" → ")
+                        : "off (no Gemini key)"}
+                    </li>
+                    <li>creator persona tools: {config.models.personas ?? "off"}</li>
+                  </ul>
+                </DevRow>
+                <DevRow label="Search thresholds">
+                  <p className="font-mono">
+                    {Object.entries(config.search)
+                      .map(([name, value]) => `${name} ${value}`)
+                      .join(" · ")}
+                  </p>
+                </DevRow>
+                <DevRow label="Match labels">
+                  <p className="font-mono">
+                    strong ≥ {BAND_STRONG} · moderate ≥ {BAND_MODERATE} · weak ≥ {BAND_WEAK}
+                  </p>
+                </DevRow>
+                <DevRow label="Features and limits">
+                  <p className="font-mono">
+                    Gemini {config.features.gemini ? "on" : "off"} · YouTube posting {config.features.youtube ? "on" : "off"} ·
+                    accounts {config.features.accounts ? "on" : "off"} · uploads up to {config.limits.max_video_minutes} min /{" "}
+                    {(config.limits.max_upload_mb / 1024).toFixed(0)} GB
+                  </p>
+                </DevRow>
+              </>
+            )}
+          </div>
+        </details>
+      </div>
     </div>
   );
 }
 
-function ConfigRow({ label, children }: { label: string; children: React.ReactNode }) {
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="space-y-4 border-t border-[var(--mtv-divider)] pt-6">
+      <h2 className="font-mono text-[11px] uppercase tracking-[0.2em] text-[var(--mtv-text-2)]">{title}</h2>
+      {children}
+    </section>
+  );
+}
+
+function DevRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="mb-1 font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="mb-1 font-semibold uppercase tracking-wide text-white/40">{label}</p>
       {children}
     </div>
   );

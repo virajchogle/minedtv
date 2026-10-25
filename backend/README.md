@@ -1,4 +1,4 @@
-# MinedTV backend
+# MinedIt backend
 
 Stores, processes and serves gameplay recordings with plain-language search ("the clutch on Bind", "when my friend screamed") that jumps to the exact second.
 

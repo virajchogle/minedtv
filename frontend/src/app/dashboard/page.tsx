@@ -79,7 +79,9 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-[var(--mtv-bg)] px-4 pb-16 pt-28 text-[var(--mtv-text)] sm:px-8 sm:pt-32">
       <SiteNav />
       <div className="mx-auto max-w-5xl space-y-8">
-        <ScreenTitle>Dashboard</ScreenTitle>
+        <ScreenTitle eyebrow="Dashboard" accent="doing.">
+          How you&apos;re
+        </ScreenTitle>
 
         {!me ? (
           <ChooseUserNotice action="see your dashboard" />
@@ -377,13 +379,13 @@ function ClipsTable({ clips, days }: { clips: ClipAnalytics[]; days: number }) {
         </p>
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-[var(--mtv-divider)]">
-          <table className="w-full min-w-[640px] text-left text-[13px]">
+          <table className="w-full min-w-[640px] table-fixed text-left text-[13px]">
             <thead className="bg-[var(--mtv-surface)] text-xs text-[var(--mtv-text-2)]">
               <tr>
                 <th className="px-4 py-2 font-normal">Clip</th>
-                <th className="px-3 py-2 text-right font-normal">Views</th>
-                <th className="px-3 py-2 text-right font-normal">Likes</th>
-                <th className="px-3 py-2 text-right font-normal">Comments</th>
+                <th className="w-20 px-3 py-2 text-right font-normal">Views</th>
+                <th className="w-20 px-3 py-2 text-right font-normal">Likes</th>
+                <th className="w-24 px-3 py-2 text-right font-normal">Comments</th>
                 <th className="w-56 px-4 py-2 font-normal">Virality</th>
               </tr>
             </thead>

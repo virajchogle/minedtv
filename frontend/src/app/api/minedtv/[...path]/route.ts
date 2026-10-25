@@ -1,5 +1,5 @@
 /**
- * Server-side proxy to the deployed MinedTV API.
+ * Server-side proxy to the deployed MinedIt API.
  *
  * The service requires an `X-API-Key` on every route. That key is a shared
  * secret, so it must never be sent to the browser: it lives in

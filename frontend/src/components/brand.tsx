@@ -1,6 +1,6 @@
 /**
- * The MinedTv logo, shared with the Android app (rishikesh-web/MinedTv): a brain ("Mined" ->
- * "Mind") drawn as strokes on an accent tile, next to the "Mined" + accented "Tv" wordmark.
+ * The MinedIt logo, shared with the Android app (rishikesh-web/MinedTv): a brain ("Mined" ->
+ * "Mind") drawn as strokes on an accent tile, next to the "Mined" + accented "It" wordmark.
  * BRAIN_PATH is the same 24x24 path as the app's BrainIcon.kt and launcher icon.
  */
 
@@ -38,13 +38,13 @@ export function BrainMark({ size = 28, className }: { size?: number; className?:
   );
 }
 
-/** Mark + "MinedTv" wordmark, for navigation. */
+/** Mark + "MinedIt" wordmark, for navigation. */
 export function Logo({ size = 28, className }: { size?: number; className?: string }) {
   return (
     <span className={cn("inline-flex items-center gap-2", className)}>
       <BrainMark size={size} />
       <span className="text-base font-extrabold tracking-tight text-white">
-        Mined<span className="text-[var(--mtv-gold)]">Tv</span>
+        Mined<span className="text-[var(--mtv-gold)]">It</span>
       </span>
     </span>
   );

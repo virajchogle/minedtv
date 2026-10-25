@@ -1,5 +1,5 @@
 /**
- * Types for the deployed MinedTV API.
+ * Types for the deployed MinedIt API.
  *
  * These mirror the service's OpenAPI schema exactly — same field names, same
  * units (milliseconds), same nullability. Nothing is renamed here; the
@@ -282,6 +282,7 @@ export interface YouTubeStatusOut {
 export interface YouTubeUploadOut {
   id: string;
   clip_id: string;
+  kind?: "clip" | "montage";
   status: "queued" | "uploading" | "published" | "failed";
   privacy: YouTubePrivacy;
   title: string;
@@ -356,4 +357,35 @@ export interface CommentsPage {
   next_cursor: string | null;
   /** All comments on the clip, replies included. */
   total: number;
+}
+
+// ── AI share renders: single highlight or montage (POST/GET /clips/{id}/highlights) ──
+
+export type HighlightMode = "single" | "montage";
+export type HighlightCaptionStyle = "bold" | "minimal" | "gamer";
+
+export interface HighlightOptions {
+  platform: CreatorPlatform;
+  mode: HighlightMode;
+  captions: boolean;
+  caption_style: HighlightCaptionStyle;
+  hook: boolean;
+}
+
+export interface ClipHighlightsOut {
+  clip_id: string;
+  status: JobStatus;
+  stage: "queued" | "exporting" | "analyzing" | "selecting" | "captioning" | "rendering";
+  progress: number;
+  error: string | null;
+  video_url: string | null;
+  download_url: string | null;
+  width: number | null;
+  height: number | null;
+  duration_ms: number | null;
+  moments: { source_start_ms: number; source_end_ms: number; score: number; reason: string }[];
+  captions: { start_ms: number; end_ms: number; text: string; kind: "hook" | "speech" | "moment" }[];
+  summary: string | null;
+  suggested_caption: string | null;
+  hashtags: string[];
 }

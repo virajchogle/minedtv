@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * MinedTV landing page.
+ * MinedIt landing page.
  *
  * The sunrise hero, a grayscale games strip, a bold statement (no boxed
  * search-preview cards — those read as generic SaaS filler and were pulled
@@ -52,7 +52,7 @@ export default function LandingPage() {
         imageSrc="/images/minecraft-hero.webp"
         headline="Your moments. Rediscovered."
         subhead="Search every clip. Find every moment."
-        wordmark="MinedTV"
+        wordmark="MinedIt"
       />
 
       {/* ── games strip ── */}

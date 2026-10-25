@@ -177,7 +177,7 @@ body::before {
   100% { transform: translate(-50%, -50%) scale(0)   rotate(15deg); opacity: 0; }
 }
 
-/* ── MinedTv design tokens ────────────────────────────────────────────────
+/* ── MinedIt design tokens ────────────────────────────────────────────────
  * Scoped as plain custom properties (not mapped into @theme) so they are
  * additive only: nothing elsewhere in the app references these names, so
  * introducing them cannot change any existing page's colours.

@@ -435,6 +435,9 @@ class YouTubeUpload(Base):
     tags: Mapped[list] = mapped_column(JSONB, nullable=False, default=list, server_default="[]")
     video_id: Mapped[str | None] = mapped_column(String(32))
     error: Mapped[str | None] = mapped_column(Text)
+    # "clip" uploads the clip's MP4 export; "montage" uploads a rendered AI edit stored at source_key.
+    kind: Mapped[str] = mapped_column(String(16), nullable=False, default="clip", server_default="clip")
+    source_key: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = _created()
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()

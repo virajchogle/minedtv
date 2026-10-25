@@ -1,4 +1,4 @@
-# Connecting the MinedTv Android app
+# Connecting the MinedIt Android app
 
 Drop-in code for [rishikesh-web/MinedTv](https://github.com/rishikesh-web/MinedTv). It fits the app's existing
 `Clip`, `SearchRepository` and `AppServices` so the screens don't change. Networking uses

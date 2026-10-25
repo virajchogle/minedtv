@@ -33,7 +33,7 @@ async def lifespan(app: FastAPI):
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     app = FastAPI(
-        title="MinedTV API",
+        title="MinedIt API",
         version="0.1.0",
         description="Gaming clips with semantic search. Clips are time ranges over stored sessions.",
         lifespan=lifespan,

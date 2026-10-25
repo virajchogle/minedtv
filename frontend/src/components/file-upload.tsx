@@ -9,7 +9,7 @@ interface FileUploadProps {
   onFileSelect: (file: File | null) => void;
 }
 
-/** Gold/dark dropzone, styled per the MinedTv UI spec's card + button tokens. */
+/** Gold/dark dropzone, styled per the MinedIt UI spec's card + button tokens. */
 export function FileUpload({ onFileSelect }: FileUploadProps) {
   const [file, setFile] = useState<File | null>(null);
 

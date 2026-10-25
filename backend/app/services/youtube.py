@@ -176,7 +176,7 @@ def _api_error(body: dict, status: int) -> str:
 
 def clean_metadata(title: str, description: str, tags: list[str]) -> tuple[str, str, list[str]]:
     """Fit YouTube's limits: title <= 100 chars, no angle brackets; description <= 5000; tags <= 500 chars total."""
-    title = " ".join((title or "").replace("<", "").replace(">", "").split())[:TITLE_MAX] or "MinedTV clip"
+    title = " ".join((title or "").replace("<", "").replace(">", "").split())[:TITLE_MAX] or "MinedIt clip"
     description = (description or "").replace("<", "").replace(">", "")[:DESCRIPTION_MAX]
     kept, used = [], 0
     for tag in tags or []:

@@ -35,7 +35,7 @@ export function Splash() {
         </div>
         <p className="mtv-splash-word">
           <span className="mtv-splash-mined">Mined</span>
-          <span className="mtv-splash-tv">Tv</span>
+          <span className="mtv-splash-tv">It</span>
         </p>
         <p className="mtv-splash-tagline">Clip the plays that blow your mind</p>
       </div>
