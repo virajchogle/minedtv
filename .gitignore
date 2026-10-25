@@ -31,3 +31,4 @@ next-env.d.ts
 # frontend/public are what the app loads, so the originals stay local.
 frontend/public/images/mc_wallpaper_*.png
 frontend/public/images/minecraft-hero.png
+.vercel

@@ -1,0 +1,41 @@
+# Deploys the web app (frontend/) to Vercel on every push to main, whoever made the commit.
+#
+# Vercel's Hobby plan only builds git pushes from the project owner, so teammates' commits
+# were "blocked". This runs the Vercel CLI with the owner's token instead, so every push
+# deploys. Vercel's own git trigger is off (frontend/vercel.json) to avoid double deploys.
+#
+# Repo secrets (Settings -> Secrets and variables -> Actions):
+#   VERCEL_TOKEN       - from vercel.com/account/tokens
+#   VERCEL_ORG_ID      - "orgId" in .vercel/project.json after `vercel link`
+#   VERCEL_PROJECT_ID  - "projectId" in the same file
+name: Deploy web to Vercel
+
+on:
+  push:
+    branches: [main]
+    paths: ["frontend/**", ".github/workflows/deploy-web.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-web
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install Vercel CLI
+        run: npm install --global vercel@39.3.0
+      - name: Pull production settings and env vars
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+      - name: Build
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+      - name: Deploy
+        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
