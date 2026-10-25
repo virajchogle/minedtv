@@ -8,8 +8,9 @@ Drop-in code for [rishikesh-web/MinedTv](https://github.com/rishikesh-web/MinedT
 - Every request needs `X-API-Key: <key>`. Requests that act as a user also need `X-User-Id: <uuid>`.
 - Real sign-in exists too: `POST /auth/login {"login": "<username or email>", "password": "..."}` (or
   `/auth/signup {"username", "email", "password"}`) returns `{token, expires_at, user}`. Send
-  `Authorization: Bearer <token>` and the API knows who you are without `X-User-Id`. `X-User-Id` alone keeps
-  working for now (`REQUIRE_LOGIN=false` on the server), so moving to login can wait until after the demo.
+  `Authorization: Bearer <token>` and the API knows who you are without `X-User-Id`. While testing
+  (`REQUIRE_LOGIN=false` on the server), `X-User-Id` alone keeps working and anyone may act as any user,
+  so keep the demo-user picker; moving to login can wait until after the demo.
 - `*.m3u8` playlist URLs need no key, so the player can fetch them directly.
 - Example responses for every endpoint: [`api-examples/`](api-examples/)
 
@@ -422,7 +423,21 @@ The flow is **upload → My videos (private) → Publish → Post to YouTube**. 
 2. If not connected: `GET /youtube/connect` returns `auth_url`. Open it in a Custom Tab or browser. The user approves on Google and lands on a "YouTube connected" page (or the web app). Then check status again.
 3. On a **published** clip: `POST /clips/{id}/youtube {"privacy": "unlisted"}`. Title, description and tags default to the AI creator pack; pass your own to override them. Then poll `GET /clips/{id}/youtube` until `status` is `published` and show the `url`. The owner also gets a `youtube_posted` notification.
 
-Uploads may be private-only until Google audits the app. For TikTok and Reels, share the MP4 from `/clips/{id}/export` through the Android share sheet (`IntentPlatformPublisher`), since their APIs need an app review.
+Uploads are private-only until Google audits the app, and only Google accounts added as test users in
+the Cloud console can connect (ask Viraj to add yours). Each clip in lists carries `youtube_url` once
+posted: show an "On YouTube" badge or link with it. For TikTok and Reels, share the MP4 from `/clips/{id}/export` through the Android share sheet (`IntentPlatformPublisher`), since their APIs need an app review.
+
+## 10b. Content moderation
+
+Every upload's transcript and some sampled frames are checked by Gemini (Jasper's step, between
+transcription and highlights):
+
+- Sessions and clips carry `moderation_severity` (`none` | `mild` | `severe`), `age_restricted`
+  (true for mild or severe) and, for the owner, `moderation_reason`. Show an 18+ badge or a
+  tap-to-reveal cover on `age_restricted` clips.
+- **Severe** content stops processing: the session's `status` becomes `blocked` (a new value next to
+  `ready` and `failed`) and no clips are made. Treat `blocked` as finished, and show the owner
+  `moderation_reason` instead of a spinner.
 
 ## 11. Uploading from the phone (optional)
 
