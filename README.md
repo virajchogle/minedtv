@@ -62,10 +62,10 @@ Every upload is scored moment by moment. Highlight clips are cut automatically a
 ## Watch your numbers
 
 <p align="center">
-  <img src="docs/screenshots/dashboard.jpg" alt="Creator dashboard with views, likes, comments, followers and views per day" width="100%">
+  <img src="docs/screenshots/dashboard.jpg" alt="Creator dashboard with expected income, daily views, likes and comments, a per-clip forecast and audience flow" width="100%">
 </p>
 
-Views (counted once per viewer), likes, comments and new followers per day over 7, 30 or 90 days, compared with the period before, and every clip with its virality score.
+Daily views (counted once per viewer), likes and comments over 7, 30 or 90 days; an illustrative income projection at an assumed TikTok RPM; a 90-day forecast for each clip; how your audience flows from views to likes and comments; and every clip with its virality score.
 
 ## Drop it in, we do the rest
 
